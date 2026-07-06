@@ -41,23 +41,23 @@ public class IncidentEntity {
     @Column(nullable = false)
     private IncidentStatus status;
 
-    @Column(nullable = false)
+    @Column(length = 2000)
     private String description;
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime declaredAt;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private LocalDateTime assignedAt;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private LocalDateTime inProgressAt;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private LocalDateTime resolvedAt;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private LocalDateTime closedAt;
 
 }
