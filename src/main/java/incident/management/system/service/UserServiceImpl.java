@@ -1,0 +1,127 @@
+package incident.management.system.service;
+
+import incident.management.system.dto.CreateUserRequest;
+import incident.management.system.dto.DepartmentResponse;
+import incident.management.system.dto.UpdateUserRequest;
+import incident.management.system.dto.UserResponse;
+import incident.management.system.exception.ResourceNotFoundException;
+import incident.management.system.model.DepartmentEntity;
+import incident.management.system.model.UserEntity;
+import incident.management.system.repository.DepartmentRepository;
+import incident.management.system.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+@Transactional
+public class UserServiceImpl implements UserService {
+
+    private final UserRepository userRepository;
+    private final DepartmentRepository departmentRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    @Override
+    public UserResponse createUser(CreateUserRequest request) {
+        DepartmentEntity department = null;
+        if (request.departmentId() != null) {
+            department = departmentRepository.findById(request.departmentId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Department", "id", request.departmentId()));
+        }
+
+        UserEntity user = UserEntity.builder()
+                .firstName(request.firstName())
+                .lastName(request.lastName())
+                .passwordHash(passwordEncoder.encode(request.password()))
+                .matricule(request.matricule())
+                .role(request.role())
+                .isActive(true)
+                .department(department)
+                .build();
+
+        return toResponse(userRepository.save(user));
+    }
+
+    @Override
+    public UserResponse updateUser(Long id, UpdateUserRequest request) {
+        UserEntity user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+
+        if (request.firstName() != null) {
+            user.setFirstName(request.firstName());
+        }
+        if (request.lastName() != null) {
+            user.setLastName(request.lastName());
+        }
+        if (request.role() != null) {
+            user.setRole(request.role());
+        }
+        if (request.departmentId() != null) {
+            DepartmentEntity department = departmentRepository.findById(request.departmentId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Department", "id", request.departmentId()));
+            user.setDepartment(department);
+        }
+
+        return toResponse(userRepository.save(user));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public UserResponse getUserById(Long id) {
+        return userRepository.findById(id)
+                .map(this::toResponse)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<UserResponse> getAllUsers(Pageable pageable) {
+        return userRepository.findAll(pageable).map(this::toResponse);
+    }
+
+    @Override
+    public void deleteUser(Long id) {
+        UserEntity user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+        user.deactivate();
+        userRepository.save(user);
+    }
+
+    @Override
+    public UserResponse activateUser(Long id) {
+        UserEntity user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+        user.setActive(true);
+        user.setDeletedAt(null);
+        return toResponse(userRepository.save(user));
+    }
+
+    @Override
+    public UserResponse deactivateUser(Long id) {
+        UserEntity user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+        user.deactivate();
+        return toResponse(userRepository.save(user));
+    }
+
+    private UserResponse toResponse(UserEntity entity) {
+        DepartmentResponse deptResponse = entity.getDepartment() != null
+                ? new DepartmentResponse(entity.getDepartment().getId(), entity.getDepartment().getName())
+                : null;
+
+        return new UserResponse(
+                entity.getId(),
+                entity.getFirstName(),
+                entity.getLastName(),
+                entity.getMatricule(),
+                entity.isActive(),
+                entity.getRole(),
+                deptResponse,
+                entity.getCreatedAt()
+        );
+    }
+}
