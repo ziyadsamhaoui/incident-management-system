@@ -61,12 +61,4 @@ public class IncidentController {
         IncidentResponse response = incidentService.updateIncidentStatus(id, request);
         return ResponseEntity.ok(response);
     }
-
-    @PutMapping("/{id}/assign")
-    public ResponseEntity<IncidentResponse> assignIncident(
-            @PathVariable Long id,
-            @RequestParam Long userId) {
-        IncidentResponse response = incidentService.assignIncident(id, userId);
-        return ResponseEntity.ok(response);
-    }
 }

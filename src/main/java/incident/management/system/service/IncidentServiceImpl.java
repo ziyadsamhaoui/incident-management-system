@@ -35,7 +35,6 @@ public class IncidentServiceImpl implements IncidentService {
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
     private final Map<String, AtomicLong> dailyCounters = new ConcurrentHashMap<>();
 
-    // Allowed status transitions: DECLARED -> ASSIGNED -> IN_PROGRESS -> RESOLVED -> CLOSED
     private static final Map<IncidentStatus, IncidentStatus> VALID_TRANSITIONS = Map.of(
             IncidentStatus.DECLARED, IncidentStatus.ASSIGNED,
             IncidentStatus.ASSIGNED, IncidentStatus.IN_PROGRESS,
@@ -143,28 +142,7 @@ public class IncidentServiceImpl implements IncidentService {
         return toResponse(saved);
     }
 
-    @Override
-    public IncidentResponse assignIncident(Long id, Long userId) {
-        IncidentEntity incident = incidentRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Incident", "id", id));
-
-        UserEntity user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
-
-        // Assigning a user also moves status to ASSIGNED if currently DECLARED
-        if (incident.getStatus() == IncidentStatus.DECLARED) {
-            validateTransition(incident.getStatus(), IncidentStatus.ASSIGNED);
-            applyStatusTransition(incident, IncidentStatus.ASSIGNED);
-        }
-
-        incident.setUser(user);
-        IncidentEntity saved = incidentRepository.save(incident);
-
-        notificationService.notifyStatusChange(saved,
-                "Incident " + saved.getReference() + " has been assigned to " + user.getFirstName() + " " + user.getLastName() + ".");
-
-        return toResponse(saved);
-    }
+    // ASSIGN INCIDENT (OPTIONAL)
 
     @Override
     public void deleteIncident(Long id) {
@@ -186,7 +164,7 @@ public class IncidentServiceImpl implements IncidentService {
 
     private void validateTransition(IncidentStatus current, IncidentStatus target) {
         if (current == target) {
-            return; // same status, no transition needed
+            return;
         }
         IncidentStatus allowedNext = VALID_TRANSITIONS.get(current);
         if (allowedNext == null || allowedNext != target) {
@@ -204,7 +182,6 @@ public class IncidentServiceImpl implements IncidentService {
             case RESOLVED -> incident.setResolvedAt(now);
             case CLOSED -> incident.setClosedAt(now);
             default -> {
-                // DECLARED — no timestamp update needed
             }
         }
     }
