@@ -32,6 +32,10 @@ public class IncidentEntity {
     private DepartmentEntity department;
 
     @ManyToOne
+    @JoinColumn(name = "station_id")
+    private StationEntity station;
+
+    @ManyToOne
     @JoinColumn(name = "category_id")
     private CategoryEntity category;
 
