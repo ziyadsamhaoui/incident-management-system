@@ -9,7 +9,7 @@ import org.springframework.data.domain.Pageable;
 public interface IncidentService {
 
     IncidentResponse createIncident(CreateIncidentRequest request);
-//
+
     IncidentResponse getIncidentById(Long id);
 
     IncidentResponse getIncidentByReference(String reference);
