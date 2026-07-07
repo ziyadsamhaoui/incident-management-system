@@ -185,7 +185,7 @@ public class IncidentServiceImpl implements IncidentService {
             }
         }
     }
-//
+
     private IncidentResponse toResponse(IncidentEntity entity) {
         UserSummaryResponse userSummary = entity.getUser() != null
                 ? new UserSummaryResponse(
