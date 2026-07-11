@@ -48,7 +48,6 @@ public class NotificationServiceImpl implements NotificationService {
         notificationRepository.save(notification);
     }
 
-    //
 
     @Override
     @Transactional(readOnly = true)

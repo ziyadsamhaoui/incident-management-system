@@ -140,7 +140,7 @@ public class IncidentServiceImpl implements IncidentService {
         return toResponse(saved);
     }
 
-    // ASSIGN INCIDENT HERE (OPTIONAL)
+    // ASSIGN INCIDENT (OPTIONAL)
 
     @Override
     public void  deleteIncident(Long id) {
