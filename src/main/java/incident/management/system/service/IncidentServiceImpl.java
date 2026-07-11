@@ -30,10 +30,8 @@ public class IncidentServiceImpl implements IncidentService {
     private final StationRepository stationRepository;
     private final CategoryRepository categoryRepository;
     private final NotificationService notificationService;
+    private final IncidentReferenceGenerator referenceGenerator;
 
-    private static final String REFERENCE_PREFIX = "INC";
-    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
-    private final Map<String, AtomicLong> dailyCounters = new ConcurrentHashMap<>();
 
     private static final Map<IncidentStatus, IncidentStatus> VALID_TRANSITIONS = Map.of(
             IncidentStatus.DECLARED, IncidentStatus.ASSIGNED,
@@ -54,7 +52,7 @@ public class IncidentServiceImpl implements IncidentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Category", "id", request.categoryId()));
 
         IncidentEntity incident = IncidentEntity.builder()
-                .reference(generateReference())
+                .reference(referenceGenerator.generateReference())
                 .user(user)
                 .department(department)
                 .station(station)
@@ -142,10 +140,10 @@ public class IncidentServiceImpl implements IncidentService {
         return toResponse(saved);
     }
 
-    // ASSIGN INCIDENT (OPTIONAL)
+    // ASSIGN INCIDENT HERE (OPTIONAL)
 
     @Override
-    public void deleteIncident(Long id) {
+    public void  deleteIncident(Long id) {
         if (!incidentRepository.existsById(id)) {
             throw new ResourceNotFoundException("Incident", "id", id);
         }
@@ -153,14 +151,6 @@ public class IncidentServiceImpl implements IncidentService {
     }
 
     // HELPER METHODS
-
-    private String generateReference() {
-        String datePart = LocalDateTime.now().format(DATE_FORMATTER);
-        String key = REFERENCE_PREFIX + "-" + datePart;
-        AtomicLong counter = dailyCounters.computeIfAbsent(key, k -> new AtomicLong(1));
-        long sequence = counter.getAndIncrement();
-        return String.format("%s-%s-%04d", REFERENCE_PREFIX, datePart, sequence);
-    }
 
     private void validateTransition(IncidentStatus current, IncidentStatus target) {
         if (current == target) {
