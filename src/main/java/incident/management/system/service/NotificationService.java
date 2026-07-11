@@ -13,3 +13,5 @@ public interface NotificationService {
 
     Page<NotificationResponse> getUnreadNotificationsForUser(Long userId, Pageable pageable);
 }
+
+//
