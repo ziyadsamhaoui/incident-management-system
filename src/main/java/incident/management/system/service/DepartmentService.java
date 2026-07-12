@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional
 public class DepartmentService {
-
+//
     private final DepartmentRepository departmentRepository;
 
     public DepartmentResponse createDepartment(String name) {

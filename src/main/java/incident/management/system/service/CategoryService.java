@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional
 public class CategoryService {
-//
+
     private final CategoryRepository categoryRepository;
 
     public CategoryResponse createCategory(String name) {
