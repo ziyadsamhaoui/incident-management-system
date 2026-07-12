@@ -36,6 +36,11 @@ public class UserController {
         return ResponseEntity.ok(userService.getUserById(id));
     }
 
+    @GetMapping({"/matricule/{matricule}"})
+    public ResponseEntity<UserResponse> getUserByMatricule(@PathVariable int matricule) {
+        return ResponseEntity.ok(userService.getUserByMatricule(matricule));
+    }
+
     @PutMapping("/{id}")
     public ResponseEntity<UserResponse> updateUser(
             @PathVariable Long id,

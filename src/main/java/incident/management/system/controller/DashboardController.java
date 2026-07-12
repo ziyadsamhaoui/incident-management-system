@@ -31,6 +31,7 @@ public class DashboardController {
                         i -> i.getStatus().name(),
                         Collectors.counting()
                 ));
+
         // Ensure all statuses appear even when count is zero
         for (IncidentStatus status : IncidentStatus.values()) {
             stats.putIfAbsent(status.name(), 0L);

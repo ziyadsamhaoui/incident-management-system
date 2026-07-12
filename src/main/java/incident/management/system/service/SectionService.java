@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional
 public class SectionService {
-//
+
     private final SectionRepository sectionRepository;
 
     public SectionResponse createSection(String name) {
