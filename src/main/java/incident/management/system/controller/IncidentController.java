@@ -11,7 +11,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/incidents")
@@ -21,6 +24,7 @@ public class IncidentController {
     private final IncidentService incidentService;
 
     @PostMapping
+    @PreAuthorize("hasRole('SOUS_CHEF')")
     public ResponseEntity<IncidentResponse> createIncident(@Valid @RequestBody CreateIncidentRequest request) {
         IncidentResponse response = incidentService.createIncident(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -51,6 +55,15 @@ public class IncidentController {
     @GetMapping("/{id}")
     public ResponseEntity<IncidentResponse> getIncidentById(@PathVariable Long id) {
         IncidentResponse response = incidentService.getIncidentById(id);
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}/assign")
+    @PreAuthorize("hasRole('CHEF_ATELIER')")
+    public ResponseEntity<IncidentResponse> assignIncident(
+            @PathVariable Long id,
+            @RequestBody Map<String, Long> body) {
+        IncidentResponse response = incidentService.assignIncident(id, body.get("userId"));
         return ResponseEntity.ok(response);
     }
 

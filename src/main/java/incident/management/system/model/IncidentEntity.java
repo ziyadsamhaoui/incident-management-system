@@ -64,4 +64,8 @@ public class IncidentEntity {
     @Column(updatable = false)
     private LocalDateTime closedAt;
 
+    @ManyToOne
+    @JoinColumn(name = "assigned_user_id")
+    private UserEntity assignedTo;
+
 }

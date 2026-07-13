@@ -24,7 +24,7 @@ public interface IncidentService {
 
     IncidentResponse updateIncidentStatus(Long id, UpdateIncidentStatusRequest request);
 
-    // IncidentResponse assignIncident(Long id, Long userId);
+    IncidentResponse assignIncident(Long id, Long userId);
 
     void deleteIncident(Long id);
 }

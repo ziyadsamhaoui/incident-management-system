@@ -140,7 +140,29 @@ public class IncidentServiceImpl implements IncidentService {
         return toResponse(saved);
     }
 
-    // ASSIGN INCIDENT (OPTIONAL)
+    @Override
+    public IncidentResponse assignIncident(Long id, Long userId) {
+        IncidentEntity incident = incidentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Incident", "id", id));
+
+        UserEntity assignedUser = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+
+        incident.setAssignedTo(assignedUser);
+        incident.setAssignedAt(LocalDateTime.now());
+
+        if (incident.getStatus() == IncidentStatus.DECLARED) {
+            incident.setStatus(IncidentStatus.ASSIGNED);
+        }
+
+        IncidentEntity saved = incidentRepository.save(incident);
+
+        notificationService.notifyStatusChange(saved,
+                "Incident " + saved.getReference() + " has been assigned to "
+                        + assignedUser.getFirstName() + " " + assignedUser.getLastName() + ".");
+
+        return toResponse(saved);
+    }
 
     @Override
     public void  deleteIncident(Long id) {
@@ -205,10 +227,19 @@ public class IncidentServiceImpl implements IncidentService {
                 ? new CategoryResponse(entity.getCategory().getId(), entity.getCategory().getName())
                 : null;
 
+        UserSummaryResponse assignedTo = entity.getAssignedTo() != null
+                ? new UserSummaryResponse(
+                        entity.getAssignedTo().getId(),
+                        entity.getAssignedTo().getFirstName(),
+                        entity.getAssignedTo().getLastName(),
+                        entity.getAssignedTo().getMatricule())
+                : null;
+
         return new IncidentResponse(
                 entity.getId(),
                 entity.getReference(),
                 userSummary,
+                assignedTo,
                 deptResponse,
                 stationResponse,
                 categoryResponse,

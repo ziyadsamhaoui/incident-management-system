@@ -77,6 +77,14 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public UserResponse getUserByEmail(String email) {
+        return userRepository.findByEmail(email)
+                .map(this::toResponse)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "email", email));
+    }
+
     @Transactional(readOnly = true)
     @Override
     public UserResponse getUserByMatricule(int matricule) {

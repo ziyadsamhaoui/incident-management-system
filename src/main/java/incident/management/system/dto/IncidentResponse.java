@@ -8,6 +8,7 @@ public record IncidentResponse(
         Long id,
         String reference,
         UserSummaryResponse user,
+        UserSummaryResponse assignedTo,
         DepartmentResponse department,
         StationResponse station,
         CategoryResponse category,

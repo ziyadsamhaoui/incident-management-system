@@ -15,6 +15,8 @@ public interface UserService {
 
     UserResponse getUserById(Long id);
 
+    UserResponse getUserByEmail(String email);
+
     UserResponse getUserByMatricule(int matricule);
 
     Page<UserResponse> getAllUsers(Pageable pageable);

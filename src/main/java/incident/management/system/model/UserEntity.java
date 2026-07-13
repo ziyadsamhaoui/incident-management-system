@@ -25,6 +25,9 @@ public class UserEntity {
     @Column(nullable = false)
     private String lastName;
 
+    @Column(nullable = false, unique = true)
+    private String email;
+
     @Column(nullable = false)
     private String passwordHash;
 
@@ -49,8 +52,38 @@ public class UserEntity {
     @JoinColumn(name = "department_id")
     private DepartmentEntity department;
 
+    @Column(nullable = false)
+    @Builder.Default
+    private int failedLoginAttempts = 0;
+
+    @Column
+    private LocalDateTime lockoutEnd;
+
     public void deactivate() {
         this.isActive = false;
         this.deletedAt = LocalDateTime.now();
+    }
+
+    // Check if the user is locked out.
+    public boolean isLocked() {
+        return lockoutEnd != null && LocalDateTime.now().isBefore(lockoutEnd);
+    }
+
+    // Increment the failed login attempts and set a lockout if necessary.
+    public void incrementFailedAttempts() {
+        if (lockoutEnd != null && LocalDateTime.now().isAfter(lockoutEnd)) {
+            this.failedLoginAttempts = 0;
+            this.lockoutEnd = null;
+        }
+        this.failedLoginAttempts++;
+        if (this.failedLoginAttempts >= 5) {
+            this.lockoutEnd = LocalDateTime.now().plusMinutes(15);
+        }
+    }
+
+    // Reset the failed login attempts and unlock the account after a successful login.
+    public void resetFailedAttempts() {
+        this.failedLoginAttempts = 0;
+        this.lockoutEnd = null;
     }
 }
