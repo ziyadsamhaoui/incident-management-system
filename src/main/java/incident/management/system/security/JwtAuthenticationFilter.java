@@ -36,7 +36,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = extractTokenFromHeader(request);
 
         if (token != null) {
-            // Reject blacklisted (logged-out) tokens immediately
+            // Reject blacklisted tokens immediately
             if (tokenBlacklistService.isBlacklisted(token)) {
                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Token has been revoked");
                 return;
