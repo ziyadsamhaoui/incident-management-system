@@ -15,7 +15,7 @@ public interface UserService {
 
     UserResponse getUserById(Long id);
 
-    UserResponse getUserByEmail(String email);
+    UserResponse getUserByEmail(String email);//
 
     UserResponse getUserByMatricule(int matricule);
 
