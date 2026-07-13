@@ -14,13 +14,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-/**
- * In-memory token blacklist for revoking access tokens on logout.
- * <p>
- * Entries are automatically evicted once the token's original expiry has passed,
- * preventing unbounded memory growth. For production, replace with a Redis-backed
- * or database-backed implementation.
- */
+// In-memory blacklist for JWT tokens on logout
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -42,12 +37,8 @@ public class TokenBlacklistService {
         log.debug("Token blacklist cleaner shut down");
     }
 
-    /**
-     * Adds a token to the blacklist. The token will be rejected by the
-     * {@link JwtAuthenticationFilter} until its natural expiry cleans it up.
-     *
-     * @param token the JWT access token to revoke
-     */
+    // Blacklist a token by storing it with its expiration time. If the expiration cannot be determined, store it for 15 minutes as a fallback.
+
     public void blacklist(String token) {
         try {
             long expiryMs = jwtService.getExpirationFromToken(token).getTime();
@@ -55,17 +46,14 @@ public class TokenBlacklistService {
             log.debug("Token blacklisted, expires at {}", Instant.ofEpochMilli(expiryMs));
         } catch (Exception e) {
             log.warn("Could not extract expiry for blacklisted token", e);
-            // Fallback: keep entry for 15 minutes
+            log.debug("Storing token in blacklist for 15 minutes");
+            // Keep entry for 15 minutes
             blacklist.put(token, Instant.now().plusMillis(900_000).toEpochMilli());
         }
     }
 
-    /**
-     * Returns true if the token has been blacklisted.
-     *
-     * @param token the JWT access token to check
-     * @return true if the token is blacklisted
-     */
+    // Returns true if the token is blacklisted and has expired
+
     public boolean isBlacklisted(String token) {
         Long expiry = blacklist.get(token);
         if (expiry == null) {

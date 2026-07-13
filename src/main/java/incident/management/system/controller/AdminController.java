@@ -25,9 +25,7 @@ public class AdminController {
     private final ProductionLineService productionLineService;
     private final StationService stationService;
 
-    // ──────────────────────────────────────────────
     //  Categories
-    // ──────────────────────────────────────────────
 
     @PostMapping("/categories")
     public ResponseEntity<CategoryResponse> createCategory(@RequestBody Map<String, String> body) {
@@ -58,9 +56,7 @@ public class AdminController {
         return ResponseEntity.noContent().build();
     }
 
-    // ──────────────────────────────────────────────
     //  Departments
-    // ──────────────────────────────────────────────
 
     @PostMapping("/departments")
     public ResponseEntity<DepartmentResponse> createDepartment(@RequestBody Map<String, String> body) {
@@ -91,9 +87,7 @@ public class AdminController {
         return ResponseEntity.noContent().build();
     }
 
-    // ──────────────────────────────────────────────
     //  Sections
-    // ──────────────────────────────────────────────
 
     @PostMapping("/sections")
     public ResponseEntity<SectionResponse> createSection(@RequestBody Map<String, String> body) {
@@ -124,9 +118,7 @@ public class AdminController {
         return ResponseEntity.noContent().build();
     }
 
-    // ──────────────────────────────────────────────
     //  Production Lines
-    // ──────────────────────────────────────────────
 
     @PostMapping("/production-lines")
     public ResponseEntity<ProductionLineResponse> createProductionLine(@RequestBody Map<String, Object> body) {
@@ -162,9 +154,7 @@ public class AdminController {
         return ResponseEntity.noContent().build();
     }
 
-    // ──────────────────────────────────────────────
     //  Stations
-    // ──────────────────────────────────────────────
 
     @PostMapping("/stations")
     public ResponseEntity<StationResponse> createStation(@RequestBody Map<String, Object> body) {

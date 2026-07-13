@@ -59,12 +59,8 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    /**
-     * Replaces the default {@code DaoAuthenticationProvider}-backed manager with
-     * a {@link ProviderManager} that delegates to our custom
-     * {@link MultiChannelAuthenticationProvider}, which routes each login through
-     * the correct operational lane (SOUS_CHEF, CHEF_ATELIER, ADMIN).
-     */
+    // This bean is necessary for the authentication manager to work with the custom authentication provider
+
     @Bean
     public AuthenticationManager authenticationManager() {
         return new ProviderManager(multiChannelAuthenticationProvider);
