@@ -2,12 +2,13 @@ package incident.management.system.config;
 
 import incident.management.system.security.CustomUserDetailsService;
 import incident.management.system.security.JwtAuthenticationFilter;
+import incident.management.system.security.MultiChannelAuthenticationProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -31,6 +32,7 @@ public class SecurityConfig {
 
     private final CustomUserDetailsService customUserDetailsService;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final MultiChannelAuthenticationProvider multiChannelAuthenticationProvider;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -57,10 +59,15 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
+    /**
+     * Replaces the default {@code DaoAuthenticationProvider}-backed manager with
+     * a {@link ProviderManager} that delegates to our custom
+     * {@link MultiChannelAuthenticationProvider}, which routes each login through
+     * the correct operational lane (SOUS_CHEF, CHEF_ATELIER, ADMIN).
+     */
     @Bean
-    public AuthenticationManager authenticationManager(
-            AuthenticationConfiguration authenticationConfiguration) throws Exception {
-        return authenticationConfiguration.getAuthenticationManager();
+    public AuthenticationManager authenticationManager() {
+        return new ProviderManager(multiChannelAuthenticationProvider);
     }
 
     @Bean

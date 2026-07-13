@@ -20,7 +20,7 @@ public class PasswordResetToken {
     @Column(nullable = false)
     private Long userId;
 
-    @Column(nullable = false, unique = true, length = 36)
+    @Column(nullable = false, unique = true, length = 64)
     private String token;
 
     @Column(nullable = false)
