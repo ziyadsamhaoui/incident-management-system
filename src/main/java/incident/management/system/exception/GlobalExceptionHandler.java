@@ -118,7 +118,33 @@ public class GlobalExceptionHandler {
     }
 
     // ──────────────────────────────────────────────
-    //  E. Generic Runtime Catch-All → 500
+    //  E. Rate Limiting Exceeded → 429
+    // ──────────────────────────────────────────────
+
+    /**
+     * Handles {@link RateLimitExceededException} thrown when a client has
+     * exceeded the allowed request rate. Returns HTTP 429 with a descriptive
+     * message and the retry-after hint embedded in the response body.
+     * <p>
+     * Note: In the filter-based rate-limiting flow, the 429 response is
+     * written directly by {@code RateLimitingFilter}. This handler serves
+     * as a safety net for any rate-limit exceptions that propagate from
+     * deeper layers.
+     */
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ErrorResponse> handleRateLimitExceeded(RateLimitExceededException ex) {
+        log.warn("Rate limit exceeded: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()))
+                .body(ErrorResponse.of(
+                        HttpStatus.TOO_MANY_REQUESTS.value(),
+                        "Too Many Requests",
+                        ex.getMessage()));
+    }
+
+    // ──────────────────────────────────────────────
+    //  F. Generic Runtime Catch-All → 500
     // ──────────────────────────────────────────────
 
     /**
