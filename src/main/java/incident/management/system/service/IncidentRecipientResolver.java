@@ -34,25 +34,17 @@ public class IncidentRecipientResolver {
     private final UserRepository userRepository;
     private final AdminDepartmentSubscriptionRepository subscriptionRepository;
 
-    /**
-     * Returns the list of users who should be notified for the given transition.
-     *
-     * @param incident  the incident that transitioned
-     * @param newStatus the new status (target of the transition)
-     * @param actor     the user who triggered the transition, or {@code null}
-     *                  if it was triggered by the system (scheduler)
-     * @return list of recipient {@link UserEntity users} (never {@code null})
-     */
+    // Returns the list of users who should receive a notification.
     public List<UserEntity> resolveRecipients(IncidentEntity incident,
                                               IncidentStatus newStatus,
                                               UserEntity actor) {
-        // IN_PROGRESS is silent — no notifications
+        // No notifications
         if (newStatus == IncidentStatus.IN_PROGRESS) {
             return Collections.emptyList();
         }
 
-        // Auto-closure (RESOLVED → CLOSED via scheduler): only notify the
-        // admin who resolved the incident (actor is null in this case)
+        // Auto-closure (RESOLVED → CLOSED via scheduler)
+        // Only notify the admin who resolved the incident
         if (newStatus == IncidentStatus.CLOSED && actor == null) {
             UserEntity resolvedBy = incident.getResolvedBy();
             if (resolvedBy != null) {
@@ -67,8 +59,7 @@ public class IncidentRecipientResolver {
             return findChefAtelier(incident);
         }
 
-        // DECLARED (→ DECLARED): all department watchers, no exclusion
-        // (the declarant still gets notified per the design brief)
+        // DECLARED (→ DECLARED): all department watchers, declarant as well
         if (newStatus == IncidentStatus.DECLARED) {
             return getDepartmentWatchers(incident);
         }
