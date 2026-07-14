@@ -9,6 +9,7 @@ public record IncidentResponse(
         String reference,
         UserSummaryResponse user,
         UserSummaryResponse assignedTo,
+        UserSummaryResponse resolvedBy,
         DepartmentResponse department,
         StationResponse station,
         CategoryResponse category,

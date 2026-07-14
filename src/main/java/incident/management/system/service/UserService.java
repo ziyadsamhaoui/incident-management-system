@@ -1,11 +1,13 @@
 package incident.management.system.service;
 
 import incident.management.system.dto.CreateUserRequest;
+import incident.management.system.dto.DepartmentResponse;
 import incident.management.system.dto.UpdateUserRequest;
 import incident.management.system.dto.UserResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 public interface UserService {
 
@@ -26,4 +28,12 @@ public interface UserService {
     UserResponse activateUser(Long id);
 
     UserResponse deactivateUser(Long id);
+
+    //  Admin Department Subscriptions
+
+    void subscribeToDepartment(Long adminId, Long departmentId);
+
+    void unsubscribeFromDepartment(Long adminId, Long departmentId);
+
+    List<DepartmentResponse> getSubscribedDepartments(Long adminId);
 }

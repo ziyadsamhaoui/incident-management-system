@@ -2,7 +2,6 @@ package incident.management.system.service;
 
 import incident.management.system.dto.NotificationResponse;
 import incident.management.system.exception.ResourceNotFoundException;
-import incident.management.system.model.IncidentEntity;
 import incident.management.system.model.NotificationEntity;
 import incident.management.system.model.UserEntity;
 import incident.management.system.repository.NotificationRepository;
@@ -22,32 +21,12 @@ public class NotificationServiceImpl implements NotificationService {
     private final UserRepository userRepository;
 
     @Override
-    public void notifyStatusChange(IncidentEntity incident, String message) {
-        // Notify the user associated with the incident (declarant or assigned user)
-        UserEntity recipient = incident.getUser();
-        if (recipient == null) {
-            return;
-        }
-
-        NotificationEntity notification = NotificationEntity.builder()
-                .incident(incident)
-                .recipient(recipient)
-                .message(message)
-                .isRead(false)
-                .type("STATUS_CHANGE")
-                .build();
-
-        notificationRepository.save(notification);
-    }
-
-    @Override
     public void markAsRead(Long notificationId) {
         NotificationEntity notification = notificationRepository.findById(notificationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Notification", "id", notificationId));
         notification.setRead(true);
         notificationRepository.save(notification);
     }
-
 
     @Override
     @Transactional(readOnly = true)

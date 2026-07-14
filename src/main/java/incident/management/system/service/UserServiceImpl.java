@@ -1,29 +1,31 @@
 package incident.management.system.service;
 
-import incident.management.system.dto.CreateUserRequest;
-import incident.management.system.dto.DepartmentResponse;
-import incident.management.system.dto.UpdateUserRequest;
-import incident.management.system.dto.UserResponse;
+import incident.management.system.dto.*;
+import incident.management.system.enums.UserRole;
 import incident.management.system.exception.ResourceNotFoundException;
-import incident.management.system.model.DepartmentEntity;
-import incident.management.system.model.UserEntity;
-import incident.management.system.repository.DepartmentRepository;
-import incident.management.system.repository.UserRepository;
+import incident.management.system.model.*;
+import incident.management.system.repository.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 @Service
 @RequiredArgsConstructor
 @Transactional
+@Slf4j
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AdminDepartmentSubscriptionRepository subscriptionRepository;
 
     @Override
     public UserResponse createUser(CreateUserRequest request) {
@@ -43,7 +45,16 @@ public class UserServiceImpl implements UserService {
                 .department(department)
                 .build();
 
-        return toResponse(userRepository.save(user));
+        UserResponse response = toResponse(userRepository.save(user));
+
+        // Soft nudge: ADMIN users should have at least one department subscription
+        if (request.role() == UserRole.ADMIN && request.departmentId() == null) {
+            log.warn("Admin user '{}' ({}) created without a department — they should subscribe to "
+                    + "at least one department via the subscription endpoints to receive notifications.",
+                    response.firstName() + " " + response.lastName(), response.matricule());
+        }
+
+        return response;
     }
 
     @Override
@@ -123,6 +134,55 @@ public class UserServiceImpl implements UserService {
         user.deactivate();
         return toResponse(userRepository.save(user));
     }
+
+    //  ========================================================================
+    //  Admin Department Subscriptions
+    //  ========================================================================
+
+    @Override
+    public void subscribeToDepartment(Long adminId, Long departmentId) {
+        UserEntity admin = userRepository.findById(adminId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", adminId));
+        DepartmentEntity department = departmentRepository.findById(departmentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Department", "id", departmentId));
+
+        if (subscriptionRepository.existsByAdminAndDepartment(admin, department)) {
+            return; // Already subscribed — idempotent
+        }
+
+        AdminDepartmentSubscription subscription = AdminDepartmentSubscription.builder()
+                .admin(admin)
+                .department(department)
+                .build();
+        subscriptionRepository.save(subscription);
+    }
+
+    @Override
+    public void unsubscribeFromDepartment(Long adminId, Long departmentId) {
+        UserEntity admin = userRepository.findById(adminId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", adminId));
+        DepartmentEntity department = departmentRepository.findById(departmentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Department", "id", departmentId));
+
+        subscriptionRepository.deleteByAdminAndDepartment(admin, department);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DepartmentResponse> getSubscribedDepartments(Long adminId) {
+        UserEntity admin = userRepository.findById(adminId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", adminId));
+
+        return subscriptionRepository.findByAdmin(admin).stream()
+                .map(sub -> new DepartmentResponse(
+                        sub.getDepartment().getId(),
+                        sub.getDepartment().getName()))
+                .collect(Collectors.toList());
+    }
+
+    //  ========================================================================
+    //  DTO Mapping
+    //  ========================================================================
 
     private UserResponse toResponse(UserEntity entity) {
         DepartmentResponse deptResponse = entity.getDepartment() != null

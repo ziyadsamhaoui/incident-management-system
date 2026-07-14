@@ -1,6 +1,7 @@
 package incident.management.system.controller;
 
 import incident.management.system.dto.CreateUserRequest;
+import incident.management.system.dto.DepartmentResponse;
 import incident.management.system.dto.UpdateUserRequest;
 import incident.management.system.dto.UserResponse;
 import incident.management.system.service.UserService;
@@ -13,6 +14,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/users")
@@ -54,5 +57,31 @@ public class UserController {
     public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
         userService.deleteUser(id);
         return ResponseEntity.noContent().build();
+    }
+
+    //  ========================================================================
+    //  Admin Department Subscriptions
+    //  ========================================================================
+
+    @PostMapping("/{userId}/subscriptions/{departmentId}")
+    public ResponseEntity<Void> subscribeToDepartment(
+            @PathVariable Long userId,
+            @PathVariable Long departmentId) {
+        userService.subscribeToDepartment(userId, departmentId);
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/{userId}/subscriptions/{departmentId}")
+    public ResponseEntity<Void> unsubscribeFromDepartment(
+            @PathVariable Long userId,
+            @PathVariable Long departmentId) {
+        userService.unsubscribeFromDepartment(userId, departmentId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{userId}/subscriptions")
+    public ResponseEntity<List<DepartmentResponse>> getSubscribedDepartments(
+            @PathVariable Long userId) {
+        return ResponseEntity.ok(userService.getSubscribedDepartments(userId));
     }
 }

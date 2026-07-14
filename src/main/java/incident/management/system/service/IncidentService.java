@@ -22,15 +22,13 @@ public interface IncidentService {
 
     Page<IncidentResponse> getIncidentsByStatus(String status, Pageable pageable);
 
-    //  New 6-Stage Lifecycle Methods
+    //  6-Stage Lifecycle Methods
 
     IncidentResponse claimIncident(Long id);
 
     IncidentResponse progressIncident(Long id);
 
     IncidentResponse evaluateIncident(Long id, EvaluateIncidentRequest request);
-
-    IncidentResponse closeIncident(Long id);
 
     void deleteIncident(Long id);
 }

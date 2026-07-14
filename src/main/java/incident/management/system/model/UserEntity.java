@@ -86,4 +86,14 @@ public class UserEntity {
         this.failedLoginAttempts = 0;
         this.lockoutEnd = null;
     }
+
+    /**
+     * Returns an audit-label string that unambiguously identifies this user
+     * in log output and {@link IncidentHistory} comments.
+     * <p>
+     * Format: {@code FirstName_LastName_Matricule}
+     */
+    public String getAuditLabel() {
+        return firstName + "_" + lastName + "_" + matricule;
+    }
 }

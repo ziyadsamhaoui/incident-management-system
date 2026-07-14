@@ -2,13 +2,17 @@ package incident.management.system.service;
 
 import incident.management.system.dto.*;
 import incident.management.system.enums.IncidentStatus;
+import incident.management.system.event.IncidentTransitionEvent;
 import incident.management.system.exception.InvalidStatusTransitionException;
 import incident.management.system.exception.ResourceNotFoundException;
 import incident.management.system.model.*;
 import incident.management.system.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,7 +30,7 @@ public class IncidentServiceImpl implements IncidentService {
     private final DepartmentRepository departmentRepository;
     private final StationRepository stationRepository;
     private final CategoryRepository categoryRepository;
-    private final NotificationService notificationService;
+    private final ApplicationEventPublisher eventPublisher;
     private final IncidentReferenceGenerator referenceGenerator;
 
     //  -------------------------------------------------------------------------
@@ -76,8 +80,11 @@ public class IncidentServiceImpl implements IncidentService {
         // Audit trail: initial declaration entry
         recordHistory(saved, IncidentStatus.DECLARED, IncidentStatus.DECLARED, null);
 
-        notificationService.notifyStatusChange(saved,
-                "Incident " + saved.getReference() + " has been declared with " + saved.getPriority() + " priority.");
+        // Publish event for notification processing
+        // Both previous and new status are DECLARED because this is the
+        // creation event — functionally a "→ DECLARED" transition
+        eventPublisher.publishEvent(new IncidentTransitionEvent(
+                saved, IncidentStatus.DECLARED, IncidentStatus.DECLARED, user.getId()));
 
         return toResponse(saved);
     }
@@ -147,17 +154,25 @@ public class IncidentServiceImpl implements IncidentService {
 
         validateTransition(incident.getStatus(), IncidentStatus.CLAIMED);
 
+        UserEntity currentUser = getCurrentUser();
+
         IncidentStatus previousStatus = incident.getStatus();
         incident.setStatus(IncidentStatus.CLAIMED);
         incident.setClaimedAt(LocalDateTime.now());
+        incident.setClaimedBy(currentUser);
 
         IncidentEntity saved = incidentRepository.save(incident);
 
         // Dual-write: audit trail
-        recordHistory(saved, previousStatus, IncidentStatus.CLAIMED, null);
+        String auditComment = currentUser != null
+                ? "Claimed by " + currentUser.getAuditLabel()
+                : "Claimed by system";
+        recordHistory(saved, previousStatus, IncidentStatus.CLAIMED, auditComment);
 
-        notificationService.notifyStatusChange(saved,
-                "Incident " + saved.getReference() + " has been claimed by an administrator.");
+        // Publish event for notification processing
+        Long actorId = currentUser != null ? currentUser.getId() : null;
+        eventPublisher.publishEvent(new IncidentTransitionEvent(
+                saved, previousStatus, IncidentStatus.CLAIMED, actorId));
 
         return toResponse(saved);
     }
@@ -182,8 +197,10 @@ public class IncidentServiceImpl implements IncidentService {
         // Dual-write: audit trail
         recordHistory(saved, previousStatus, IncidentStatus.IN_PROGRESS, null);
 
-        notificationService.notifyStatusChange(saved,
-                "Incident " + saved.getReference() + " is now in progress.");
+        // Publish event — IN_PROGRESS is silent per design (no notifications),
+        // but we still send the event in case other listeners need it
+        eventPublisher.publishEvent(new IncidentTransitionEvent(
+                saved, previousStatus, IncidentStatus.IN_PROGRESS, null));
 
         return toResponse(saved);
     }
@@ -202,7 +219,6 @@ public class IncidentServiceImpl implements IncidentService {
         IncidentStatus targetStatus = request.status();
 
         //  Strict transition check: only allowed from IN_PROGRESS
-        //  validateTransition() already enforces this via the state machine map
         validateTransition(incident.getStatus(), targetStatus);
 
         //  Conditional mandatory note for NON_RESOLVED
@@ -214,6 +230,8 @@ public class IncidentServiceImpl implements IncidentService {
             }
         }
 
+        UserEntity currentUser = getCurrentUser();
+
         //  Capture the note (may be null for RESOLVED without a comment)
         String resolutionNote = request.note();
 
@@ -221,6 +239,7 @@ public class IncidentServiceImpl implements IncidentService {
         IncidentStatus previousStatus = incident.getStatus();
         incident.setStatus(targetStatus);
         incident.setResolutionNote(resolutionNote);
+        incident.setResolvedBy(currentUser);
         if (targetStatus == IncidentStatus.RESOLVED || targetStatus == IncidentStatus.NON_RESOLVED) {
             incident.setResolvedAt(LocalDateTime.now());
         }
@@ -228,36 +247,17 @@ public class IncidentServiceImpl implements IncidentService {
         IncidentEntity saved = incidentRepository.save(incident);
 
         //  Dual-write: mirror the note into incident_history.comment
-        recordHistory(saved, previousStatus, targetStatus, resolutionNote);
+        String auditComment = resolutionNote;
+        if (currentUser != null) {
+            auditComment = (resolutionNote != null ? resolutionNote + " (" : "(")
+                    + "Evaluated by " + currentUser.getAuditLabel() + ")";
+        }
+        recordHistory(saved, previousStatus, targetStatus, auditComment);
 
-        notificationService.notifyStatusChange(saved,
-                "Incident " + saved.getReference() + " has been marked as " + targetStatus + ".");
-
-        return toResponse(saved);
-    }
-
-    //  ========================================================================
-    //  D. CLOSE INCIDENT  —  RESOLVED / NON_RESOLVED → CLOSED
-    //  ========================================================================
-
-    @Override
-    public IncidentResponse closeIncident(Long id) {
-        IncidentEntity incident = incidentRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Incident", "id", id));
-
-        validateTransition(incident.getStatus(), IncidentStatus.CLOSED);
-
-        IncidentStatus previousStatus = incident.getStatus();
-        incident.setStatus(IncidentStatus.CLOSED);
-        incident.setClosedAt(LocalDateTime.now());
-
-        IncidentEntity saved = incidentRepository.save(incident);
-
-        // Dual-write: audit trail
-        recordHistory(saved, previousStatus, IncidentStatus.CLOSED, null);
-
-        notificationService.notifyStatusChange(saved,
-                "Incident " + saved.getReference() + " has been closed.");
+        // Publish event for notification processing
+        Long actorId = currentUser != null ? currentUser.getId() : null;
+        eventPublisher.publishEvent(new IncidentTransitionEvent(
+                saved, previousStatus, targetStatus, actorId));
 
         return toResponse(saved);
     }
@@ -321,6 +321,25 @@ public class IncidentServiceImpl implements IncidentService {
         incidentHistoryRepository.save(history);
     }
 
+    /**
+     * Extracts the currently authenticated {@link UserEntity} from the
+     * {@link SecurityContextHolder}, or returns {@code null} if no
+     * authentication is available (e.g. for scheduler-triggered transitions).
+     */
+    private UserEntity getCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return null;
+        }
+        String principal = authentication.getName(); // matricule as string
+        try {
+            int matricule = Integer.parseInt(principal);
+            return userRepository.findByMatricule(matricule).orElse(null);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
     //  ========================================================================
     //  DTO MAPPING
     //  ========================================================================
@@ -354,12 +373,20 @@ public class IncidentServiceImpl implements IncidentService {
                 ? new CategoryResponse(entity.getCategory().getId(), entity.getCategory().getName())
                 : null;
 
-        UserSummaryResponse assignedTo = entity.getAssignedTo() != null
+        UserSummaryResponse assignedTo = entity.getClaimedBy() != null
                 ? new UserSummaryResponse(
-                        entity.getAssignedTo().getId(),
-                        entity.getAssignedTo().getFirstName(),
-                        entity.getAssignedTo().getLastName(),
-                        entity.getAssignedTo().getMatricule())
+                        entity.getClaimedBy().getId(),
+                        entity.getClaimedBy().getFirstName(),
+                        entity.getClaimedBy().getLastName(),
+                        entity.getClaimedBy().getMatricule())
+                : null;
+
+        UserSummaryResponse resolvedBy = entity.getResolvedBy() != null
+                ? new UserSummaryResponse(
+                        entity.getResolvedBy().getId(),
+                        entity.getResolvedBy().getFirstName(),
+                        entity.getResolvedBy().getLastName(),
+                        entity.getResolvedBy().getMatricule())
                 : null;
 
         return new IncidentResponse(
@@ -367,6 +394,7 @@ public class IncidentServiceImpl implements IncidentService {
                 entity.getReference(),
                 userSummary,
                 assignedTo,
+                resolvedBy,
                 deptResponse,
                 stationResponse,
                 categoryResponse,

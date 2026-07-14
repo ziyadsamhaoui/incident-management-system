@@ -102,14 +102,6 @@ public class IncidentController {
         return ResponseEntity.ok(response);
     }
 
-    //  ========================================================================
-    //  CLOSE  —  RESOLVED / NON_RESOLVED → CLOSED
-    //  Client/backend auto-closure
-    //  ========================================================================
-
-    @PutMapping("/{id}/close")
-    public ResponseEntity<IncidentResponse> closeIncident(@PathVariable Long id) {
-        IncidentResponse response = incidentService.closeIncident(id);
-        return ResponseEntity.ok(response);
-    }
+    //  NOTE: Manual close endpoint has been retired.
+    //  Closure happens exclusively via the IncidentAutoClosureJob scheduler.
 }

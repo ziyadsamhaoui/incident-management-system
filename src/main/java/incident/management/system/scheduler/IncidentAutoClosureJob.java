@@ -1,12 +1,14 @@
 package incident.management.system.scheduler;
 
 import incident.management.system.enums.IncidentStatus;
+import incident.management.system.event.IncidentTransitionEvent;
 import incident.management.system.model.IncidentEntity;
 import incident.management.system.model.IncidentHistory;
 import incident.management.system.repository.IncidentHistoryRepository;
 import incident.management.system.repository.IncidentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,11 +34,14 @@ public class IncidentAutoClosureJob {
 
     private final IncidentRepository incidentRepository;
     private final IncidentHistoryRepository incidentHistoryRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * Runs every 120 000 milliseconds (2 minutes).
      * Queries for any incident in RESOLVED status whose resolvedAt
      * timestamp is older than 10 minutes and transitions them to CLOSED.
+     * Publishes an {@link IncidentTransitionEvent} for each closure so
+     * that the {@code resolvedBy} admin receives a notification.
      */
     @Scheduled(fixedRate = 120_000)
     @Transactional
@@ -67,6 +72,10 @@ public class IncidentAutoClosureJob {
                     .comment("Auto-closed by system after 10-minute timer.")
                     .build();
             incidentHistoryRepository.save(history);
+
+            // Publish event so the resolvedBy admin gets notified
+            eventPublisher.publishEvent(new IncidentTransitionEvent(
+                    incident, previousStatus, IncidentStatus.CLOSED, null));
 
             log.debug("Auto-closed incident: {}", incident.getReference());
         }
