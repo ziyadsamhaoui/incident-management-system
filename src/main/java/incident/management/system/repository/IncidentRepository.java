@@ -9,6 +9,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -21,4 +23,6 @@ public interface IncidentRepository extends JpaRepository<IncidentEntity, Long> 
     Page<IncidentEntity> findByDepartment(DepartmentEntity department, Pageable pageable);
 
     Optional<IncidentEntity> findByReference(String reference);
+
+    List<IncidentEntity> findByStatusAndResolvedAtBefore(IncidentStatus status, LocalDateTime resolvedAt);
 }

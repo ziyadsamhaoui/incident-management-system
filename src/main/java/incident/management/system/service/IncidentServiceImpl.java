@@ -13,11 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +21,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class IncidentServiceImpl implements IncidentService {
 
     private final IncidentRepository incidentRepository;
+    private final IncidentHistoryRepository incidentHistoryRepository;
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
     private final StationRepository stationRepository;
@@ -32,13 +29,24 @@ public class IncidentServiceImpl implements IncidentService {
     private final NotificationService notificationService;
     private final IncidentReferenceGenerator referenceGenerator;
 
+    //  -------------------------------------------------------------------------
+    //  6-Stage Linear State Machine
+    //  -------------------------------------------------------------------------
+    //  DECLARED → CLAIMED → IN_PROGRESS → RESOLVED/NON_RESOLVED → CLOSED
+    //  -------------------------------------------------------------------------
 
-    private static final Map<IncidentStatus, IncidentStatus> VALID_TRANSITIONS = Map.of(
-            IncidentStatus.DECLARED, IncidentStatus.ASSIGNED,
-            IncidentStatus.ASSIGNED, IncidentStatus.IN_PROGRESS,
-            IncidentStatus.IN_PROGRESS, IncidentStatus.RESOLVED,
-            IncidentStatus.RESOLVED, IncidentStatus.CLOSED
+    private static final Map<IncidentStatus, IncidentStatus[]> VALID_TRANSITIONS = Map.of(
+            IncidentStatus.DECLARED,       new IncidentStatus[]{IncidentStatus.CLAIMED},
+            IncidentStatus.CLAIMED,        new IncidentStatus[]{IncidentStatus.IN_PROGRESS},
+            IncidentStatus.IN_PROGRESS,    new IncidentStatus[]{IncidentStatus.RESOLVED, IncidentStatus.NON_RESOLVED},
+            IncidentStatus.RESOLVED,       new IncidentStatus[]{IncidentStatus.CLOSED},
+            IncidentStatus.NON_RESOLVED,   new IncidentStatus[]{IncidentStatus.CLOSED},
+            IncidentStatus.CLOSED,         new IncidentStatus[]{}
     );
+
+    //  ========================================================================
+    //  CREATE INCIDENT
+    //  ========================================================================
 
     @Override
     public IncidentResponse createIncident(CreateIncidentRequest request) {
@@ -65,11 +73,18 @@ public class IncidentServiceImpl implements IncidentService {
 
         IncidentEntity saved = incidentRepository.save(incident);
 
+        // Audit trail: initial declaration entry
+        recordHistory(saved, IncidentStatus.DECLARED, IncidentStatus.DECLARED, null);
+
         notificationService.notifyStatusChange(saved,
                 "Incident " + saved.getReference() + " has been declared with " + saved.getPriority() + " priority.");
 
         return toResponse(saved);
     }
+
+    //  ========================================================================
+    //  READ OPERATIONS
+    //  ========================================================================
 
     @Override
     @Transactional(readOnly = true)
@@ -121,90 +136,202 @@ public class IncidentServiceImpl implements IncidentService {
         return incidentRepository.findByStatus(incidentStatus, pageable).map(this::toResponse);
     }
 
+    //  ========================================================================
+    //  A. CLAIM INCIDENT  —  DECLARED → CLAIMED
+    //  ========================================================================
+
     @Override
-    public IncidentResponse updateIncidentStatus(Long id, UpdateIncidentStatusRequest request) {
+    public IncidentResponse claimIncident(Long id) {
         IncidentEntity incident = incidentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Incident", "id", id));
 
-        IncidentStatus currentStatus = incident.getStatus();
-        IncidentStatus targetStatus = request.status();
+        validateTransition(incident.getStatus(), IncidentStatus.CLAIMED);
 
-        validateTransition(currentStatus, targetStatus);
-        applyStatusTransition(incident, targetStatus);
+        IncidentStatus previousStatus = incident.getStatus();
+        incident.setStatus(IncidentStatus.CLAIMED);
+        incident.setClaimedAt(LocalDateTime.now());
 
         IncidentEntity saved = incidentRepository.save(incident);
 
+        // Dual-write: audit trail
+        recordHistory(saved, previousStatus, IncidentStatus.CLAIMED, null);
+
         notificationService.notifyStatusChange(saved,
-                "Incident " + saved.getReference() + " status changed from " + currentStatus + " to " + targetStatus + ".");
+                "Incident " + saved.getReference() + " has been claimed by an administrator.");
 
         return toResponse(saved);
     }
 
+    //  ========================================================================
+    //  B. PROGRESS INCIDENT  —  CLAIMED → IN_PROGRESS
+    //  ========================================================================
+
     @Override
-    public IncidentResponse assignIncident(Long id, Long userId) {
+    public IncidentResponse progressIncident(Long id) {
         IncidentEntity incident = incidentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Incident", "id", id));
 
-        UserEntity assignedUser = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+        validateTransition(incident.getStatus(), IncidentStatus.IN_PROGRESS);
 
-        incident.setAssignedTo(assignedUser);
-        incident.setAssignedAt(LocalDateTime.now());
+        IncidentStatus previousStatus = incident.getStatus();
+        incident.setStatus(IncidentStatus.IN_PROGRESS);
+        incident.setInProgressAt(LocalDateTime.now());
 
-        if (incident.getStatus() == IncidentStatus.DECLARED) {
-            incident.setStatus(IncidentStatus.ASSIGNED);
+        IncidentEntity saved = incidentRepository.save(incident);
+
+        // Dual-write: audit trail
+        recordHistory(saved, previousStatus, IncidentStatus.IN_PROGRESS, null);
+
+        notificationService.notifyStatusChange(saved,
+                "Incident " + saved.getReference() + " is now in progress.");
+
+        return toResponse(saved);
+    }
+
+    //  ========================================================================
+    //  C. EVALUATE INCIDENT  —  IN_PROGRESS → RESOLVED / NON_RESOLVED
+    //     Dual-write comment architecture: note saved to incident.resolutionNote
+    //     AND mirrored to incident_history.comment
+    //  ========================================================================
+
+    @Override
+    public IncidentResponse evaluateIncident(Long id, EvaluateIncidentRequest request) {
+        IncidentEntity incident = incidentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Incident", "id", id));
+
+        IncidentStatus targetStatus = request.status();
+
+        //  Strict transition check: only allowed from IN_PROGRESS
+        //  validateTransition() already enforces this via the state machine map
+        validateTransition(incident.getStatus(), targetStatus);
+
+        //  Conditional mandatory note for NON_RESOLVED
+        if (targetStatus == IncidentStatus.NON_RESOLVED) {
+            String note = request.note();
+            if (note == null || note.isBlank()) {
+                throw new IllegalArgumentException(
+                        "An explanatory note is mandatory when marking an incident as non-resolved.");
+            }
+        }
+
+        //  Capture the note (may be null for RESOLVED without a comment)
+        String resolutionNote = request.note();
+
+        //  Persist — unified transactional boundary
+        IncidentStatus previousStatus = incident.getStatus();
+        incident.setStatus(targetStatus);
+        incident.setResolutionNote(resolutionNote);
+        if (targetStatus == IncidentStatus.RESOLVED || targetStatus == IncidentStatus.NON_RESOLVED) {
+            incident.setResolvedAt(LocalDateTime.now());
         }
 
         IncidentEntity saved = incidentRepository.save(incident);
 
+        //  Dual-write: mirror the note into incident_history.comment
+        recordHistory(saved, previousStatus, targetStatus, resolutionNote);
+
         notificationService.notifyStatusChange(saved,
-                "Incident " + saved.getReference() + " has been assigned to "
-                        + assignedUser.getFirstName() + " " + assignedUser.getLastName() + ".");
+                "Incident " + saved.getReference() + " has been marked as " + targetStatus + ".");
 
         return toResponse(saved);
     }
 
+    //  ========================================================================
+    //  D. CLOSE INCIDENT  —  RESOLVED / NON_RESOLVED → CLOSED
+    //  ========================================================================
+
     @Override
-    public void  deleteIncident(Long id) {
+    public IncidentResponse closeIncident(Long id) {
+        IncidentEntity incident = incidentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Incident", "id", id));
+
+        validateTransition(incident.getStatus(), IncidentStatus.CLOSED);
+
+        IncidentStatus previousStatus = incident.getStatus();
+        incident.setStatus(IncidentStatus.CLOSED);
+        incident.setClosedAt(LocalDateTime.now());
+
+        IncidentEntity saved = incidentRepository.save(incident);
+
+        // Dual-write: audit trail
+        recordHistory(saved, previousStatus, IncidentStatus.CLOSED, null);
+
+        notificationService.notifyStatusChange(saved,
+                "Incident " + saved.getReference() + " has been closed.");
+
+        return toResponse(saved);
+    }
+
+    //  ========================================================================
+    //  DELETE
+    //  ========================================================================
+
+    @Override
+    public void deleteIncident(Long id) {
         if (!incidentRepository.existsById(id)) {
             throw new ResourceNotFoundException("Incident", "id", id);
         }
         incidentRepository.deleteById(id);
     }
 
-    // HELPER METHODS
+    //  ========================================================================
+    //  VALIDATION & HELPERS
+    //  ========================================================================
 
+    /**
+     * Validates that a transition from {@code current} to {@code target} is
+     * allowed according to the state machine defined in {@link #VALID_TRANSITIONS}.
+     * <p>
+     * Same-state transitions are silently allowed (idempotent).
+     */
     private void validateTransition(IncidentStatus current, IncidentStatus target) {
         if (current == target) {
             return;
         }
-        IncidentStatus allowedNext = VALID_TRANSITIONS.get(current);
-        if (allowedNext == null || allowedNext != target) {
+        IncidentStatus[] allowedNext = VALID_TRANSITIONS.get(current);
+        if (allowedNext == null) {
             throw new InvalidStatusTransitionException(current, target);
         }
-    }
-
-    private void applyStatusTransition(IncidentEntity incident, IncidentStatus targetStatus) {
-        incident.setStatus(targetStatus);
-        LocalDateTime now = LocalDateTime.now();
-
-        switch (targetStatus) {
-            case ASSIGNED -> incident.setAssignedAt(now);
-            case IN_PROGRESS -> incident.setInProgressAt(now);
-            case RESOLVED -> incident.setResolvedAt(now);
-            case CLOSED -> incident.setClosedAt(now);
-            default -> {
+        for (IncidentStatus allowed : allowedNext) {
+            if (allowed == target) {
+                return;
             }
         }
+        throw new InvalidStatusTransitionException(current, target);
     }
+
+    /**
+     * Persists an {@link IncidentHistory} row for every status transition.
+     * <p>
+     * This implements the <strong>dual-write comment architecture</strong>:
+     * evaluation notes are stored both on the {@link IncidentEntity#resolutionNote}
+     * column and mirrored here in the {@code comment} column for chronological audit.
+     */
+    private void recordHistory(IncidentEntity incident,
+                               IncidentStatus previousStatus,
+                               IncidentStatus newStatus,
+                               String comment) {
+        IncidentHistory history = IncidentHistory.builder()
+                .incident(incident)
+                .previousStatus(previousStatus)
+                .currentStatus(newStatus)
+                .changedAt(LocalDateTime.now())
+                .comment(comment)
+                .build();
+        incidentHistoryRepository.save(history);
+    }
+
+    //  ========================================================================
+    //  DTO MAPPING
+    //  ========================================================================
 
     private IncidentResponse toResponse(IncidentEntity entity) {
         UserSummaryResponse userSummary = entity.getUser() != null
                 ? new UserSummaryResponse(
-                entity.getUser().getId(),
-                entity.getUser().getFirstName(),
-                entity.getUser().getLastName(),
-                entity.getUser().getMatricule())
+                        entity.getUser().getId(),
+                        entity.getUser().getFirstName(),
+                        entity.getUser().getLastName(),
+                        entity.getUser().getMatricule())
                 : null;
 
         DepartmentResponse deptResponse = entity.getDepartment() != null
@@ -213,14 +340,14 @@ public class IncidentServiceImpl implements IncidentService {
 
         StationResponse stationResponse = entity.getStation() != null
                 ? new StationResponse(
-                entity.getStation().getId(),
-                entity.getStation().getCode(),
-                entity.getStation().getRowIndex(),
-                entity.getStation().getLineIndex(),
-                entity.getStation().isWorking(),
-                entity.getStation().getProductionLine() != null
-                        ? entity.getStation().getProductionLine().getId()
-                        : null)
+                        entity.getStation().getId(),
+                        entity.getStation().getCode(),
+                        entity.getStation().getRowIndex(),
+                        entity.getStation().getLineIndex(),
+                        entity.getStation().isWorking(),
+                        entity.getStation().getProductionLine() != null
+                                ? entity.getStation().getProductionLine().getId()
+                                : null)
                 : null;
 
         CategoryResponse categoryResponse = entity.getCategory() != null
@@ -246,8 +373,9 @@ public class IncidentServiceImpl implements IncidentService {
                 entity.getPriority(),
                 entity.getStatus(),
                 entity.getDescription(),
+                entity.getResolutionNote(),
                 entity.getDeclaredAt(),
-                entity.getAssignedAt(),
+                entity.getClaimedAt(),
                 entity.getInProgressAt(),
                 entity.getResolvedAt(),
                 entity.getClosedAt()

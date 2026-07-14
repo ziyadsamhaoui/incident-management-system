@@ -2,8 +2,9 @@ package incident.management.system.enums;
 
 public enum IncidentStatus {
     DECLARED,
-    ASSIGNED,
+    CLAIMED,
     IN_PROGRESS,
     RESOLVED,
+    NON_RESOLVED,
     CLOSED
 }

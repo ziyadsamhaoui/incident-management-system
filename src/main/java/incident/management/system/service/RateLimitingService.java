@@ -51,7 +51,7 @@ public class RateLimitingService {
         log.debug("RateLimitingService cleaner shut down");
     }
 
-    //  Public API
+
     public void consume(String clientKey, String requestPath, String httpMethod) {
         // Determine which rate-limit rule applies
         RateLimitRule rule = resolveRule(requestPath, httpMethod);

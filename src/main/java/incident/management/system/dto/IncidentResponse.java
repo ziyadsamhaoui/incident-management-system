@@ -15,8 +15,9 @@ public record IncidentResponse(
         IncidentPriority priority,
         IncidentStatus status,
         String description,
+        String resolutionNote,
         LocalDateTime declaredAt,
-        LocalDateTime assignedAt,
+        LocalDateTime claimedAt,
         LocalDateTime inProgressAt,
         LocalDateTime resolvedAt,
         LocalDateTime closedAt

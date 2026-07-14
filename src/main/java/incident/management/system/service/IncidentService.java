@@ -1,8 +1,8 @@
 package incident.management.system.service;
 
 import incident.management.system.dto.CreateIncidentRequest;
+import incident.management.system.dto.EvaluateIncidentRequest;
 import incident.management.system.dto.IncidentResponse;
-import incident.management.system.dto.UpdateIncidentStatusRequest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -22,9 +22,15 @@ public interface IncidentService {
 
     Page<IncidentResponse> getIncidentsByStatus(String status, Pageable pageable);
 
-    IncidentResponse updateIncidentStatus(Long id, UpdateIncidentStatusRequest request);
+    //  New 6-Stage Lifecycle Methods
 
-    IncidentResponse assignIncident(Long id, Long userId);
+    IncidentResponse claimIncident(Long id);
+
+    IncidentResponse progressIncident(Long id);
+
+    IncidentResponse evaluateIncident(Long id, EvaluateIncidentRequest request);
+
+    IncidentResponse closeIncident(Long id);
 
     void deleteIncident(Long id);
 }

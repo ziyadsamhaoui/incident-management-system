@@ -53,7 +53,7 @@ public class IncidentEntity {
     private LocalDateTime declaredAt;
 
     @Column(updatable = false)
-    private LocalDateTime assignedAt;
+    private LocalDateTime claimedAt;
 
     @Column(updatable = false)
     private LocalDateTime inProgressAt;
@@ -64,8 +64,7 @@ public class IncidentEntity {
     @Column(updatable = false)
     private LocalDateTime closedAt;
 
-    @ManyToOne
-    @JoinColumn(name = "assigned_user_id")
-    private UserEntity assignedTo;
+    @Column(length = 1000)
+    private String resolutionNote;
 
 }
