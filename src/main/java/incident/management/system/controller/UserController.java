@@ -59,9 +59,7 @@ public class UserController {
         return ResponseEntity.noContent().build();
     }
 
-    //  ========================================================================
     //  Admin Department Subscriptions
-    //  ========================================================================
 
     @PostMapping("/{userId}/subscriptions/{departmentId}")
     public ResponseEntity<Void> subscribeToDepartment(
