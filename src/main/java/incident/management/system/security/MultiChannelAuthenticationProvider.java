@@ -13,17 +13,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
-/**
- * Industrial multi-channel {@link AuthenticationProvider} that routes login
- * requests through three distinct operational lanes:
- * <ol>
- *   <li><b>SOUS_CHEF</b> — floor operator, no password, identity verified by
- *       {@code matricule + firstName + lastName}</li>
- *   <li><b>CHEF_ATELIER</b> — floor supervisor, {@code matricule + firstName +
- *       lastName + BCrypt password}</li>
- *   <li><b>ADMIN</b> — corporate administrator, {@code email + BCrypt password}</li>
- * </ol>
- */
+
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -43,9 +33,7 @@ public class MultiChannelAuthenticationProvider implements AuthenticationProvide
         };
     }
 
-    // ──────────────────────────────────────────────
-    //  Lane 1: SOUS_CHEF (Floor Operator — No Password)
-    // ──────────────────────────────────────────────
+    // SOUS_CHEF (Matricule only, No password)
 
     private Authentication authenticateSousChef(MultiChannelAuthenticationToken token) {
         int matricule = parseMatricule((String) token.getPrincipal());
@@ -59,7 +47,7 @@ public class MultiChannelAuthenticationProvider implements AuthenticationProvide
 
         // Strict role enforcement
         if (user.getRole() != UserRole.SOUS_CHEF) {
-            log.warn("Role mismatch for SOUS_CHEF lane — user {} has role {}", matricule, user.getRole());
+            log.warn("Role mismatch for SOUS_CHEF lane, user {} has role {}", matricule, user.getRole());
             throw new BadCredentialsException("Invalid credentials");
         }
 
@@ -67,9 +55,7 @@ public class MultiChannelAuthenticationProvider implements AuthenticationProvide
         return new MultiChannelAuthenticationToken(user);
     }
 
-    // ──────────────────────────────────────────────
-    //  Lane 2: CHEF_ATELIER (Floor Supervisor — Mixed Mode)
-    // ──────────────────────────────────────────────
+    // CHEF_ATELIER (Matricule + Password)
 
     private Authentication authenticateChefAtelier(MultiChannelAuthenticationToken token) {
         int matricule = parseMatricule((String) token.getPrincipal());
@@ -92,9 +78,7 @@ public class MultiChannelAuthenticationProvider implements AuthenticationProvide
         return new MultiChannelAuthenticationToken(user);
     }
 
-    // ──────────────────────────────────────────────
-    //  Lane 3: ADMIN (Corporate Administrator — Classic Mode)
-    // ──────────────────────────────────────────────
+    // ADMIN (Email + Password Mode)
 
     private Authentication authenticateAdmin(MultiChannelAuthenticationToken token) {
         String email = (String) token.getPrincipal();
@@ -118,9 +102,7 @@ public class MultiChannelAuthenticationProvider implements AuthenticationProvide
         return new MultiChannelAuthenticationToken(user);
     }
 
-    // ──────────────────────────────────────────────
-    //  Shared helpers
-    // ──────────────────────────────────────────────
+    //  Helpers
 
     private int parseMatricule(String principal) {
         try {

@@ -15,17 +15,8 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * Encapsulates the dual-track password reset lifecycle:
- * <ul>
- *   <li><b>Manual Token Loop</b> — for CHEF_ATELIER &amp; floor staff; short
- *       alphanumeric code returned inline so a manager can display it.</li>
- *   <li><b>Corporate Email Loop</b> — for ADMIN; secure UUID token dispatched
- *       via a background async email stub.</li>
- *   <li><b>Unified Confirmation</b> — validates token expiry/integrity,
- *       BCrypt-hashes the new password, and invalidates the token atomically.</li>
- * </ul>
- */
+// Encapsulate the dual-track password reset logic (Track A, Track B, Track C)
+
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -42,16 +33,7 @@ public class AuthService {
 
     private static final String ALPHANUMERIC = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // avoid ambiguous chars (0/O, 1/I)
 
-    // ──────────────────────────────────────────────
-    //  Track A: No-Email Manual Token Loop
-    //  (For CHEF_ATELIER & floor staff)
-    // ──────────────────────────────────────────────
-
-    /**
-     * Generates a short (6-char) alphanumeric reset token with a 15-minute
-     * expiry. Invalidates any prior unused token for the same user. Returns
-     * the raw token string so it can be rendered on a manager dashboard.
-     */
+    //  Track A: No-Email, Manual Token Loop (CHEF_ATELIER)
     public String requestPasswordResetManual(int matricule) {
         UserEntity user = userRepository.findByMatricule(matricule)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "matricule", matricule));
@@ -72,18 +54,7 @@ public class AuthService {
         return token;
     }
 
-    // ──────────────────────────────────────────────
-    //  Track B: Corporate Email Loop
-    //  (For ADMIN)
-    // ──────────────────────────────────────────────
-
-    /**
-     * Generates a secure UUID-based reset token with a 10-minute expiry for
-     * the ADMIN identified by their corporate email. The token is delegated
-     * to a background asynchronous email dispatcher stub.
-     *
-     * @return the generated secure token (for testing/debug purposes)
-     */
+    //  Track B: Email Loop (ADMIN)
     public String requestPasswordResetEmail(String email) {
         UserEntity user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "email", email));
@@ -100,23 +71,14 @@ public class AuthService {
 
         passwordResetTokenRepository.save(resetToken);
 
-        // Async email dispatcher stub — in production, replace with a real
-        // email service call (e.g. Spring Mail + Thymeleaf template).
+        // Async email dispatcher stub, in production replace with a real email service (Spring Mail)
         dispatchPasswordResetEmailAsync(email, token);
 
         log.info("Email password reset token generated for user {} (email: {})", user.getId(), email);
         return token;
     }
 
-    // ──────────────────────────────────────────────
     //  Track C: Unified Confirmation
-    // ──────────────────────────────────────────────
-
-    /**
-     * Validates the supplied token (regardless of origin track), BCrypt-hashes
-     * the new password, persists the hash on the target user record, and
-     * atomically invalidates the token so it cannot be reused.
-     */
     public void confirmPasswordReset(String token, String newPassword) {
         PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(token)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid or expired reset token"));
@@ -138,10 +100,7 @@ public class AuthService {
         log.info("Password reset confirmed for user {}", user.getId());
     }
 
-    // ──────────────────────────────────────────────
-    //  Internal helpers
-    // ──────────────────────────────────────────────
-
+    //  Helpers
     private void invalidateExistingTokens(Long userId) {
         passwordResetTokenRepository.findByUserIdAndUsedFalse(userId)
                 .ifPresent(existing -> {
@@ -150,11 +109,7 @@ public class AuthService {
                 });
     }
 
-    /**
-     * Generates a short alphanumeric token using a cryptographically secure
-     * random source. The character set excludes visually confusable characters
-     * (0/O, 1/I) for dashboard readability.
-     */
+    // Generates a random alphanumeric string of length 6
     private String generateManualToken() {
         SecureRandom random = new SecureRandom();
         StringBuilder sb = new StringBuilder(MANUAL_TOKEN_LENGTH);
@@ -164,12 +119,7 @@ public class AuthService {
         return sb.toString();
     }
 
-    /**
-     * Stub for asynchronous email dispatch. In a production environment this
-     * would publish an {@link org.springframework.context.ApplicationEvent} or
-     * invoke a {@link org.springframework.scheduling.annotation.Async} method
-     * to send an email via SMTP.
-     */
+
     private void dispatchPasswordResetEmailAsync(String email, String token) {
         log.info("[EMAIL STUB] --- Password reset link for {} ---", email);
         log.info("[EMAIL STUB] Token: {}", token);

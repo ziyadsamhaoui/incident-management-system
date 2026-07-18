@@ -57,13 +57,7 @@ public class SecurityConfig {
         return http.build();
     }
 
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
-
     // This bean is necessary for the authentication manager to work with the custom authentication provider
-
     @Bean
     public AuthenticationManager authenticationManager() {
         return new ProviderManager(multiChannelAuthenticationProvider);
