@@ -80,7 +80,8 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         }
     }
 
-    //  Helpers
+
+    //  Helpers methods
 
     private boolean isRateLimitedEndpoint(String requestPath, String httpMethod) {
         return RateLimitingService.resolveRule(requestPath, httpMethod) != null;

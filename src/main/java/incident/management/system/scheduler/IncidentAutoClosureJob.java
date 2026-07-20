@@ -27,6 +27,8 @@ import java.util.List;
  * Runs every 2 minutes to minimise the window between resolution and
  * automatic closure.
  */
+
+// Automatically close resolved incidents after 10 minutes
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -36,13 +38,8 @@ public class IncidentAutoClosureJob {
     private final IncidentHistoryRepository incidentHistoryRepository;
     private final ApplicationEventPublisher eventPublisher;
 
-    /**
-     * Runs every 120 000 milliseconds (2 minutes).
-     * Queries for any incident in RESOLVED status whose resolvedAt
-     * timestamp is older than 10 minutes and transitions them to CLOSED.
-     * Publishes an {@link IncidentTransitionEvent} for each closure so
-     * that the {@code resolvedBy} admin receives a notification.
-     */
+
+    // Runs every 2 minutes
     @Scheduled(fixedRate = 120_000)
     @Transactional
     public void autoCloseResolvedIncidents() {

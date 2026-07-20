@@ -29,6 +29,7 @@ public class IncidentRecipientResolver {
     public List<UserEntity> resolveRecipients(IncidentEntity incident,
                                               IncidentStatus newStatus,
                                               UserEntity actor) {
+
         // No notifications for incidents in progress
         if (newStatus == IncidentStatus.IN_PROGRESS) {
             return Collections.emptyList();

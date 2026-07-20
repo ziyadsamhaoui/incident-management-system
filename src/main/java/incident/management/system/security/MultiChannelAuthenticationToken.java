@@ -9,11 +9,8 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import java.util.Collection;
 import java.util.List;
 
-/**
- * Custom {@link org.springframework.security.core.Authentication} token that
- * carries the multi-channel lane information alongside the credentials and
- * identity fields needed to authenticate each operational lane.
- */
+
+// Carries the multi-channel lane information alongside the credentials and identity fields needed to authenticate each operational lane.
 public class MultiChannelAuthenticationToken extends AbstractAuthenticationToken {
 
     private final String principal;       // matricule (SOUS_CHEF/CHEF_ATELIER) or email (ADMIN)
@@ -24,10 +21,8 @@ public class MultiChannelAuthenticationToken extends AbstractAuthenticationToken
 
     private UserEntity authenticatedUser; // populated post-authentication
 
-    /**
-     * Pre-authentication constructor — carries the raw request fields.
-     * The token is not yet authenticated.
-     */
+
+    // Pre-authentication constructor which carries the raw request fields.
     public MultiChannelAuthenticationToken(String principal, String credentials,
                                            UserRole lane, String firstName, String lastName) {
         super((Collection<? extends GrantedAuthority>) null);
@@ -39,10 +34,8 @@ public class MultiChannelAuthenticationToken extends AbstractAuthenticationToken
         setAuthenticated(false);
     }
 
-    /**
-     * Post-authentication constructor — builds an authenticated token with
-     * granted authorities from the persistent {@link UserEntity}.
-     */
+
+    // Post-authentication constructor which carries the authenticated user.
     public MultiChannelAuthenticationToken(UserEntity user) {
         super(List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())));
         this.principal = String.valueOf(user.getMatricule());

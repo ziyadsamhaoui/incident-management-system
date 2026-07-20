@@ -21,22 +21,7 @@ public class IncidentController {
 
     private final IncidentService incidentService;
 
-    //  ========================================================================
-    //  DECLARE  —  DECLARED
-    //  Actors: SOUS_CHEF or CHEF_ATELIER
-    //  ========================================================================
-
-    @PostMapping
-    @PreAuthorize("hasAnyRole('SOUS_CHEF', 'CHEF_ATELIER')")
-    public ResponseEntity<IncidentResponse> createIncident(@Valid @RequestBody CreateIncidentRequest request) {
-        IncidentResponse response = incidentService.createIncident(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
-    }
-
-    //  ========================================================================
-    //  LIST / GET
-    //  ========================================================================
-
+    //  Get all incidents, optionally filtered by status, department, or user.
     @GetMapping
     public ResponseEntity<Page<IncidentResponse>> getIncidents(
             @RequestParam(required = false) String status,
@@ -59,17 +44,24 @@ public class IncidentController {
         return ResponseEntity.ok(incidents);
     }
 
+
+    //  DECLARED
+    //  Actor: SOUS_CHEF or CHEF_ATELIER
+    @PostMapping
+    @PreAuthorize("hasAnyRole('SOUS_CHEF', 'CHEF_ATELIER')")
+    public ResponseEntity<IncidentResponse> createIncident(@Valid @RequestBody CreateIncidentRequest request) {
+        IncidentResponse response = incidentService.createIncident(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<IncidentResponse> getIncidentById(@PathVariable Long id) {
         IncidentResponse response = incidentService.getIncidentById(id);
         return ResponseEntity.ok(response);
     }
 
-    //  ========================================================================
-    //  CLAIM  —  DECLARED → CLAIMED
+    //  DECLARED → CLAIMED
     //  Actor: ADMIN
-    //  ========================================================================
-
     @PutMapping("/{id}/claim")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<IncidentResponse> claimIncident(@PathVariable Long id) {
@@ -77,22 +69,16 @@ public class IncidentController {
         return ResponseEntity.ok(response);
     }
 
-    //  ========================================================================
-    //  PROGRESS  —  CLAIMED → IN_PROGRESS
-    //  Open to client-side automated triggers
-    //  ========================================================================
-
+    //  CLAIMED → IN_PROGRESS
+    //  Actor: CLIENT
     @PutMapping("/{id}/progress")
     public ResponseEntity<IncidentResponse> progressIncident(@PathVariable Long id) {
         IncidentResponse response = incidentService.progressIncident(id);
         return ResponseEntity.ok(response);
     }
 
-    //  ========================================================================
-    //  EVALUATE  —  IN_PROGRESS → RESOLVED / NON_RESOLVED
+    //  IN_PROGRESS → RESOLVED / NON_RESOLVED
     //  Actor: ADMIN
-    //  ========================================================================
-
     @PutMapping("/{id}/evaluate")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<IncidentResponse> evaluateIncident(
@@ -102,6 +88,6 @@ public class IncidentController {
         return ResponseEntity.ok(response);
     }
 
-    //  NOTE: Manual close endpoint has been retired.
-    //  Closure happens exclusively via the IncidentAutoClosureJob scheduler.
+    //  RESOLVED → CLOSED
+    // Actor: CLIENT via scheduler/IncidentAutoClosureJob
 }
