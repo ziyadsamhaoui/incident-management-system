@@ -26,13 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-/**
- * Web slice tests for {@link IncidentController}.
- * <p>
- * Covers annotation verification for method-level {@code @PreAuthorize},
- * RBAC (HTTP 403) enforcement via {@link RoleEnforcementFilter},
- * and functional validation tests.
- */
+
 class IncidentControllerWebTest extends StandaloneWebMvcTestBase {
 
     @Mock
@@ -51,10 +45,7 @@ class IncidentControllerWebTest extends StandaloneWebMvcTestBase {
         SecurityContextHolder.clearContext();
     }
 
-    //  ──────────────────────────────────────────────
     //  @PreAuthorize Annotation Verification
-    //  ──────────────────────────────────────────────
-
     @Nested
     @DisplayName("@PreAuthorize annotation verification")
     class AnnotationVerification {
@@ -101,12 +92,9 @@ class IncidentControllerWebTest extends StandaloneWebMvcTestBase {
         }
     }
 
-    //  ──────────────────────────────────────────────
-    //  RBAC — role enforcement (403)
-    //  ──────────────────────────────────────────────
-
+    //  Role enforcement (403)
     @Nested
-    @DisplayName("RBAC — role enforcement (403)")
+    @DisplayName("Role enforcement (403)")
     class RbacEnforcement {
 
         @BeforeEach
@@ -184,10 +172,7 @@ class IncidentControllerWebTest extends StandaloneWebMvcTestBase {
         }
     }
 
-    //  ──────────────────────────────────────────────
     //  Functional validation tests
-    //  ──────────────────────────────────────────────
-
     @Nested
     @DisplayName("Functional endpoint tests")
     class FunctionalValidation {

@@ -24,20 +24,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/**
- * Web slice tests for {@link AdminController}.
- * <p>
- * The controller is annotated with {@code @PreAuthorize("hasRole('ADMIN')")}
- * at the class level.
- * <p>
- * Testing strategy:
- * <ol>
- *   <li><b>Annotation verification</b> — reflection checks for {@code @PreAuthorize}.</li>
- *   <li><b>RBAC (HTTP 403) tests</b> — standalone MockMvc with
- *       {@link RoleEnforcementFilter} verifies non-admin → 403.</li>
- *   <li><b>Functional endpoint tests</b> — request/response flow.</li>
- * </ol>
- */
 class AdminControllerWebTest extends StandaloneWebMvcTestBase {
 
     @Mock
@@ -70,10 +56,7 @@ class AdminControllerWebTest extends StandaloneWebMvcTestBase {
         SecurityContextHolder.clearContext();
     }
 
-    //  ──────────────────────────────────────────────
     //  @PreAuthorize Annotation Verification
-    //  ──────────────────────────────────────────────
-
     @Nested
     @DisplayName("@PreAuthorize annotation verification")
     class AnnotationVerification {
@@ -101,12 +84,9 @@ class AdminControllerWebTest extends StandaloneWebMvcTestBase {
         }
     }
 
-    //  ──────────────────────────────────────────────
-    //  RBAC — non-admin → 403
-    //  ──────────────────────────────────────────────
-
+    //  non-ADMIN → 403 FORBIDDEN
     @Nested
-    @DisplayName("RBAC — non-admin users receive 403")
+    @DisplayName("non-ADMIN users receive 403 FORBIDDEN")
     class RbacEnforcement {
 
         @BeforeEach
@@ -220,10 +200,7 @@ class AdminControllerWebTest extends StandaloneWebMvcTestBase {
         }
     }
 
-    //  ──────────────────────────────────────────────
     //  Functional endpoint tests
-    //  ──────────────────────────────────────────────
-
     @Nested
     @DisplayName("Functional endpoint behavior")
     class FunctionalEndpoints {

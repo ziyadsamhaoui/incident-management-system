@@ -27,21 +27,7 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-/**
- * Web slice tests for {@link AuthController#login} focusing on the
- * <em>multi-channel lane routing</em> logic ({@code detectLane()}).
- * <p>
- * The endpoint is open ({@code permitAll()}), so no authentication is
- * required. All routing vectors are exercised via different payload
- * shapes.
- * <p>
- * Routing matrix:
- * <ul>
- *   <li><b>SOUS_CHEF</b> — mat + firstName + lastName, no password</li>
- *   <li><b>CHEF_ATELIER</b> — mat + password + firstName + lastName</li>
- *   <li><b>ADMIN</b> — email + password</li>
- * </ul>
- */
+
 class AuthControllerAuthTest extends StandaloneWebMvcTestBase {
 
     @Mock
@@ -70,9 +56,7 @@ class AuthControllerAuthTest extends StandaloneWebMvcTestBase {
         buildMockMvc(authController);
     }
 
-    /**
-     * Creates a minimal {@link UserEntity} for test authentication.
-     */
+    // Creates a UserEntity with the given matricule, firstName, lastName, and role.
     private UserEntity createUser(int matricule, String firstName, String lastName, UserRole role) {
         return UserEntity.builder()
                 .id((long) matricule)
@@ -86,21 +70,15 @@ class AuthControllerAuthTest extends StandaloneWebMvcTestBase {
                 .build();
     }
 
-    /**
-     * Stubs AuthenticationManager to return a successful
-     * {@link MultiChannelAuthenticationToken} for the given user.
-     */
+    // Stubs AuthenticationManager to return a successful MultiChannelAuthenticationToken for the given user.
     private void stubSuccessfulAuth(UserEntity user) {
         when(authenticationManager.authenticate(any()))
                 .thenReturn(new MultiChannelAuthenticationToken(user));
     }
 
-    //  ──────────────────────────────────────────────────────────────
-    //  SOUS_CHEF Lane — identity-only
-    //  ──────────────────────────────────────────────────────────────
-
+    //  SOUS_CHEF: identity only
     @Nested
-    @DisplayName("SOUS_CHEF lane — mat + firstName + lastName, no password")
+    @DisplayName("SOUS_CHEF: mat + firstName + lastName, no password")
     class SousChefLane {
 
         @Test
@@ -129,12 +107,9 @@ class AuthControllerAuthTest extends StandaloneWebMvcTestBase {
         }
     }
 
-    //  ──────────────────────────────────────────────────────────────
-    //  CHEF_ATELIER Lane — mixed
-    //  ──────────────────────────────────────────────────────────────
-
+    //  CHEF_ATELIER: identity + password
     @Nested
-    @DisplayName("CHEF_ATELIER lane — mat + password + firstName + lastName")
+    @DisplayName("CHEF_ATELIER: mat + password + firstName + lastName")
     class ChefAtelierLane {
 
         @Test
@@ -207,10 +182,7 @@ class AuthControllerAuthTest extends StandaloneWebMvcTestBase {
         }
     }
 
-    //  ──────────────────────────────────────────────────────────────
-    //  ADMIN Lane — email-based
-    //  ──────────────────────────────────────────────────────────────
-
+    //  ADMIN: email + password
     @Nested
     @DisplayName("ADMIN lane — email + password")
     class AdminLane {
@@ -287,12 +259,9 @@ class AuthControllerAuthTest extends StandaloneWebMvcTestBase {
         }
     }
 
-    //  ──────────────────────────────────────────────────────────────
     //  Edge Cases
-    //  ──────────────────────────────────────────────────────────────
-
     @Nested
-    @DisplayName("Edge cases — unexpected / malformed payloads")
+    @DisplayName("Edge cases: unexpected / malformed payloads")
     class EdgeCases {
 
         @Test

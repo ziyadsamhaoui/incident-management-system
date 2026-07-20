@@ -66,7 +66,7 @@ class MultiChannelAuthenticationProviderTest {
 
     // SOUS_CHEF: identity-only, NO BCrypt
     @Nested
-    @DisplayName("SOUS_CHEF lane — identity-only authentication (BCrypt bypassed)")
+    @DisplayName("SOUS_CHEF lane: identity-only authentication (BCrypt bypassed)")
     class SousChefLane {
 
         private static final int MATRICULE = 1001;

@@ -20,16 +20,7 @@ import org.springframework.http.MediaType;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-/**
- * Web slice tests verifying that {@code GlobalExceptionHandler}
- * intercepts Jakarta Validation failures and returns a structured
- * {@code ErrorResponse} with per-field error detail.
- * <p>
- * Uses standalone {@code MockMvc} (not {@code @WebMvcTest}) with
- * a real {@code LocalValidatorFactoryBean} wired in, so that
- * {@code @Valid} on {@code @RequestBody} parameters triggers
- * constraint violations.
- */
+
 class GlobalExceptionHandlerWebTest extends StandaloneWebMvcTestBase {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -47,12 +38,9 @@ class GlobalExceptionHandlerWebTest extends StandaloneWebMvcTestBase {
                 new UserController(userService));
     }
 
-    //  ──────────────────────────────────────────────
     //  CreateIncidentRequest → @Valid failures
-    //  ──────────────────────────────────────────────
-
     @Nested
-    @DisplayName("POST /api/incidents — validation failures")
+    @DisplayName("POST /api/incidents: validation failures")
     class CreateIncidentValidation {
 
         @Test
@@ -100,12 +88,9 @@ class GlobalExceptionHandlerWebTest extends StandaloneWebMvcTestBase {
         }
     }
 
-    //  ──────────────────────────────────────────────
     //  CreateUserRequest → @Valid failures
-    //  ──────────────────────────────────────────────
-
     @Nested
-    @DisplayName("POST /api/users — validation failures")
+    @DisplayName("POST /api/users: validation failures")
     class CreateUserValidation {
 
         @Test
