@@ -17,15 +17,9 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.util.List;
 
-/**
- * Listens for {@link IncidentTransitionEvent}s published after incident status
- * transitions and creates notification rows for each resolved recipient.
- * <p>
- * Uses {@code AFTER_COMMIT} phase so notifications are only persisted once the
- * underlying incident state change has committed — avoiding notifications
- * about rolled-back transitions. Runs within its own {@link Transactional}
- * context to safely reload the incident entity and its lazy associations.
- */
+
+// Listens for IncidentTransitionEvent events published after incident status transitions
+// Creates notification rows for each resolved recipient.
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -39,11 +33,10 @@ public class IncidentNotificationListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     @Transactional
     public void onIncidentTransition(IncidentTransitionEvent event) {
-        // Reload the incident within this transaction so lazy associations
-        // (e.g. department, resolvedBy) are available
+        // Reload the incident within this transaction so lazy associations are available
         IncidentEntity incident = incidentRepository.findById(event.incident().getId()).orElse(null);
         if (incident == null) {
-            log.warn("Incident {} not found for notification processing — skipping",
+            log.warn("Incident {} not found for notification processing, skipping..",
                     event.incident().getId());
             return;
         }
@@ -87,11 +80,8 @@ public class IncidentNotificationListener {
                 recipients.size(), incident.getReference(), transitionLabel);
     }
 
-    /**
-     * Builds a human-readable notification message for the transition.
-     * Uses the audit-label format ({@code FirstName_LastName_Matricule}) when
-     * an actor is involved.
-     */
+
+    // Builds a human-readable notification message for the transition using the audit-label format (FirstName_LastName_Matricule) when an actor is involved.
     private String buildMessage(IncidentTransitionEvent event, IncidentEntity incident, UserEntity actor) {
         String actorPart;
         if (actor != null) {
