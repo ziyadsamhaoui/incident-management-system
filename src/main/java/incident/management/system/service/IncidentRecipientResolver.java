@@ -16,17 +16,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-/**
- * Resolves the set of recipients who should receive a notification for a given
- * incident status transition, per the business rules defined in the
- * notification design.
- * <p>
- * The only things that vary per transition are:
- * <ul>
- *   <li>Which subset of the "department watchers" pool is included</li>
- *   <li>Who, if anyone, is excluded from that pool</li>
- * </ul>
- */
+
+// Resolves the set of recipients who should receive a notification for a given incident status transition.
 @Component
 @RequiredArgsConstructor
 public class IncidentRecipientResolver {
@@ -38,13 +29,13 @@ public class IncidentRecipientResolver {
     public List<UserEntity> resolveRecipients(IncidentEntity incident,
                                               IncidentStatus newStatus,
                                               UserEntity actor) {
-        // No notifications
+        // No notifications for incidents in progress
         if (newStatus == IncidentStatus.IN_PROGRESS) {
             return Collections.emptyList();
         }
 
-        // Auto-closure (RESOLVED → CLOSED via scheduler)
-        // Only notify the admin who resolved the incident
+        // RESOLVED → CLOSED via 10m auto-closure scheduler
+        // Notify the admin who resolved the incident only.
         if (newStatus == IncidentStatus.CLOSED && actor == null) {
             UserEntity resolvedBy = incident.getResolvedBy();
             if (resolvedBy != null) {
@@ -53,20 +44,20 @@ public class IncidentRecipientResolver {
             return Collections.emptyList();
         }
 
-        // RESOLVED / NON_RESOLVED (IN_PROGRESS → RESOLVED/NON_RESOLVED):
-        // only the CHEF_ATELIER of the department
+        // IN_PROGRESS → RESOLVED/NON_RESOLVED:
+        // Notify CHEF_ATELIER of the department only.
         if (newStatus == IncidentStatus.RESOLVED || newStatus == IncidentStatus.NON_RESOLVED) {
             return findChefAtelier(incident);
         }
 
-        // DECLARED (→ DECLARED): all department watchers, declarant as well
+        // → DECLARED
+        // Notify all department watchers, including the user who declared the incident.
         if (newStatus == IncidentStatus.DECLARED) {
             return getDepartmentWatchers(incident);
         }
 
-        // CLAIMED (DECLARED → CLAIMED): department watchers minus claiming admin
-        // CLOSED manually (RESOLVED → CLOSED): department watchers
-        // (Note: manual close endpoint is being retired, but the rule is defined here for completeness)
+        // DECLARED → CLAIMED
+        // Notify all department watchers, except the admin who claimed the incident
         List<UserEntity> watchers = getDepartmentWatchers(incident);
 
         if (actor != null) {
@@ -76,26 +67,19 @@ public class IncidentRecipientResolver {
         return watchers;
     }
 
-    /**
-     * Returns all "department watchers" for the given incident:
-     * <ul>
-     *   <li>The {@code CHEF_ATELIER} belonging to the incident's department</li>
-     *   <li>All {@code ADMIN}s subscribed to the incident's department</li>
-     * </ul>
-     */
+    // Returns the list of users who should receive a notification for a declared incident in a department.
     public List<UserEntity> getDepartmentWatchers(IncidentEntity incident) {
         if (incident.getDepartment() == null) {
             return Collections.emptyList();
         }
 
-        // Use a LinkedHashSet to deduplicate in the rare case that a user
-        // could appear in both the CHEF_ATELIER and ADMIN subscriber lists
+        // Use a LinkedHashSet to deduplicate if a user is both a CHEF_ATELIER and an ADMIN.
         Set<UserEntity> watchers = new LinkedHashSet<>();
 
         // CHEF_ATELIER of the department
         watchers.addAll(findChefAtelier(incident));
 
-        // ADMINS subscribed to the department
+        // ADMIN subscribed to the department
         List<AdminDepartmentSubscription> subscriptions =
                 subscriptionRepository.findByDepartment(incident.getDepartment());
         for (AdminDepartmentSubscription sub : subscriptions) {
@@ -105,10 +89,7 @@ public class IncidentRecipientResolver {
         return new ArrayList<>(watchers);
     }
 
-    /**
-     * Finds the {@code CHEF_ATELIER} user(s) belonging to the incident's
-     * department. Returns an empty list if the department has no chef assigned.
-     */
+    // Finds the CHEF_ATELIER of a department.
     private List<UserEntity> findChefAtelier(IncidentEntity incident) {
         if (incident.getDepartment() == null) {
             return Collections.emptyList();
