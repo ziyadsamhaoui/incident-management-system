@@ -8,16 +8,21 @@ import incident.management.system.exception.InvalidStatusTransitionException;
 import incident.management.system.model.IncidentEntity;
 import incident.management.system.model.IncidentHistory;
 import incident.management.system.model.UserEntity;
-import incident.management.system.repository.*;
+import incident.management.system.repository.CategoryRepository;
+import incident.management.system.repository.DepartmentRepository;
+import incident.management.system.repository.IncidentHistoryRepository;
+import incident.management.system.repository.IncidentRepository;
+import incident.management.system.repository.StationRepository;
+import incident.management.system.repository.UserRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
@@ -27,15 +32,16 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 
 // Validate the state machine transitions and business logic in isolation (no Spring context, no database)

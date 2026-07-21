@@ -1,6 +1,5 @@
 package incident.management.system.config;
 
-import incident.management.system.config.JwtService;
 import incident.management.system.exception.GlobalExceptionHandler;
 import incident.management.system.service.RateLimitingService;
 import org.junit.jupiter.api.DisplayName;

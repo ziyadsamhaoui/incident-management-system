@@ -1,10 +1,17 @@
 package incident.management.system.service;
 
-import incident.management.system.dto.*;
+import incident.management.system.dto.CreateUserRequest;
+import incident.management.system.dto.DepartmentResponse;
+import incident.management.system.dto.UpdateUserRequest;
+import incident.management.system.dto.UserResponse;
 import incident.management.system.enums.UserRole;
 import incident.management.system.exception.ResourceNotFoundException;
-import incident.management.system.model.*;
-import incident.management.system.repository.*;
+import incident.management.system.model.AdminDepartmentSubscription;
+import incident.management.system.model.DepartmentEntity;
+import incident.management.system.model.UserEntity;
+import incident.management.system.repository.AdminDepartmentSubscriptionRepository;
+import incident.management.system.repository.DepartmentRepository;
+import incident.management.system.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;

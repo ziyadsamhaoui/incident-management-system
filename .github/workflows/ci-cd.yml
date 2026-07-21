@@ -95,15 +95,13 @@ jobs:
             target/failsafe-reports/
           retention-days: 7
 
-      # 7. Upload static-analysis reports
+      # 7. Upload static-analysis reports (PMD only)
       - name: Upload static analysis reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: static-analysis-reports
-          path: |
-            target/checkstyle-result.xml
-            target/pmd.xml
+          path: target/pmd.xml
           retention-days: 7
 
   # JOB 2: Automated Railway Deployment (main branch only)

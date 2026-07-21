@@ -3,7 +3,13 @@ package incident.management.system.repository;
 import incident.management.system.enums.IncidentPriority;
 import incident.management.system.enums.IncidentStatus;
 import incident.management.system.enums.UserRole;
-import incident.management.system.model.*;
+import incident.management.system.model.CategoryEntity;
+import incident.management.system.model.DepartmentEntity;
+import incident.management.system.model.IncidentEntity;
+import incident.management.system.model.ProductionLineEntity;
+import incident.management.system.model.SectionEntity;
+import incident.management.system.model.StationEntity;
+import incident.management.system.model.UserEntity;
 
 import java.time.LocalDateTime;
 import java.util.concurrent.atomic.AtomicLong;

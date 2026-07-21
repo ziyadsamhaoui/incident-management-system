@@ -1,6 +1,7 @@
 package incident.management.system.exception;
 
 import incident.management.system.enums.IncidentStatus;
+
 import java.io.Serial;
 
 public class InvalidStatusTransitionException extends RuntimeException {
