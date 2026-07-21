@@ -72,6 +72,10 @@ jobs:
           pg_isready -h localhost -p 5432
           echo "PostgreSQL 17 sidecar is ready."
 
+      # Fix permissions for Linux runner
+      - name: Make Maven wrapper executable
+        run: chmod +x mvnw
+
       # 5. Full build with static code analysis and integration tests
       - name: Build, analyze & verify with Maven
         run: ./mvnw clean verify -B -V

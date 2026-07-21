@@ -40,7 +40,6 @@ public class RoleEnforcementFilter implements Filter {
         String requestMethod = request.getMethod().toUpperCase();
 
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
         boolean ruleMatched = false;
 
         // Check each rule in registration order
