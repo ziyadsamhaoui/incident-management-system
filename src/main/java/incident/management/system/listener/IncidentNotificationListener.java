@@ -11,6 +11,7 @@ import incident.management.system.service.IncidentRecipientResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -31,7 +32,7 @@ public class IncidentNotificationListener {
     private final IncidentRepository incidentRepository;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void onIncidentTransition(IncidentTransitionEvent event) {
         // Reload the incident within this transaction so lazy associations are available
         IncidentEntity incident = incidentRepository.findById(event.incident().getId()).orElse(null);

@@ -1,42 +1,16 @@
-/**
- * k6 Rate-Limiting Verification Script
- * ======================================
- *
- * Simulates concurrent execution pressure on the Incident Management System
- * to verify Bucket4j rate-limiting enforcements:
- *
- *   1. Auth endpoints (POST /api/auth/login): 5 requests/minute per client IP
- *   2. Incident creation (POST /api/incidents): 10 requests/minute per client
- *
- * Asserts:
- *   - Requests within threshold return HTTP 200
- *   - Requests exceeding threshold return HTTP 429 Too Many Requests
- *   - All 429 responses contain a valid `Retry-After` header
- *
- * Usage:
- *   k6 run src/test/k6/rate-limit-test.js
- *
- * Environment variables (optional):
- *   BASE_URL   - Target base URL (default: http://localhost:8080)
- *   VUS        - Number of virtual users (default: 2)
- *   DURATION   - Test duration (default: 30s)
- */
+// Simulate concurrent execution pressure to verify rate-limiting
 
 import http from 'k6/http';
 import { check, sleep, group } from 'k6';
 import { Rate, Trend } from 'k6/metrics';
 
-// ---------------------------------------------------------------------------
 // Custom metrics
-// ---------------------------------------------------------------------------
 
 const authRateLimitHits = new Rate('auth_429_rate');
 const incidentRateLimitHits = new Rate('incident_429_rate');
 const retryAfterValues = new Trend('retry_after_seconds');
 
-// ---------------------------------------------------------------------------
 // Test configuration
-// ---------------------------------------------------------------------------
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 
@@ -60,9 +34,7 @@ export const options = {
   },
 };
 
-// ---------------------------------------------------------------------------
 // Test data
-// ---------------------------------------------------------------------------
 
 const authPayloads = {
   sousChef: JSON.stringify({
@@ -91,9 +63,7 @@ const incidentCreationPayload = JSON.stringify({
   description: 'Load test incident — rate limit verification',
 });
 
-// ---------------------------------------------------------------------------
 // Helper: Check Retry-After header
-// ---------------------------------------------------------------------------
 
 function checkRetryAfterHeader(response) {
   const retryAfter = response.headers['Retry-After'];
@@ -107,17 +77,13 @@ function checkRetryAfterHeader(response) {
   return false;
 }
 
-// ---------------------------------------------------------------------------
 // Main test function
-// ---------------------------------------------------------------------------
 
 export default function () {
   // Use different client identifiers per VU to simulate independent clients
   const vuId = __VU; // k6 built-in: virtual user ID (1-based)
 
-  // =========================================================================
   // Scenario 1: Auth endpoint rate limiting (5 req/min/IP)
-  // =========================================================================
 
   group('Auth Rate Limit — POST /api/auth/login', () => {
     // Send 7 requests rapidly (5 should succeed, 2+ should hit 429)
@@ -160,9 +126,7 @@ export default function () {
     }
   });
 
-  // =========================================================================
   // Scenario 2: Incident creation rate limiting (10 req/min/client)
-  // =========================================================================
 
   group('Incident Rate Limit — POST /api/incidents', () => {
     // First authenticate to get a valid token
@@ -219,9 +183,7 @@ export default function () {
     }
   });
 
-  // =========================================================================
   // Scenario 3: Burst test — send requests as fast as possible
-  // =========================================================================
 
   group('Burst test — rapid-fire auth requests', () => {
     // Send 10 requests in rapid succession with no delay

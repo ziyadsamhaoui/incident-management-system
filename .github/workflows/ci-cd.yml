@@ -1,0 +1,138 @@
+# =====================================================================
+# Incident Management System — CI/CD Pipeline
+# Trigger: push to main, pull_request targeting main
+# Stack: Java 17, Maven, PostgreSQL 17 (sidecar), Railway deploy
+# =====================================================================
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# Cancel in-progress runs for the same branch (PR or push)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# =====================================================================
+# Environment-level variables (override via GitHub Secrets for secrets)
+# =====================================================================
+env:
+  JAVA_VERSION: '17'
+  JAVA_DISTRIBUTION: 'temurin'
+  POSTGRES_DB: icglma_local
+  POSTGRES_USER: icglma
+  POSTGRES_PASSWORD: ICGLMA@2025
+
+# =====================================================================
+# Workflow Jobs
+# =====================================================================
+jobs:
+
+  # ------------------------------------------------------------------
+  # JOB 1: Build, Static Analysis & Integration Tests
+  # ------------------------------------------------------------------
+  build-and-test:
+    name: Build & Test (Java ${{ env.JAVA_VERSION }})
+    runs-on: ubuntu-latest
+
+    # ----- PostgreSQL 17 Docker sidecar ----------------------------------
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      # 1. Checkout source code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Set up JDK 17 (Temurin) with Maven dependency caching
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          cache: 'maven'
+
+      # 3. Cache Maven repository (belt-and-suspenders alongside setup-java)
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      # 4. Verify DB connectivity to sidecar
+      - name: Verify PostgreSQL connection
+        run: |
+          pg_isready -h localhost -p 5432
+          echo "PostgreSQL 17 sidecar is ready."
+
+      # 5. Full build with static code analysis and integration tests
+      #    - Checkstyle enforces coding conventions
+      #    - PMD detects common programming flaws
+      #    - verify runs all unit + integration tests (Flyway migrations,
+      #      Testcontainers repos, etc.) against the real DB sidecar
+      - name: Build, analyze & verify with Maven
+        run: ./mvnw clean verify -B -V
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_DB }}
+          SPRING_DATASOURCE_USERNAME: ${{ env.POSTGRES_USER }}
+          SPRING_DATASOURCE_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+
+      # 6. Upload test report (visible in the Actions UI)
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            target/surefire-reports/
+            target/failsafe-reports/
+          retention-days: 7
+
+      # 7. Upload static-analysis reports
+      - name: Upload static analysis reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-analysis-reports
+          path: |
+            target/checkstyle-result.xml
+            target/pmd.xml
+          retention-days: 7
+
+  # ------------------------------------------------------------------
+  # JOB 2: Automated Railway Deployment (main branch only)
+  # ------------------------------------------------------------------
+  deploy:
+    name: Deploy to Railway
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: build-and-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Railway Action — deploys the project to Railway using a
+      # RAILWAY_TOKEN stored in GitHub Repository Secrets.
+      # The token must have the 'Deploy' permission scope.
+      - name: Deploy to Railway
+        uses: railway/railway-action@v3
+        with:
+          railwayToken: ${{ secrets.RAILWAY_TOKEN }}

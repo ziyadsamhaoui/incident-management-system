@@ -189,6 +189,68 @@
                     </execution>
                 </executions>
             </plugin>
+
+            <!-- ================================================= -->
+            <!-- Static Code Quality: Checkstyle                   -->
+            <!-- Enforces Sun-style coding conventions and project  -->
+            <!-- formatting rules.  Fails the build on violations.  -->
+            <!-- ================================================= -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+                <version>3.6.0</version>
+                <executions>
+                    <execution>
+                        <id>validate</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <configuration>
+                            <configLocation>checkstyle.xml</configLocation>
+                            <encoding>UTF-8</encoding>
+                            <consoleOutput>true</consoleOutput>
+                            <failsOnError>true</failsOnError>
+                            <linkXRef>false</linkXRef>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- ================================================= -->
+            <!-- Static Code Quality: PMD                           -->
+            <!-- Detects common programming flaws (dead code,       -->
+            <!-- suboptimal patterns, unnecessary complexity).      -->
+            <!-- ================================================= -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-pmd-plugin</artifactId>
+                <version>3.26.0</version>
+                <executions>
+                    <execution>
+                        <id>analyze</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>check</goal>
+                            <goal>cpd-check</goal>
+                        </goals>
+                        <configuration>
+                            <!-- PMD 7.x uses category-based rulesets -->
+                            <rulesets>
+                                <ruleset>/category/java/bestpractices.xml</ruleset>
+                                <ruleset>/category/java/design.xml</ruleset>
+                                <ruleset>/category/java/errorprone.xml</ruleset>
+                                <ruleset>/category/java/performance.xml</ruleset>
+                            </rulesets>
+                            <source>17</source>
+                            <target>17</target>
+                            <printFailingErrors>true</printFailingErrors>
+                            <failOnViolation>true</failOnViolation>
+                            <minimumTokens>100</minimumTokens>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 </project>
