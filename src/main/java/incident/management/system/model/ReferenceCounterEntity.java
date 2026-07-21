@@ -17,7 +17,7 @@ import lombok.NoArgsConstructor;
 @Builder
 public class ReferenceCounterEntity {
     @Id
-    @Column(unique = true, nullable = false, length = 8)
+    @Column(unique = true, nullable = false, length = 32)
     private String dateKey;
 
     @Column(nullable = false)
