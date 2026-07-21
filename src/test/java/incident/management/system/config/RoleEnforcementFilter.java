@@ -20,7 +20,6 @@ public class RoleEnforcementFilter implements Filter {
     private static final PathMatcher pathMatcher = new AntPathMatcher();
     private final Map<Rule, String[]> rules = new LinkedHashMap<>();
 
-w
     public void addRule(String pattern, String method, String... roles) {
         rules.put(new Rule(pattern, method != null ? method.toUpperCase() : null), roles);
     }

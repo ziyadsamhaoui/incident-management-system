@@ -67,12 +67,12 @@ public class IncidentEntity {
     @Column(length = 1000)
     private String resolutionNote;
 
-    /** The admin who claimed this incident. */
+    // user type = ADMIN who claimed the incident
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "claimed_by_id")
     private UserEntity claimedBy;
 
-    /** The admin who performed the RESOLVED / NON_RESOLVED evaluation. */
+    // user type = ADMIN who resolved the incident
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "resolved_by_id")
     private UserEntity resolvedBy;

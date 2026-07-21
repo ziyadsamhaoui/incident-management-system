@@ -73,6 +73,16 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Database Migration (Flyway) -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
         <!-- Runtime Infrastructure & Utilities -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
