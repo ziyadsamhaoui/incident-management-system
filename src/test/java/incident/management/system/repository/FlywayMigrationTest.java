@@ -46,11 +46,11 @@ class FlywayMigrationTest {
                 .as("Flyway migrate() should report success = true")
                 .isTrue();
         assertThat(result.migrationsExecuted)
-                .as("Expected exactly 2 migrations (V1 baseline + V2 refactor)")
-                .isEqualTo(2);
+                .as("Expected exactly 3 migrations (V1 baseline + V2 refactor + V3 widen date_key)")
+                .isEqualTo(3);
         assertThat(result.migrations)
                 .extracting(m -> m.version)
-                .containsExactly("1", "2");
+                .containsExactly("1", "2", "3");
     }
 
     @Test
@@ -59,8 +59,8 @@ class FlywayMigrationTest {
 
         MigrationInfo[] applied = flyway.info().applied();
         assertThat(applied)
-                .as("Flyway schema_history should have 2 applied migrations")
-                .hasSize(2);
+                .as("Flyway schema_history should have 3 applied migrations")
+                .hasSize(3);
 
         assertThat(applied[0].getVersion().toString())
                 .as("First migration should be version 1")
@@ -75,6 +75,13 @@ class FlywayMigrationTest {
         assertThat(applied[1].getDescription())
                 .as("Second migration description")
                 .containsIgnoringCase("refactor");
+
+        assertThat(applied[2].getVersion().toString())
+                .as("Third migration should be version 3")
+                .isEqualTo("3");
+        assertThat(applied[2].getDescription())
+                .as("Third migration description")
+                .containsIgnoringCase("widen");
     }
 
     @Test

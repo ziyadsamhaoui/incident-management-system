@@ -3,7 +3,6 @@ package incident.management.system.service;
 import incident.management.system.exception.RateLimitExceededException;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
-import io.github.bucket4j.BucketConfiguration;
 import io.github.bucket4j.Refill;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;

@@ -1,8 +1,13 @@
 package incident.management.system.repository;
 
-import incident.management.system.enums.IncidentPriority;
 import incident.management.system.enums.IncidentStatus;
-import incident.management.system.model.*;
+import incident.management.system.model.CategoryEntity;
+import incident.management.system.model.DepartmentEntity;
+import incident.management.system.model.IncidentEntity;
+import incident.management.system.model.ProductionLineEntity;
+import incident.management.system.model.SectionEntity;
+import incident.management.system.model.StationEntity;
+import incident.management.system.model.UserEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

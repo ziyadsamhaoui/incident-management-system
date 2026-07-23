@@ -1,21 +1,19 @@
 package incident.management.system.web;
 
+import incident.management.system.config.JwtService;
 import incident.management.system.config.StandaloneWebMvcTestBase;
 import incident.management.system.controller.AuthController;
-import incident.management.system.config.JwtService;
-import incident.management.system.model.UserEntity;
-import incident.management.system.model.RefreshTokenEntity;
 import incident.management.system.enums.UserRole;
-import incident.management.system.security.MultiChannelAuthenticationToken;
-import incident.management.system.security.TokenBlacklistService;
+import incident.management.system.model.UserEntity;
 import incident.management.system.repository.RefreshTokenRepository;
 import incident.management.system.repository.UserRepository;
+import incident.management.system.security.MultiChannelAuthenticationToken;
+import incident.management.system.security.TokenBlacklistService;
 import incident.management.system.service.AuthService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -23,9 +21,10 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.LockedException;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 
 class AuthControllerAuthTest extends StandaloneWebMvcTestBase {
