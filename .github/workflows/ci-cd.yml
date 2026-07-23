@@ -62,7 +62,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          key: ${{ runner.os }}-maven-${{ hashFiles('backend/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
 
@@ -74,11 +74,12 @@ jobs:
 
       # Fix permissions for Linux runner
       - name: Make Maven wrapper executable
-        run: chmod +x mvnw
+        run: chmod +x backend/mvnw
 
       # 5. Full build with static code analysis and integration tests
       - name: Build, analyze & verify with Maven
-        run: ./mvnw clean verify -B -V
+        run: ./backend/mvnw clean verify -B -V
+        working-directory: backend
         env:
           SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_DB }}
           SPRING_DATASOURCE_USERNAME: ${{ env.POSTGRES_USER }}
@@ -91,8 +92,8 @@ jobs:
         with:
           name: test-reports
           path: |
-            target/surefire-reports/
-            target/failsafe-reports/
+            backend/target/surefire-reports/
+            backend/target/failsafe-reports/
           retention-days: 7
 
       # 7. Upload static-analysis reports (PMD only)
@@ -101,7 +102,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: static-analysis-reports
-          path: target/pmd.xml
+          path: backend/target/pmd.xml
           retention-days: 7
 
   # JOB 2: Automated Railway Deployment (main branch only)
