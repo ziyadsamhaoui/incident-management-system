@@ -837,7 +837,10 @@ This section defines the complete frontend engineering roadmap. The frontend is 
 | **HTTP** | Axios + interceptors | JWT attachment, 429 backoff |
 | **Forms** | React Hook Form + Zod | Declarative DTO validation |
 | **UI Kit** | shadcn/ui (Radix) | Accessible components |
-| **Auth** | NextAuth.js or custom JWT | Token lifecycle |
+| **Auth** | Zustand persisted JWT + Axios interceptor | Token lifecycle |
+| **Animation** | Framer Motion | Layout transitions, cross-fades |
+| **Theme** | next-themes | Dark/light mode with Tailwind `class` strategy |
+| **Locale** | Built-in (FR/AR state machine) | Dynamic `dir="rtl"` switching |
 
 ### Phase 1: Project Bootstrap, Design System & Multi-Channel Auth
 
@@ -855,6 +858,7 @@ This section defines the complete frontend engineering roadmap. The frontend is 
    - Define design tokens: ICGLMA brand palette, typography, spacing, breakpoints
    - Build base components: Button, Input, Card, Badge, Select, Table, Modal, Toast
    - Create shared layout shell (Sidebar + Header + Main Content)
+   - **ThemeProvider** from `next-themes` wrapping the app with `attribute="class"` strategy
 
 3. **API Client Infrastructure**
    - Axios instance with base URL from env
@@ -869,6 +873,9 @@ This section defines the complete frontend engineering roadmap. The frontend is 
    - Typed API service modules per domain
 
 5. **Unified Login Page (`/login`)**
+   - **LoginFormShell** (`components/login/login-form-shell.tsx`):
+     - Pure presentation shell — form validation decoupled via `fieldSlot: ReactNode`
+     - See detailed specs below
    - SOUS_CHEF: matricule + first name + last name (no password)
    - CHEF_ATELIER: matricule + first/last name + password
    - ADMIN: email + password (classic)
@@ -877,12 +884,234 @@ This section defines the complete frontend engineering roadmap. The frontend is 
    - On 401: error message; on 423 (locked): lockout countdown
    - Loading states, validation feedback
 
-6. **Route Protection & Role Navigation**
-   - `AuthGuard` component wrapping protected routes
-   - Role-based menu:
-     - SOUS_CHEF: Declare Incident, My Incidents
-     - CHEF_ATELIER: + Evaluation Dashboard
-     - ADMIN: + User Management, Admin Settings, Subscriptions
+---
+
+### Login Shell, i18n Module & Layout Architecture
+
+The login page's responsive layout strategy uses the Tailwind `lg:` breakpoint (1024px) as the pivot between full-bleed and centered card display — expanded from the previous `md:` breakpoint (768px) to give the card more room to breathe on medium screens.
+
+#### Shared Internationalization Module (`lib/i18n.ts`)
+
+Created `lib/i18n.ts` as the single source of truth for all translation dictionaries:
+- **Consolidated dictionaries:** `T` (shell copy, buttons, errors, form labels), `LANE_LABELS` (role labels)
+- **`useTranslation()` hook:** Returns `{ lang, setLang, t, laneLabel, dir, isRtl, hydrated }`
+- **Persistence:** Reads/writes language preference to `localStorage` under `app-lang` key
+- **Hydration safety:** Hook initialises with `'FR'` default and only updates after `useEffect` reads from `localStorage`, preventing SSR mismatch
+- **Theme persistence:** `next-themes` provider configured with `storageKey="app-theme"` and `defaultTheme="light"`
+
+#### Moving Grid Background
+
+Replaced the static grid overlay with a slow, animated diagonal drift using Framer Motion:
+- **Animation:** `animate={{ backgroundPosition: ['0px 0px', '40px 40px'] }}` with `transition={{ duration: 20, ease: 'linear', repeat: Infinity }}`
+- **Grid lines:** `repeating-linear-gradient` crossing at 40px intervals with `rgba(15, 98, 254, 0.05)` in light mode
+- **Method:** Framer Motion's `animate` API on `backgroundPosition` (GPU-composited, no layout thrash)
+
+#### Unified SM/MD Surface Color
+
+On full-bleed viewports (< 1024px), the outer viewport background exactly matches the card color:
+- **SM/MD viewport:** `bg-white dark:bg-slate-900` (identical to card surface, no contrast gap)
+- **LG+ viewport:** `lg:bg-slate-50/60 lg:dark:bg-slate-950` (subtle page backdrop behind centered card)
+
+#### Light/Dark Mode Token Palette
+
+| Token | Light Mode | Dark Mode | Usage |
+|---|---|---|---|
+| Primary Accent | `#0F62FE` | `#3B82F6` | Active pill border, button bg, links |
+| Gradient Target | `#0353E9` | `#2563EB` | Button hover, badge gradient end |
+| Card Background | `bg-white` | `dark:bg-slate-900` | Centered card mode |
+| Page Background | `bg-slate-50/50` | `dark:bg-slate-950` | Full viewport backdrop |
+| Card Border | `border-slate-200` | `dark:border-slate-800` | Card outline |
+| Input Background | `bg-gray-50` | `dark:bg-slate-800/50` | Form field fill |
+| Input Border | `border-gray-200` | `dark:border-slate-700` | Field outline |
+| Heading Text | `text-gray-900` | `dark:text-slate-100` | Title typography |
+| Body/Subtitle | `text-gray-600` | `dark:text-slate-400` | Subtitle and muted text |
+| Active Pill Fill | `bg-blue-50/60` | `dark:bg-blue-950/40` | Active lane background |
+
+#### Full-Viewport Background Grid Mesh
+
+Implemented via CSS `radial-gradient()` and `repeating-linear-gradient()` on fixed-position divs:
+- **Light Mode:** Pale blue wash (`rgba(15, 98, 254, 0.06)`) radiating from bottom-left and top-right corners, plus faint grid overlay at `opacity: 0.04`
+- **Dark Mode:** Deep indigo/blue glow (`rgba(59, 130, 246, 0.10)`) radiating from corners, grid overlay at `opacity: 0.06`
+- Transition between light/dark modes is handled by CSS `transition-opacity duration-500`
+
+#### Dual-Language Architecture (FR / AR)
+
+- **Language State:** Lifted to `page.tsx` and passed down to `LoginFormShell` via `language: 'FR' | 'AR'` and `onLanguageChange` props
+- **Dynamic RTL:** The shell's root wrapper sets `dir={isRtl ? 'rtl' : 'ltr'}` which reflows all content direction
+- **Translation Dictionaries:**
+  - Shell (`login-form-shell.tsx`): Title, subtitle, remember me, forgot password, submit, locked/ratelimited, register text — separate `T[lang]` objects
+  - Lane labels: `LANE_LABELS[lang]` for `Opérateur/مشغل`, `Chef d'atelier/رئيس الورشة`, `Administrateur/مسؤول`
+  - Page (`page.tsx`): Form field labels and placeholders — `FIELD_LABELS[lang]` for matricule, prénom, nom, email, password
+- **Header Utility Bar:** Compact `FR | AR` segmented toggle at top-right of the card, styled as small 11px uppercase buttons
+
+#### Dark Mode Toggle
+
+- **Technology:** `next-themes` `useTheme()` hook (`theme`, `setTheme`)
+- **Provider:** `ThemeProvider attribute="class" defaultTheme="system"` wraps the app in `providers.tsx`
+- **UI:** Sun/Moon icon button (`lucide-react`) in the header utility bar, toggling between `light`/`dark`
+- **Tailwind:** All `dark:` variants applied throughout the shell and page components
+
+#### Header Utility Bar — Responsive Control Placement
+
+The Language Switcher (FR/AR) and Dark Mode Toggle (Sun/Moon) are extracted into a reusable `HeaderControls` subcomponent with responsive positioning:
+
+| Viewport | Position | Implementation |
+|---|---|---|
+| **< 1024px (SM/MD)** | Compact sizing | `text-xs`, `px-2 py-1`, `h-7 w-7` | `absolute right-4 top-4 z-20` |
+| **≥ 1024px (LG+)** | Expanded sizing | `text-sm`, `px-3 py-2`, `h-9 w-9` | `absolute right-6 top-6 z-20` |
+
+- Single HeaderControls instance renders for all viewports. The `lg:` variant classes handle sizing expansion at 1024px.
+- No dual-rendering: one `<div className="absolute right-4 top-4 lg:right-6 lg:top-6 z-20">` wraps the controls for both desktop and mobile.
+- The `FR | AR` buttons and Sun/Moon toggle scale up at the `lg:` breakpoint to provide larger tap targets on spacious desktop screens
+
+#### Connected Sliding Role Selection Control & RTL Fix
+
+Replaces the border-based pill group with a single unified track containing a sliding blue background indicator. The track explicitly sets `dir="ltr"` to prevent Arabic RTL from reversing the tab visual order, ensuring the `SOUS_CHEF` → `CHEF_ATELIER` → `ADMIN` state mapping is preserved regardless of document text direction:
+
+**Structure:**
+```tsx
+<div className="rounded-xl bg-slate-100 p-1 dark:bg-slate-800/80">
+  <div className="relative flex">
+    {/* Sliding blue background indicator */}
+    <motion.div
+      layoutId="activeRoleTab"
+      className="absolute inset-y-1 z-10 rounded-[10px] bg-[#0F62FE] shadow-sm dark:bg-blue-600"
+      style={{
+        left: `${(currentIndex / 3) * 100}%`,
+        width: `${100 / 3}%`,
+      }}
+      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+    />
+
+    {/* Tab buttons — no gaps, no individual borders */}
+    {LANES.map((lane) => (
+      <button key={lane.id}
+        className={[
+          'relative z-20 flex-1 rounded-[10px] py-2 text-center text-sm font-medium',
+          isActive
+            ? 'text-white'
+            : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100',
+        ].join(' ')}
+        aria-pressed={isActive}
+      >
+        {laneLabel}
+      </button>
+    ))}
+  </div>
+</div>
+```
+
+**Track Styling:**
+| Element | Light Mode | Dark Mode |
+|---|---|---|
+| Track background | `bg-slate-100` | `dark:bg-slate-800/80` |
+| Track padding | `p-1` | `p-1` |
+| Track border radius | `rounded-xl` | `rounded-xl` |
+
+**Tab Styling:**
+| State | Background | Text |
+|---|---|---|
+| **Active** | `bg-[#0F62FE]` (solid blue, via sliding indicator) + `shadow-sm` | `text-white`, `font-semibold` |
+| **Inactive** | Transparent (no borders) | `text-slate-600` / `dark:text-slate-400` |
+
+**Framer Motion Animations:**
+- **Sliding Indicator:** `layoutId="activeRoleTab"` on a `motion.div` positioned absolutely within the track. The `left` and `width` are computed from the current lane index. Spring transition: `type: "spring", stiffness: 400, damping: 30` (~250–300ms)
+- **Field Slot Transition:** `AnimatePresence mode="wait"` with direction-aware cross-fade + slide:
+  ```typescript
+  const slotVariants = {
+    enter: (dir: number) => ({ x: dir > 0 ? 12 : -12, opacity: 0 }),
+    center: { x: 0, opacity: 1 },
+    exit: (dir: number) => ({ x: dir > 0 ? -12 : 12, opacity: 0 }),
+  };
+  // transition={{ duration: 0.2, ease: 'easeInOut' }}
+  ```
+
+**Key Difference vs. Previous Design:** The indicator is now a `motion.div` inside the track (not inside individual buttons), sliding CSS `left`/`width` percentages. This provides a true connected tab experience with no visual gaps between segments.
+
+#### Layout Hierarchy (Top-to-Bottom)
+
+1. **Header Controls** — Single component at `absolute right-4 top-4 lg:right-6 lg:top-6 z-20`, responsive sizing via `lg:` variants
+2. **Card Container** — `max-w-md`, centered, rounded, with border/shadow
+3. **Lock Badge** — `w-20 h-20` (80px), `rounded-2xl`, gradient `#0F62FE→#0353E9`, white `Lock` icon (28px)
+5. **Title** — `Connexion à votre compte` / `التسجيل في حسابك`
+6. **Subtitle** — `Entrez vos identifiants pour continuer` / `أدخل بياناتك للمتابعة`
+7. **Connected Sliding Role Switcher** — Unified track with `layoutId="activeRoleTab"` blue indicator
+8. **Animated Field Slot** — `AnimatePresence`-wrapped container with cross-fade + slide
+9. **Auxiliary Row** — Checkbox (Se souvenir de moi / تذكرني) + Forgot password link
+10. **Submit Button** — Full-width `bg-[#0F62FE]`, hover `#0353E9`, `rounded-xl`, `shadow-lg`
+11. **Register Link** — `Pas encore de compte ? Créer un compte` / `ليس لديك حساب؟ إنشاء حساب`
+
+#### Global Background Grid Visuals
+
+The animated grid background (shared across login and register views) uses the following parameters:
+- **Tile Size:** 80px squares (repeated `linear-gradient` at 79px/80px intervals)
+- **Animation Speed:** 12s linear infinite loop (`Framer Motion animate backgroundPosition: ['0px 0px', '80px 80px']`)
+- **Light Mode:** Grid lines at `rgba(15, 98, 254, 0.05)`, radial glow at `rgba(15, 98, 254, 0.06)`
+- **Dark Mode:** Grid lines at `rgba(59, 130, 246, 0.18)`, radial glow at `rgba(59, 130, 246, 0.10)`
+
+#### Account Creation Workflow & Real-Time Validation Specs
+
+**Backend Endpoints (within `/api/auth`):**
+
+| Method | Path | Description | Request | Response |
+|---|---|---|---|---|
+| `GET` | `/api/auth/check-matricule?matricule={value}` | Real-time matricule availability | Query param | `{ exists: boolean, available: boolean }` (200) |
+| `POST` | `/api/auth/register` | Create new user account | `RegisterRequest` JSON body | `{ id, matricule, role, message }` (201) or `409 Conflict` |
+
+**`RegisterRequest` DTO:**
+| Field | Type | Validation |
+|---|---|---|
+| `matricule` | `String` | `@NotBlank` — parsed to `int` server-side |
+| `fullName` | `String` | `@NotBlank` — split into `firstName` / `lastName` by first space |
+| `email` | `String` | `@Email @NotBlank` |
+| `password` | `String` | `@NotBlank @Size(min=4)` — BCrypt hashed |
+| `role` | `UserRole` (enum) | `@NotNull` — one of `SOUS_CHEF`, `CHEF_ATELIER`, `ADMIN` |
+
+**Registration Flow:**
+1. Client validates with `registerSchema` (Zod) — fullName, matricule, email, password, confirmPassword, role
+2. On matricule `onBlur`: frontend calls `GET /api/auth/check-matricule`, shows inline error if taken
+3. On submit: `POST /api/auth/register` with `RegisterRequest` body
+4. Server re-verifies matricule uniqueness → `409 Conflict` if race condition
+5. Password BCrypt hashed, user persisted with `isActive=true`
+6. Returns `201 Created` with user summary (id, matricule, role)
+
+**Frontend Validation (`registerSchema`):**
+- `fullName`: `z.string().min(2)`
+- `matricule`: `z.string().min(1)` + `onBlur` API check
+- `email`: `z.string().email()`
+- `password`: `z.string().min(4)`
+- `confirmPassword`: `.refine()` comparing to `password` — error on `confirmPassword` path
+- `role`: `z.enum(['ADMIN', 'CHEF_ATELIER', 'SOUS_CHEF'])`
+
+#### Responsive Layout (Three-Tier)
+
+| Breakpoint | Layout | Card Width | Padding | Spacing |
+|---|---|---|---|---|
+| **< 640px (SM)** | Full-bleed, compact | `max-w-sm` | `p-6` | `space-y-5` |
+| **640–1023px (MD)** | Full-bleed, expanded | `max-w-lg` | `p-10` | `space-y-6` |
+| **≥ 1024px (LG+)** | Centered card | `max-w-md` | `p-8` | `space-y-5` |
+
+Both SM and MD viewports share the same full-bleed appearance (no card borders/shadows) — only the internal content width and padding scale up on tablets. The centered card with border and shadow only appears at LG+.
+
+#### Admin Slot Order (Standard)
+
+The ADMIN field slot renders **Email above Password** (standard credentials order):
+
+| Lane | Field 1 | Field 2 | Field 3 |
+|---|---|---|---|
+| `SOUS_CHEF` | Matricule | First Name + Last Name (grid) | — |
+| `CHEF_ATELIER` | Matricule | First Name + Last Name (grid) | Password |
+| `ADMIN` | **Email** (top) | **Password** (bottom) | — |
+
+#### Operator Conditional Link
+
+The "Mot de passe oublié ?" forgot-password link is **hidden** when the `SOUS_CHEF` (Opérateur) lane is active since operators authenticate passwordlessly. The link only appears for `CHEF_ATELIER` and `ADMIN` lanes. This is implemented as a conditional render in the auxiliary row of `LoginFormShell`:
+
+```tsx
+const showForgotPassword = activeLane !== 'SOUS_CHEF';
+```
+
+---
 
 ### Phase 2: Core Incident Management & Real-Time Lifecycle UI
 

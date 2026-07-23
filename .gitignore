@@ -3,6 +3,8 @@ target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+frontend/node_modules
+frontend/.next
 
 ### STS ###
 .apt_generated
@@ -34,6 +36,6 @@ build/
 
 ### Misc ###
 misc.txt
-AGENT_SUMMARY.md
+/docs/AGENT_SUMMARY.md
 cp.txt
 test.log

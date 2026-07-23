@@ -434,16 +434,16 @@ CRUD for: categories, departments, sections, production-lines, stations.
 
 ### Phase 1 (Frontend): Project Bootstrap, Design System & Multi-Channel Auth
 
-**Status:** ⬜ NOT STARTED
+**Status:** ✅ COMPLETED
 
 | # | Task | Description | Status |
 |---|---|---|---|
-| F1.1 | Project Initialization | Next.js + TypeScript + Tailwind + ESLint | ⬜ |
-| F1.2 | Design System | shadcn/ui integration, tokens, base components, layout shell | ⬜ |
-| F1.3 | API Client | Axios instance, interceptors (JWT, 429, 401/refresh), React Query | ⬜ |
-| F1.4 | State Management | Zustand stores, typed API service modules | ⬜ |
-| F1.5 | Login Page | 3-lane Unified Login (SOUS_CHEF/CHEF_ATELIER/ADMIN) | ⬜ |
-| F1.6 | Route Protection | AuthGuard, role-based navigation menu | ⬜ |
+| F1.1 | Project Initialization | Next.js + TypeScript + Tailwind + ESLint | ✅ |
+| F1.2 | Design System | shadcn/ui integration, tokens, base components, layout shell | ✅ |
+| F1.3 | API Client | Axios instance, interceptors (JWT, 429, 401/refresh), React Query | ✅ |
+| F1.4 | State Management | Zustand stores, typed API service modules | ✅ |
+| F1.5 | Login Page | 3-lane Unified Login with persistent theme/language, shared i18n module & useTranslation() hook, moving grid background, unified SM/MD surface, MD scaling, conditional operator link | ✅ |
+| F1.6 | Route Protection | AuthGuard, role-based navigation menu | ✅ |
 
 ### Phase 2 (Frontend): Core Incident Management & Real-Time Lifecycle UI
 
@@ -479,6 +479,11 @@ CRUD for: categories, departments, sections, production-lines, stations.
 | F4.4 | Dashboard | Statistics charts, recent activities, auto-refresh | ⬜ |
 | F4.5 | Responsive/Accessible | Mobile layout, ARIA, high-contrast | ⬜ |
 | F4.6 | E2E Tests | Playwright/Cypress for all major flows | ⬜ |
+
+**Milestone Log:**
+- **2026-07-23 (Iteration 4):** Refactored responsive breakpoint from 768px to 1024px — SM & MD share full-bleed layout, LG+ gets centered card. Simplified header controls to single top-right instance with responsive sizing (`text-xs` compact / `text-sm` expanded). Added `dir="ltr"` on the role switcher track to prevent RTL state inversion between ADMIN and Opérateur. Inverted Admin slot order (Password above Email). Removed all ASCII divider comments in favor of plain inline comments.
+- **2026-07-23 (Iteration 5):** Created `lib/i18n.ts` with consolidated translation dictionaries and `useTranslation()` hook (localStorage `app-lang` key). Set theme persistence via `storageKey="app-theme"` in `next-themes`. Deployed animated moving grid background (Framer Motion `backgroundPosition` drift, 20-second loop). Unified SM/MD surface color to match card (`bg-white dark:bg-slate-900`) — eliminating page-vs-card color split. Added three-tier responsive card scaling (`max-w-sm` SM / `max-w-lg` MD / `max-w-md` LG+). Wrapped header controls in `dir="ltr"` to prevent RTL button swap. Hid forgot-password link for Operator lane. Reverted Admin slot to standard order (Email above Password). Removed all local translation dictionaries from shell and page — strings now injected via props from `useTranslation()`.
+- **2026-07-23 (Iteration 6):** Built registration workflow end-to-end. Added `GET /api/auth/check-matricule` and `POST /api/auth/register` backend endpoints with `RegisterRequest` DTO and `existsByMatricule` repository query. Created `app/register/page.tsx` with React Hook Form + Zod (`registerSchema` with password confirm `.refine()`), `onBlur` matricule availability check with loading spinner/inline error. Created `components/register/register-form-shell.tsx` matching login visual design (moving grid, header controls, `UserPlus` badge). Extended `lib/i18n.ts` with 14 registration translation keys (FR/AR). Updated global grid visuals — 80px tiles, 12s animation speed, dark mode opacity 0.18.
 
 ---
 

@@ -5,6 +5,7 @@ import incident.management.system.dto.JwtAuthenticationResponse;
 import incident.management.system.dto.LoginRequest;
 import incident.management.system.dto.PasswordResetConfirmRequest;
 import incident.management.system.dto.PasswordResetRequest;
+import incident.management.system.dto.RegisterRequest;
 import incident.management.system.enums.UserRole;
 import incident.management.system.model.RefreshTokenEntity;
 import incident.management.system.model.UserEntity;
@@ -16,6 +17,7 @@ import incident.management.system.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -23,10 +25,13 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.LockedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
@@ -47,31 +52,24 @@ public class AuthController {
     private final RefreshTokenRepository refreshTokenRepository;
     private final TokenBlacklistService tokenBlacklistService;
     private final AuthService authService;
+    private final PasswordEncoder passwordEncoder;
 
-    //  Multi-Channel Login
+    // Multi-Channel Login
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
 
         try {
-            // Detect the operational lane
             UserRole lane = detectLane(request);
-
-            // Build the principal and credentials based on the lane
             MultiChannelAuthenticationToken authToken = buildAuthToken(request, lane);
-
-            // Delegate to the MultiChannelAuthenticationProvider
             Authentication authentication = authenticationManager.authenticate(authToken);
 
-            // Successful login then extract the authenticated user
             MultiChannelAuthenticationToken authenticated = (MultiChannelAuthenticationToken) authentication;
             UserEntity user = authenticated.getAuthenticatedUser();
 
-            // Reset lockout state
             user.resetFailedAttempts();
             userRepository.save(user);
 
-            // Issue access token (JWT) + persist opaque refresh token (UUID)
             String accessToken = jwtService.generateAccessToken(authentication);
 
             RefreshTokenEntity refreshTokenEntity = RefreshTokenEntity.builder()
@@ -100,8 +98,6 @@ public class AuthController {
         } catch (BadCredentialsException e) {
             log.warn("Failed login attempt: {}", e.getMessage());
 
-            // Track failed attempt then attempt to locate the user based on the user's role
-
             if (request.matricule() != null) {
                 tryUpdateFailedAttemptsByMatricule(Integer.parseInt(request.matricule()));
             } else if (request.email() != null) {
@@ -112,8 +108,6 @@ public class AuthController {
                     .body(Map.of("error", "Invalid credentials"));
         }
     }
-
-    //  Refresh Token
 
     @PostMapping("/refresh")
     public ResponseEntity<?> refreshAccessToken(@RequestBody Map<String, String> body) {
@@ -140,17 +134,13 @@ public class AuthController {
                     .body(Map.of("error", "User account is deactivated"));
         }
 
-        // Build a lightweight Authentication for token generation
         Authentication authentication = new MultiChannelAuthenticationToken(user);
-
         String newAccessToken = jwtService.generateAccessToken(authentication);
 
         return ResponseEntity.ok(Map.of(
                 "accessToken", newAccessToken,
                 "type", "Bearer"));
     }
-
-    //  Logout (blacklist access token)
 
     @PostMapping("/logout")
     public ResponseEntity<Map<String, String>> logout(
@@ -164,7 +154,7 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("message", "Successfully logged out"));
     }
 
-    //  Hybrid Password Reset Lifecycle
+    // Hybrid Password Reset Lifecycle
 
     @PostMapping("/password-reset/request-manual")
     public ResponseEntity<Map<String, Object>> requestPasswordResetManual(
@@ -177,7 +167,6 @@ public class AuthController {
                 "token", token,
                 "expiresInMinutes", 15));
     }
-
 
     @PostMapping("/password-reset/request-email")
     public ResponseEntity<Map<String, Object>> requestPasswordResetEmail(
@@ -193,10 +182,9 @@ public class AuthController {
 
         return ResponseEntity.ok(Map.of(
                 "message", "If the email address is registered, a password reset link has been sent.",
-                "token", token, // Exposed for development/testing;
+                "token", token,
                 "expiresInMinutes", 10));
     }
-
 
     @PostMapping("/password-reset/confirm")
     public ResponseEntity<Map<String, String>> confirmPasswordReset(
@@ -207,7 +195,82 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("message", "Password has been successfully reset"));
     }
 
-    //  Private helpers
+    // Registration & Matricule Verification
+
+    @GetMapping("/check-matricule")
+    public ResponseEntity<Map<String, Object>> checkMatricule(
+            @RequestParam("matricule") String matricule) {
+
+        String sanitized = matricule.trim();
+        boolean exists = false;
+        try {
+            int parsed = Integer.parseInt(sanitized);
+            exists = userRepository.existsByMatricule(parsed);
+        } catch (NumberFormatException e) {
+            // Non-numeric input — treat as not existing
+        }
+
+        return ResponseEntity.ok(Map.of(
+                "exists", exists,
+                "available", !exists));
+    }
+
+    @PostMapping("/register")
+    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
+
+        String sanitizedMatricule = request.matricule().trim();
+
+        int matriculeInt;
+        try {
+            matriculeInt = Integer.parseInt(sanitizedMatricule);
+        } catch (NumberFormatException e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Le matricule doit être un nombre valide"));
+        }
+
+        if (userRepository.existsByMatricule(matriculeInt)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of(
+                            "code", "MATRICULE_ALREADY_EXISTS",
+                            "message", "Ce numéro de matricule est déjà utilisé"));
+        }
+
+        String[] nameParts = request.fullName().trim().split(" ", 2);
+        String firstName = nameParts[0];
+        String lastName = nameParts.length > 1 ? nameParts[1] : "";
+
+        String encodedPassword = passwordEncoder.encode(request.password());
+
+        UserEntity user = UserEntity.builder()
+                .firstName(firstName)
+                .lastName(lastName)
+                .email(request.email())
+                .passwordHash(encodedPassword)
+                .matricule(matriculeInt)
+                .role(request.role())
+                .isActive(true)
+                .build();
+
+        try {
+            UserEntity saved = userRepository.save(user);
+            log.info("New user registered: {} {} (matricule={}, role={})",
+                    firstName, lastName, matriculeInt, request.role());
+
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(Map.of(
+                            "message", "Inscription réussie",
+                            "id", saved.getId(),
+                            "matricule", saved.getMatricule(),
+                            "role", saved.getRole().name()));
+        } catch (DataIntegrityViolationException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of(
+                            "code", "REGISTRATION_CONFLICT",
+                            "message", "Cet email ou matricule est déjà utilisé"));
+        }
+    }
+
+    // Private helpers
 
     private UserRole detectLane(LoginRequest request) {
         if (request.email() != null && !request.email().isBlank()) {
@@ -218,7 +281,6 @@ public class AuthController {
         }
         return UserRole.SOUS_CHEF;
     }
-
 
     private MultiChannelAuthenticationToken buildAuthToken(LoginRequest request, UserRole lane) {
         return switch (lane) {
@@ -232,8 +294,6 @@ public class AuthController {
                     request.firstName(), request.lastName());
         };
     }
-
-    //  Failed login attempt tracking
 
     private void tryUpdateFailedAttemptsByMatricule(int matricule) {
         userRepository.findByMatricule(matricule).ifPresent(user -> {
