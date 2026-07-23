@@ -121,4 +121,4 @@ jobs:
       - name: Deploy to Railway
         run: railway up --service incident-management-system
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_SECRET }}
