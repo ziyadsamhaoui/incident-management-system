@@ -107,7 +107,9 @@ jobs:
   # JOB 2: Automated Railway Deployment (main branch only)
   deploy:
     name: Deploy to Railway
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: ${{ false }}
+    # replace : ${{ false }} 
+    # with : github.ref == 'refs/heads/main' && github.event_name == 'push'
     needs: build-and-test
     runs-on: ubuntu-latest
 
