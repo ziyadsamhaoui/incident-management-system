@@ -66,7 +66,7 @@ public class RateLimitingService {
             long retryAfterSeconds = bucket.getAvailableTokens() == 0
                     ? rule.window.toSeconds()
                     : (long) Math.ceil(
-                            (double) (rule.window.toNanos())
+                            (double) rule.window.toNanos()
                             / (double) rule.maxRequests
                             / 1_000_000_000.0);
 

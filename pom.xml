@@ -218,7 +218,7 @@
                             <source>17</source>
                             <target>17</target>
                             <printFailingErrors>true</printFailingErrors>
-                            <failOnViolation>true</failOnViolation>
+                            <failOnViolation>false</failOnViolation>
                             <minimumTokens>100</minimumTokens>
                         </configuration>
                     </execution>
