@@ -107,7 +107,9 @@ jobs:
   # JOB 2: Automated Railway Deployment (main branch only)
   deploy:
     name: Deploy to Railway
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: ${{ false }}
+    # replace : ${{ false }} 
+    # with : github.ref == 'refs/heads/main' && github.event_name == 'push'
     needs: build-and-test
     runs-on: ubuntu-latest
 
@@ -115,7 +117,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
       - name: Deploy to Railway
-        uses: railway/railway-action@v3
-        with:
-          railwayToken: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service incident-management-system
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_SECRET }}
