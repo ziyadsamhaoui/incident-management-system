@@ -6,7 +6,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.PostgreSQLContainer;
 
-// Base class for integration tests that require a running PostgreSQL database.
+// Base class for integration tests that require a running dummy PostgreSQL database.
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @Transactional
 public abstract class BaseRepositoryIntegrationTest {
