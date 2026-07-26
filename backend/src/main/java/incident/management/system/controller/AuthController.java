@@ -1,12 +1,13 @@
 package incident.management.system.controller;
 
 import incident.management.system.config.JwtService;
+import incident.management.system.dto.ClaimAccountRequest;
 import incident.management.system.dto.JwtAuthenticationResponse;
 import incident.management.system.dto.LoginRequest;
 import incident.management.system.dto.PasswordResetConfirmRequest;
 import incident.management.system.dto.PasswordResetRequest;
-import incident.management.system.dto.RegisterRequest;
 import incident.management.system.enums.UserRole;
+import incident.management.system.exception.AccountUnclaimedException;
 import incident.management.system.model.RefreshTokenEntity;
 import incident.management.system.model.UserEntity;
 import incident.management.system.repository.RefreshTokenRepository;
@@ -35,6 +36,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -90,9 +92,16 @@ public class AuthController {
 
             return ResponseEntity.ok(response);
 
+        } catch (AccountUnclaimedException e) {
+            log.warn("Account unclaimed login attempt: {}", e.getMessage());
+            Map<String, String> body = new LinkedHashMap<>();
+            body.put("code", e.getCode());
+            body.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+
         } catch (LockedException e) {
             log.warn("Locked account login attempt: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+            return ResponseEntity.status(HttpStatus.LOCKED)
                     .body(Map.of("error", "Account is locked. Try again later."));
 
         } catch (BadCredentialsException e) {
@@ -195,7 +204,7 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("message", "Password has been successfully reset"));
     }
 
-    // Registration & Matricule Verification
+    // Matricule Verification (Boolean-Only, No PII)
 
     @GetMapping("/check-matricule")
     public ResponseEntity<Map<String, Object>> checkMatricule(
@@ -203,21 +212,33 @@ public class AuthController {
 
         String sanitized = matricule.trim();
         boolean exists = false;
+        boolean eligibleToClaim = false;
+
         try {
             int parsed = Integer.parseInt(sanitized);
-            exists = userRepository.existsByMatricule(parsed);
+            var userOpt = userRepository.findByMatricule(parsed);
+            if (userOpt.isPresent()) {
+                UserEntity user = userOpt.get();
+                exists = true;
+                // Eligible to claim: role == CHEF_ATELIER AND passwordHash IS NULL
+                eligibleToClaim = user.getRole() == UserRole.CHEF_ATELIER
+                        && (user.getPasswordHash() == null || user.getPasswordHash().isBlank());
+            }
         } catch (NumberFormatException e) {
             // Non-numeric input — treat as not existing
         }
 
-        return ResponseEntity.ok(Map.of(
-                "exists", exists,
-                "available", !exists));
+        // CRITICAL: NEVER return firstName, lastName, or any PII
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("exists", exists);
+        response.put("eligibleToClaim", eligibleToClaim);
+        return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/register")
-    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
+    // Account Claim Endpoint (Replaces Public Self-Register)
 
+    @PostMapping("/claim")
+    public ResponseEntity<?> claimAccount(@Valid @RequestBody ClaimAccountRequest request) {
         String sanitizedMatricule = request.matricule().trim();
 
         int matriculeInt;
@@ -228,46 +249,57 @@ public class AuthController {
                     .body(Map.of("error", "Le matricule doit être un nombre valide"));
         }
 
-        if (userRepository.existsByMatricule(matriculeInt)) {
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(Map.of(
-                            "code", "MATRICULE_ALREADY_EXISTS",
-                            "message", "Ce numéro de matricule est déjà utilisé"));
+        // 1. Lookup user by matricule
+        UserEntity user = userRepository.findByMatricule(matriculeInt)
+                .orElseThrow(() -> new incident.management.system.exception.ResourceNotFoundException(
+                        "User", "matricule", matriculeInt));
+
+        // 2. Verify role == CHEF_ATELIER
+        if (user.getRole() != UserRole.CHEF_ATELIER) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("code", "NOT_ELIGIBLE",
+                            "message", "Seuls les comptes Chef d'atelier peuvent être réclamés."));
         }
 
-        String[] nameParts = request.fullName().trim().split(" ", 2);
-        String firstName = nameParts[0];
-        String lastName = nameParts.length > 1 ? nameParts[1] : "";
+        // 3. Verify passwordHash IS NULL (not already claimed)
+        if (user.getPasswordHash() != null && !user.getPasswordHash().isBlank()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("code", "ALREADY_CLAIMED",
+                            "message", "Ce compte a déjà été réclamé."));
+        }
 
-        String encodedPassword = passwordEncoder.encode(request.password());
+        // 4. Compare firstName and lastName (case-insensitive, trimmed)
+        if (!request.firstName().trim().equalsIgnoreCase(user.getFirstName().trim())
+                || !request.lastName().trim().equalsIgnoreCase(user.getLastName().trim())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("code", "IDENTITY_MISMATCH",
+                            "message", "Les informations fournies ne correspondent pas à nos enregistrements."));
+        }
 
-        UserEntity user = UserEntity.builder()
-                .firstName(firstName)
-                .lastName(lastName)
-                .email(request.email())
-                .passwordHash(encodedPassword)
-                .matricule(matriculeInt)
-                .role(request.role())
-                .isActive(true)
+        // 5. Hash newPassword with BCrypt, save, and return JWT
+        String encodedPassword = passwordEncoder.encode(request.newPassword());
+        user.setPasswordHash(encodedPassword);
+        userRepository.save(user);
+
+        // Generate JWT token for immediate login
+        Authentication authentication = new MultiChannelAuthenticationToken(user);
+        String accessToken = jwtService.generateAccessToken(authentication);
+
+        RefreshTokenEntity refreshTokenEntity = RefreshTokenEntity.builder()
+                .userId(user.getId())
+                .token(UUID.randomUUID().toString())
+                .expiryDate(LocalDateTime.now().plusDays(7))
+                .revoked(false)
                 .build();
+        refreshTokenRepository.save(refreshTokenEntity);
 
-        try {
-            UserEntity saved = userRepository.save(user);
-            log.info("New user registered: {} {} (matricule={}, role={})",
-                    firstName, lastName, matriculeInt, request.role());
+        List<String> roles = List.of("ROLE_" + user.getRole().name());
 
-            return ResponseEntity.status(HttpStatus.CREATED)
-                    .body(Map.of(
-                            "message", "Inscription réussie",
-                            "id", saved.getId(),
-                            "matricule", saved.getMatricule(),
-                            "role", saved.getRole().name()));
-        } catch (DataIntegrityViolationException e) {
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(Map.of(
-                            "code", "REGISTRATION_CONFLICT",
-                            "message", "Cet email ou matricule est déjà utilisé"));
-        }
+        JwtAuthenticationResponse response = new JwtAuthenticationResponse(
+                accessToken, refreshTokenEntity.getToken(), user.getMatricule(), roles);
+
+        log.info("Account claimed for matricule: {} (userId: {})", matriculeInt, user.getId());
+        return ResponseEntity.ok(response);
     }
 
     // Private helpers

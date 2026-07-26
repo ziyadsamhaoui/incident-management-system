@@ -10,7 +10,7 @@ import type { AuthLane } from '@/types/auth';
 
 export type { AuthLane };
 
-const LANE_ORDER: AuthLane[] = ['SOUS_CHEF', 'CHEF_ATELIER', 'ADMIN'];
+const LANE_ORDER: AuthLane[] = ['SOUS_CHEF', 'CHEF_ATELIER'];
 
 // Props
 
@@ -27,6 +27,8 @@ interface LoginFormShellProps {
   lockoutCountdown?: string;
   isRateLimited?: boolean;
   retryAfter?: number;
+  accountUnclaimed?: boolean;
+  onClaimRedirect?: () => void;
   // Translation strings (injected from useTranslation)
   t: Record<string, string>;
   laneLabel: Record<string, string>;
@@ -139,11 +141,13 @@ export function LoginFormShell({
   lockoutCountdown = '',
   isRateLimited = false,
   retryAfter = 0,
+  accountUnclaimed = false,
+  onClaimRedirect,
   t,
   laneLabel,
   isRtl,
 }: LoginFormShellProps) {
-  const { theme } = useTheme();
+  const { resolvedTheme } = useTheme();
 
   const prevIndexRef = useRef(0);
   const currentIndex = LANE_ORDER.indexOf(activeLane);
@@ -158,23 +162,18 @@ export function LoginFormShell({
   return (
     <div
       dir={isRtl ? 'rtl' : 'ltr'}
-      className={[
-        'relative flex min-h-screen items-center justify-center',
-        // SM/MD full-bleed: viewport matches card background exactly
-        'bg-white dark:bg-slate-900',
-        // LG+ centered: subtle page backdrop
-        'lg:bg-slate-50/60 lg:dark:bg-slate-950',
-        'px-4 py-8 sm:px-6',
-      ].join(' ')}
+      className="relative flex min-h-screen items-center justify-center px-4 py-8 sm:px-6"
     >
-      {/* Background: diagonal gradient mesh + moving grid */}
-      <div className="fixed inset-0 -z-10 overflow-hidden">
+      {/* Background layer: solid color + glow + moving grid */}
+      <div className="fixed inset-0 z-0">
+        {/* Solid base color */}
+        <div className="absolute inset-0 bg-white dark:bg-slate-900 lg:bg-slate-50/60 lg:dark:bg-slate-950" />
         {/* Radial glow — subtle pulsing opacity animation */}
         <motion.div
           className="absolute inset-0"
           style={{
-            backgroundImage: theme === 'dark'
-              ? `radial-gradient(ellipse at 15% 85%, rgba(59, 130, 246, 0.10) 0%, transparent 55%), radial-gradient(ellipse at 80% 15%, rgba(59, 130, 246, 0.08) 0%, transparent 55%), radial-gradient(ellipse at 50% 50%, rgba(59, 130, 246, 0.06) 0%, transparent 60%)`
+            backgroundImage: resolvedTheme === 'dark'
+              ? `radial-gradient(ellipse at 15% 85%, rgba(59, 130, 246, 0.07) 0%, transparent 55%), radial-gradient(ellipse at 80% 15%, rgba(59, 130, 246, 0.05) 0%, transparent 55%), radial-gradient(ellipse at 50% 50%, rgba(59, 130, 246, 0.03) 0%, transparent 60%)`
               : `radial-gradient(ellipse at 15% 85%, rgba(15, 98, 254, 0.06) 0%, transparent 55%), radial-gradient(ellipse at 80% 15%, rgba(15, 98, 254, 0.06) 0%, transparent 55%), radial-gradient(ellipse at 50% 50%, rgba(3, 83, 233, 0.04) 0%, transparent 60%)`,
           }}
           animate={glowAnimation}
@@ -184,10 +183,10 @@ export function LoginFormShell({
         <motion.div
           className="absolute inset-0"
           style={{
-            backgroundImage: theme === 'dark'
+            backgroundImage: resolvedTheme === 'dark'
               ? [
-                  'repeating-linear-gradient(0deg, transparent, transparent 79px, rgba(59, 130, 246, 0.18) 79px, rgba(59, 130, 246, 0.18) 80px)',
-                  'repeating-linear-gradient(90deg, transparent, transparent 79px, rgba(59, 130, 246, 0.18) 79px, rgba(59, 130, 246, 0.18) 80px)',
+                  'repeating-linear-gradient(0deg, transparent, transparent 79px, rgba(59, 130, 246, 0.12) 79px, rgba(59, 130, 246, 0.12) 80px)',
+                  'repeating-linear-gradient(90deg, transparent, transparent 79px, rgba(59, 130, 246, 0.12) 79px, rgba(59, 130, 246, 0.12) 80px)',
                 ].join(', ')
               : [
                   'repeating-linear-gradient(0deg, transparent, transparent 79px, rgba(15, 98, 254, 0.05) 79px, rgba(15, 98, 254, 0.05) 80px)',
@@ -207,6 +206,7 @@ export function LoginFormShell({
       {/* Card / Full-bleed container */}
       <div
         className={[
+          'relative z-10',
           // SM: compact full-bleed
           'w-full max-w-sm sm:max-w-xl lg:max-w-md',
           // LG+ card mode
@@ -235,16 +235,15 @@ export function LoginFormShell({
           {t.subtitle}
         </p>
 
-        {/* 4. Connected Sliding Role Switcher */}
+        {/* 4. Connected Sliding Role Switcher (2 lanes) */}
         <div className="mt-8" dir="ltr">
           <div className="relative rounded-xl bg-slate-100 p-1 dark:bg-slate-800/80">
             <div className="relative flex">
               <motion.div
-                layoutId="activeRoleTab"
-                className="absolute inset-0 z-10 rounded-[10px] bg-[#0F62FE] shadow-sm dark:bg-blue-600"
-                style={{
-                  left: `${(currentIndex / 3) * 100}%`,
-                  width: `${100 / 3}%`,
+                className="absolute left-0 top-0 z-10 h-full rounded-[10px] bg-[#0F62FE] shadow-sm dark:bg-blue-600"
+                animate={{
+                  left: `${(currentIndex / LANE_ORDER.length) * 100}%`,
+                  width: `${100 / LANE_ORDER.length}%`,
                 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               />
@@ -307,7 +306,28 @@ export function LoginFormShell({
                 )}
               </div>
 
-              {/* 7. Submit Button */}
+              {/* 7. Account Unclaimed Banner */}
+              {accountUnclaimed && (
+                <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                    {t.unclaimedTitle}
+                  </p>
+                  <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                    {t.unclaimedMessage}
+                  </p>
+                  {onClaimRedirect && (
+                    <button
+                      type="button"
+                      onClick={onClaimRedirect}
+                      className="mt-3 w-full rounded-lg bg-[#0F62FE] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#0353E9] dark:bg-blue-600 dark:hover:bg-blue-500"
+                    >
+                      {t.claimAccount}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* 8. Submit Button */}
               <div className="mt-5">
                 <button
                   type="submit"
@@ -342,16 +362,24 @@ export function LoginFormShell({
           </AnimatePresence>
         </form>
 
-        {/* 8. Register Placeholder */}
-        <div className="mt-8 text-center text-sm text-gray-500 dark:text-slate-400">
-          {t.registerQuestion}{' '}
-          <button
-            type="button"
-            className="ms-1 font-semibold text-[#0F62FE] transition-colors hover:text-[#0353E9] hover:underline dark:text-blue-400 dark:hover:text-blue-300"
-          >
-            {t.registerAction}
-          </button>
-        </div>
+        {/* 9. Lane-specific footer */}
+        {activeLane === 'SOUS_CHEF' && (
+          <div className="mt-8 text-center text-xs text-gray-400 dark:text-slate-500">
+            {t.sousChefHelp}
+          </div>
+        )}
+        {activeLane === 'CHEF_ATELIER' && onClaimRedirect && (
+          <div className="mt-8 text-center text-xs text-gray-400 dark:text-slate-500">
+            <span>{t.chefAtelierClaimPrompt}{' '}</span>
+            <button
+              type="button"
+              onClick={onClaimRedirect}
+              className="font-semibold text-[#0F62FE] transition-colors hover:text-[#0353E9] hover:underline dark:text-blue-400 dark:hover:text-blue-300"
+            >
+              {t.chefAtelierClaimAction}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

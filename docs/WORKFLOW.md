@@ -823,7 +823,78 @@ The `IncidentResponse` record exposes `claimedBy` data under the field name `ass
 
 ---
 
-## 16. Frontend Architecture & Step-by-Step Workflow Specifications
+## 16. Roster Identity, Account Claim & Auth Route Separation
+
+### Zero Self-Registration Model
+
+Public self-registration has been **eliminated entirely**. Nobody self-selects their own role.
+
+| Source | Default Role | passwordHash | Notes |
+|---|---|---|---|
+| **HR Roster Import** | `SOUS_CHEF` | BCrypt-encoded password provided | Operators authenticate passwordlessly via matricule + identity match |
+| **Admin Promotion** | `CHEF_ATELIER` | `NULL` (unclaimed) | Promoted users must claim their account before first login |
+| **Admin Direct Creation** | Any role | BCrypt-encoded password | Used for corporate ADMIN accounts only |
+
+### Claim Flow for CHEF_ATELIER (`POST /api/auth/claim`)
+
+1. User submits `ClaimAccountRequest` with `matricule`, `firstName`, `lastName`, `newPassword`
+2. Backend validates:
+   - User exists by matricule (404 if not found)
+   - `role == CHEF_ATELIER` (403 if SOUS_CHEF or ADMIN)
+   - `passwordHash IS NULL` (409 if already claimed)
+   - `firstName` and `lastName` match via `.trim().equalsIgnoreCase()` (401 on mismatch)
+3. `newPassword` is BCrypt-hashed and saved as `passwordHash`
+4. JWT token is returned for immediate login
+
+### Authentication Logic Adjustments
+
+#### `authenticateSousChef`
+- Validates `matricule` + `firstName` + `lastName` using `.trim().equalsIgnoreCase()`
+- Enforces `user.getRole() == SOUS_CHEF`
+- No BCrypt password check
+
+#### `authenticateChefAtelier`
+- Validates `matricule` + `password`
+- Enforces `user.getRole() == CHEF_ATELIER` (role check before password verification)
+- If `role == CHEF_ATELIER` but `passwordHash IS NULL`: throws `AccountUnclaimedException` → HTTP 403 with `{ "code": "ACCOUNT_UNCLAIMED", "message": "..." }`
+- Otherwise: identity + BCrypt password verification
+
+### Secure `check-matricule` Boolean Response
+
+`GET /api/auth/check-matricule?matricule={value}` returns:
+```json
+{ "exists": true|false, "eligibleToClaim": true|false }
+```
+**CRITICAL:** Never returns `firstName`, `lastName`, or any PII to prevent floor-terminal credential harvesting.
+
+### Route Separation
+
+| Route | Purpose | Authentication Method | Visible To |
+|---|---|---|---|
+| `/login` | Floor kiosk login (2 lanes) | Matricule + identity (SOUS_CHEF) or password (CHEF_ATELIER) | All floor staff |
+| `/admin/login` | Corporate Admin login | Email + password | ADMIN users only |
+| `/claim` | Account activation for promoted CHEF_ATELIER | Matricule + identity verification + new password | Users with unclaimed promotions |
+
+- The floor kiosk (`/login`) shows only 2 lanes: **SOUS_CHEF** and **CHEF_ATELIER**
+- The ADMIN tab has been removed from the floor terminal entirely
+- When `ACCOUNT_UNCLAIMED` is returned for a CHEF_ATELIER login attempt, a prominent action prompt is displayed with a direct button linking to `/claim`
+- The SOUS_CHEF lane shows auxiliary copy: "Problème de connexion ? Demandez à votre chef d'équipe de vérifier vos informations." instead of a register link
+
+### Admin User Management (`PUT /api/users/{id}/promote`)
+
+- Admin can promote `SOUS_CHEF` → `CHEF_ATELIER` via `PUT /api/users/{id}/promote`
+- `passwordHash` is set to `NULL` upon promotion (signals unclaimed)
+- Frontend can display an orange "En attente de réclamation" badge when `role == CHEF_ATELIER` and `passwordHash == null`
+
+### Updated Exception Handling
+
+| Exception | Status | Description |
+|---|---|---|
+| `AccountUnclaimedException` | **403** | `{ "code": "ACCOUNT_UNCLAIMED", "message": "Compte non réclamé..." }` |
+
+---
+
+## 17. Frontend Architecture & Step-by-Step Workflow Specifications
 
 This section defines the complete frontend engineering roadmap. The frontend is a modern single-page application communicating with the backend REST API.
 

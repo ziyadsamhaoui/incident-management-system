@@ -34,12 +34,49 @@ const T: Record<Lang, Record<string, string>> = {
     emailPlaceholder: 'admin@icglma.ma',
     passwordPlaceholder: '••••••••',
     passwordPlaceholderAlt: 'Votre mot de passe',
+    newPassword: 'Nouveau mot de passe',
+    confirmPassword: 'Confirmer le mot de passe',
+    newPasswordPlaceholder: 'Votre nouveau mot de passe',
+    confirmPasswordPlaceholder: 'Confirmez votre mot de passe',
     showPassword: 'Afficher le mot de passe',
     hidePassword: 'Masquer le mot de passe',
     errorAuth: 'Échec de connexion',
     errorLocked: 'Compte verrouillé',
     errorRateLimited: 'Trop de requêtes',
     unlockIn: 'Débloqué dans',
+    // SOUS_CHEF helper copy (replaces register link)
+    sousChefHelp:
+      "Problème de connexion ? Demandez à votre chef d'équipe de vérifier vos informations.",
+    // Account unclaimed
+    unclaimedTitle: 'Compte non réclamé',
+    unclaimedMessage:
+      "Votre compte Chef d'atelier a été créé mais pas encore réclamé. Veuillez définir votre mot de passe.",
+    claimAccount: "Réclamer mon compte Chef d'atelier",
+    // Claim page
+    claimTitle: 'Réclamer votre compte',
+    claimSubtitle:
+      'Vérifiez votre identité et définissez un mot de passe pour activer votre compte.',
+    claimSubmit: 'Réclamer mon compte',
+    claiming: 'Réclamation en cours...',
+    claimSuccess: 'Compte réclamé avec succès ! Vous allez être redirigé.',
+    claimError: 'Échec de la réclamation du compte',
+    matriculeNotEligible: "Ce matricule n'est pas éligible à la réclamation.",
+    alreadyClaimed: 'Ce compte a déjà été réclamé.',
+    identityMismatch:
+      'Les informations fournies ne correspondent pas à nos enregistrements.',
+    checkMatricule: 'Vérification du matricule...',
+    claimLoginLink: 'Déjà un compte ?',
+    claimLoginAction: 'Se connecter',
+    // CHEF_ATELIER lane claim prompt (login page footer)
+    chefAtelierClaimPrompt: "Vous êtes un chef d'atelier ?",
+    chefAtelierClaimAction: 'Réclamer mon compte',
+    // Admin login
+    adminLoginTitle: 'Connexion administrateur',
+    adminLoginSubtitle:
+      'Saisissez vos identifiants pour accéder à l’espace sécurisé.',
+    adminLoginSubmit: 'Se connecter',
+    adminLoginSubmitting: 'Connexion...',
+    backToFloor: "Retour au terminal de l'atelier",
   },
   AR: {
     title: 'التسجيل في حسابك',
@@ -57,7 +94,7 @@ const T: Record<Lang, Record<string, string>> = {
     // Form field labels
     matricule: 'رقم التسجيل',
     firstName: 'الاسم الشخصي',
-    lastName: 'اسم العائلي',
+    lastName: 'الاسم العائلي',
     email: 'البريد الإلكتروني',
     password: 'كلمة المرور',
     matriculePlaceholder: '1005',
@@ -66,12 +103,46 @@ const T: Record<Lang, Record<string, string>> = {
     emailPlaceholder: 'admin@icglma.ma',
     passwordPlaceholder: '••••••••',
     passwordPlaceholderAlt: 'كلمة المرور الخاصة بك',
+    newPassword: 'كلمة المرور الجديدة',
+    confirmPassword: 'تأكيد كلمة المرور',
+    newPasswordPlaceholder: 'كلمة المرور الجديدة',
+    confirmPasswordPlaceholder: 'أكد كلمة المرور',
     showPassword: 'إظهار كلمة المرور',
     hidePassword: 'إخفاء كلمة المرور',
     errorAuth: 'فشل تسجيل الدخول',
     errorLocked: 'الحساب مقفل',
     errorRateLimited: 'طلبات كثيرة جداً',
     unlockIn: 'يفتح بعد',
+    // SOUS_CHEF helper copy
+    sousChefHelp: 'تعذر تسجيل الدخول؟ اطلب من مشرفك التحقق من بياناتك.',
+    // Account unclaimed
+    unclaimedTitle: 'الحساب غير مُطالب به',
+    unclaimedMessage:
+      'تم إنشاء حسابك كرئيس ورشة لكن لم يُطالب به بعد. يرجى تعيين كلمة المرور الخاصة بك.',
+    claimAccount: 'المطالبة بحساب رئيس الورشة',
+    // Claim page
+    claimTitle: 'المطالبة بحسابك',
+    claimSubtitle: 'تحقق من هويتك وحدد كلمة مرور لتفعيل حسابك كرئيس ورشة.',
+    claimSubmit: 'المطالبة بحسابي',
+    claiming: 'جارٍ المطالبة...',
+    claimSuccess: 'تمت المطالبة بالحساب بنجاح! سيتم إعادة توجيهك.',
+    claimError: 'فشلت المطالبة بالحساب',
+    matriculeNotEligible: 'رقم التسجيل هذا غير مؤهل للمطالبة.',
+    alreadyClaimed: 'تمت المطالبة بهذا الحساب بالفعل.',
+    identityMismatch: 'المعلومات المقدمة لا تتطابق مع سجلاتنا.',
+    checkMatricule: 'جارٍ التحقق من رقم التسجيل...',
+    claimLoginLink: 'لديك حساب بالفعل؟',
+    claimLoginAction: 'تسجيل الدخول',
+    // CHEF_ATELIER lane claim prompt (login page footer)
+    chefAtelierClaimPrompt: 'هل تمت ترقيتك إلى رئيس ورشة؟',
+    chefAtelierClaimAction: 'المطالبة بحسابي',
+    // Admin login
+    adminLoginTitle: 'تسجيل دخول المسؤول',
+    adminLoginSubtitle:
+      'أدخل بيانات الدخول الخاصة بك للوصول إلى لوحة التحكم.',
+    adminLoginSubmit: 'تسجيل الدخول',
+    adminLoginSubmitting: 'جارٍ تسجيل الدخول...',
+    backToFloor: 'العودة إلى واجهة الورشة',
   },
 };
 

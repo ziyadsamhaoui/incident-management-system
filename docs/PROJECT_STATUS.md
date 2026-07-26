@@ -34,6 +34,31 @@
 
 ---
 
+## Auth & Registration Refactoring — Roster-Driven Identity Model ✅ COMPLETED
+
+**Date:** 2026-07-26
+
+### Changes Summary
+
+- **Roster-Driven Identity Architecture:** Eliminated public self-registration; all accounts now originate as `SOUS_CHEF` via HR roster imports or are promoted to `CHEF_ATELIER` by an Admin.
+- **Account Claim Workflow (`POST /api/auth/claim`):** Replaced generic `POST /api/auth/register` with a Claim Account flow requiring exact match of `matricule`, `firstName`, and `lastName` for promoted accounts with `passwordHash IS NULL`.
+- **Authentication Logic:**
+  - `authenticateSousChef` now uses `.trim().equalsIgnoreCase()` for identity matching
+  - `authenticateChefAtelier` now enforces `role == CHEF_ATELIER` and checks `passwordHash IS NULL` → returns `ACCOUNT_UNCLAIMED` (403)
+- **Floor vs. Corporate Route Separation:** Removed `ADMIN` tab from `/login` (now a 2-lane `SOUS_CHEF` / `CHEF_ATELIER` selector); Admin authentication moved to dedicated `/admin/login`.
+- **Privacy & PII Protection:** Enforced boolean-only output on `GET /api/auth/check-matricule` → `{ exists, eligibleToClaim }` with zero PII exposure.
+- **Admin Dashboard Extensions:** Added `PUT /api/users/{id}/promote` endpoint for promoting `SOUS_CHEF` → `CHEF_ATELIER`.
+- **New Files:** `ClaimAccountRequest.java`, `AccountUnclaimedException.java`
+- **Modified Files:** `AuthController.java`, `MultiChannelAuthenticationProvider.java`, `GlobalExceptionHandler.java`, `UserService.java`, `UserServiceImpl.java`, `UserController.java`
+
+**Milestone Log Entry:**
+- Deployment of claim endpoint `POST /api/auth/claim` and trimmed case-insensitive name checks
+- Separation of Admin login to `/admin/login` and removal of Admin tab from floor kiosk
+- Conversion of registration page to Claim Account page (`app/claim/page.tsx`)
+- Admin Users Dashboard promotion action
+
+---
+
 ## 1. Project Overview & Architectural Blueprint
 
 ### 1.1 Executive Summary
@@ -444,6 +469,17 @@ CRUD for: categories, departments, sections, production-lines, stations.
 | F1.4 | State Management | Zustand stores, typed API service modules | ✅ |
 | F1.5 | Login Page | 3-lane Unified Login with persistent theme/language, shared i18n module & useTranslation() hook, moving grid background, unified SM/MD surface, MD scaling, conditional operator link | ✅ |
 | F1.6 | Route Protection | AuthGuard, role-based navigation menu | ✅ |
+
+**Post-Phase-1 Refactoring — Roster Identity & Account Claim (2026-07-26):**
+
+| # | Task | Description | Status |
+|---|---|---|---|
+| F1.7 | Roster Identity Refactoring | Eliminated public self-registration; accounts originate as SOUS_CHEF via HR imports or Admin promotion | ✅ |
+| F1.8 | Account Claim Flow | `POST /api/auth/claim` replaces register; requires matricule + identity match + newPassword | ✅ |
+| F1.9 | Auth Route Separation | `/login` = 2 lanes (SOUS_CHEF, CHEF_ATELIER); `/admin/login` = isolated corporate login; `/claim` = account activation | ✅ |
+| F1.10 | Admin Promotion Endpoint | `PUT /api/users/{id}/promote` to promote SOUS_CHEF → CHEF_ATELIER with passwordHash=NULL | ✅ |
+| F1.11 | Secure check-matricule | Boolean-only response `{exists, eligibleToClaim}` with zero PII exposure | ✅ |
+| F1.12 | ACCOUNT_UNCLAIMED UX | 403 error handling with claim redirect button in floor login CHEF_ATELIER lane | ✅ |
 
 ### Phase 2 (Frontend): Core Incident Management & Real-Time Lifecycle UI
 

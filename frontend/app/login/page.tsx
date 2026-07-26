@@ -9,7 +9,7 @@ import { LoginFormShell } from '@/components/login/login-form-shell';
 import { useAuthStore } from '@/store/useAuthStore';
 import { login } from '@/services/authService';
 import { useTranslation } from '@/lib/i18n';
-import { loginSchema, type LoginFormValues } from '@/lib/schemas';
+import { floorLoginSchema, type FloorLoginFormValues } from '@/lib/schemas';
 import type { AuthLane } from '@/types/auth';
 
 // Shared Input Class
@@ -41,6 +41,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [accountUnclaimed, setAccountUnclaimed] = useState(false);
 
   // Rate-limit countdown
   const [retryAfter, setRetryAfter] = useState(0);
@@ -57,9 +58,9 @@ export default function LoginPage() {
     formState: { errors },
     reset,
     setValue,
-  } = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { lane: 'SOUS_CHEF' } as LoginFormValues,
+  } = useForm<FloorLoginFormValues>({
+    resolver: zodResolver(floorLoginSchema),
+    defaultValues: { lane: 'SOUS_CHEF' } as FloorLoginFormValues,
   });
 
   // Sync form lane when user switches tabs
@@ -70,6 +71,7 @@ export default function LoginPage() {
   // Clear errors when switching lanes
   useEffect(() => {
     setErrorMessage(null);
+    setAccountUnclaimed(false);
   }, [activeLane]);
 
   // Redirect if already authenticated
@@ -124,41 +126,42 @@ export default function LoginPage() {
   // Lane switch — reset clears fields, values prop syncs lane automatically
   const handleLaneChange = useCallback((lane: AuthLane) => {
     setActiveLane(lane);
-    reset({ lane, matricule: '', firstName: '', lastName: '', email: '', password: '' } as LoginFormValues);
+    reset({ lane, matricule: '', firstName: '', lastName: '', password: '' } as FloorLoginFormValues);
   }, [reset]);
+
+  // Claim redirect handler
+  const handleClaimRedirect = useCallback(() => {
+    router.push('/claim');
+  }, [router]);
 
   // Submit handler — react-hook-form validated
   const onSubmit = useCallback(
-    async (data: LoginFormValues) => {
+    async (data: FloorLoginFormValues) => {
       setIsSubmitting(true);
       setErrorMessage(null);
+      setAccountUnclaimed(false);
 
       try {
-        // Build credentials based on lane — TS narrows via data.lane directly
-        const credentials: Record<string, string> = {};
+        const credentials: Record<string, string> = {
+          matricule: data.matricule,
+          firstName: data.firstName,
+          lastName: data.lastName,
+        };
 
-        if (data.lane === 'SOUS_CHEF' || data.lane === 'CHEF_ATELIER') {
-          credentials.matricule = data.matricule;
-          credentials.firstName = data.firstName;
-          credentials.lastName = data.lastName;
-          if (data.lane === 'CHEF_ATELIER') {
-            credentials.password = data.password;
-          }
-        }
-        if (data.lane === 'ADMIN') {
-          credentials.email = data.email;
+        if (data.lane === 'CHEF_ATELIER') {
           credentials.password = data.password;
         }
 
         const response = await login(credentials);
         loginSucceeded(response, data.lane);
-        const displayName = data.lane === 'ADMIN'
-          ? data.email.split('@')[0]
-          : data.firstName!;
-        useAuthStore.getState().setUserIdentity(displayName, data.lane !== 'ADMIN' ? data.lastName! : '');
+        const displayName = data.firstName!;
+        useAuthStore.getState().setUserIdentity(displayName, data.lastName!);
         router.replace('/dashboard');
       } catch (err: any) {
-        if (err?.code === 'LOCKED') {
+        if (err?.code === 'ACCOUNT_UNCLAIMED') {
+          setAccountUnclaimed(true);
+          setErrorMessage(err.message);
+        } else if (err?.code === 'LOCKED') {
           setLockoutTimer(err.lockoutEnd);
           setErrorMessage(err.message);
           setLockoutEnd(err.lockoutEnd);
@@ -182,105 +185,52 @@ export default function LoginPage() {
   const fieldSlot = useMemo(
     () => (
       <>
-        {/* SOUS_CHEF & CHEF_ATELIER: Identity fields */}
-        {(activeLane === 'SOUS_CHEF' || activeLane === 'CHEF_ATELIER') && (
-          <>
-            <div className="space-y-1.5">
-              <label htmlFor="matricule" className="text-sm font-medium text-gray-700 dark:text-slate-300">
-                {fl.matricule}
-              </label>
-              <input
-                id="matricule"
-                type="text"
-                {...register('matricule')}
-                placeholder={fl.matriculePlaceholder}
-                disabled={isSubmitting || isLocked || isRateLimited}
-                className={inputClass}
-              />
-              {(errors as any).matricule && <p className={errorTextClass}>{(errors as any).matricule.message}</p>}
-            </div>
+        {/* Shared Identity fields (SOUS_CHEF & CHEF_ATELIER) */}
+        <div className="space-y-1.5">
+          <label htmlFor="matricule" className="text-sm font-medium text-gray-700 dark:text-slate-300">
+            {fl.matricule}
+          </label>
+          <input
+            id="matricule"
+            type="text"
+            {...register('matricule')}
+            placeholder={fl.matriculePlaceholder}
+            disabled={isSubmitting || isLocked || isRateLimited}
+            className={inputClass}
+          />
+          {(errors as any).matricule && <p className={errorTextClass}>{(errors as any).matricule.message}</p>}
+        </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label htmlFor="firstName" className="text-sm font-medium text-gray-700 dark:text-slate-300">
-                  {fl.firstName}
-                </label>
-                <input
-                  id="firstName"
-                  type="text"
-                  {...register('firstName')}
-                  placeholder={fl.firstNamePlaceholder}
-                  disabled={isSubmitting || isLocked || isRateLimited}
-                  className={inputClass}
-                />
-                {(errors as any).firstName && <p className={errorTextClass}>{(errors as any).firstName.message}</p>}
-              </div>
-              <div className="space-y-1.5">
-                <label htmlFor="lastName" className="text-sm font-medium text-gray-700 dark:text-slate-300">
-                  {fl.lastName}
-                </label>
-                <input
-                  id="lastName"
-                  type="text"
-                  {...register('lastName')}
-                  placeholder={fl.lastNamePlaceholder}
-                  disabled={isSubmitting || isLocked || isRateLimited}
-                  className={inputClass}
-                />
-                {(errors as any).lastName && <p className={errorTextClass}>{(errors as any).lastName.message}</p>}
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* ADMIN: Email field (top) then Password field (bottom) */}
-        {activeLane === 'ADMIN' && (
-          <>
-            <div className="space-y-1.5">
-              <label htmlFor="email" className="text-sm font-medium text-gray-700 dark:text-slate-300">
-                {fl.email}
-              </label>
-              <input
-                id="email"
-                type="email"
-                {...register('email')}
-                placeholder={fl.emailPlaceholder}
-                disabled={isSubmitting || isLocked || isRateLimited}
-                className={inputClass}
-              />
-              {(errors as any).email && <p className={errorTextClass}>{(errors as any).email.message}</p>}
-            </div>
-            <div className="space-y-1.5">
-              <label htmlFor="password" className="text-sm font-medium text-gray-700 dark:text-slate-300">
-                {fl.password}
-              </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  {...register('password')}
-                  placeholder={fl.passwordPlaceholder}
-                  disabled={isSubmitting || isLocked || isRateLimited}
-                  className={`${inputClass} pe-12`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute end-3 top-1/2 -translate-y-1/2 text-gray-400 transition-colors hover:text-gray-600 dark:text-slate-500 dark:hover:text-slate-300"
-                  tabIndex={-1}
-                  aria-label={showPassword ? fl.hidePassword : fl.showPassword}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-              {(errors as any).password && <p className={errorTextClass}>{(errors as any).password.message}</p>}
-            </div>
-          </>
-        )}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <label htmlFor="firstName" className="text-sm font-medium text-gray-700 dark:text-slate-300">
+              {fl.firstName}
+            </label>
+            <input
+              id="firstName"
+              type="text"
+              {...register('firstName')}
+              placeholder={fl.firstNamePlaceholder}
+              disabled={isSubmitting || isLocked || isRateLimited}
+              className={inputClass}
+            />
+            {(errors as any).firstName && <p className={errorTextClass}>{(errors as any).firstName.message}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="lastName" className="text-sm font-medium text-gray-700 dark:text-slate-300">
+              {fl.lastName}
+            </label>
+            <input
+              id="lastName"
+              type="text"
+              {...register('lastName')}
+              placeholder={fl.lastNamePlaceholder}
+              disabled={isSubmitting || isLocked || isRateLimited}
+              className={inputClass}
+            />
+            {(errors as any).lastName && <p className={errorTextClass}>{(errors as any).lastName.message}</p>}
+          </div>
+        </div>
 
         {/* CHEF_ATELIER: Password field */}
         {activeLane === 'CHEF_ATELIER' && (
@@ -316,7 +266,7 @@ export default function LoginPage() {
         )}
 
         {/* Error alert */}
-        {errorMessage && (
+        {errorMessage && !accountUnclaimed && (
           <div
             className={[
               'flex items-start gap-3 rounded-xl px-4 py-3 text-sm',
@@ -358,6 +308,8 @@ export default function LoginPage() {
             </div>
           </div>
         )}
+
+        {/* ACCOUNT_UNCLAIMED banner shown in shell when accountUnclaimed=true */}
       </>
     ),
     [
@@ -367,6 +319,7 @@ export default function LoginPage() {
       errors,
       showPassword,
       errorMessage,
+      accountUnclaimed,
       isLocked,
       isRateLimited,
       lockoutCountdown,
@@ -390,6 +343,8 @@ export default function LoginPage() {
       lockoutCountdown={lockoutCountdown}
       isRateLimited={isRateLimited}
       retryAfter={retryAfter}
+      accountUnclaimed={accountUnclaimed}
+      onClaimRedirect={handleClaimRedirect}
       t={fl}
       laneLabel={laneLabel}
       isRtl={isRtl}

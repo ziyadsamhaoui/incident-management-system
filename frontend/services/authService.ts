@@ -3,13 +3,16 @@ import type {
   LoginRequest,
   JwtAuthenticationResponse,
   ApiError,
+  ClaimAccountRequest,
+  CheckMatriculeResponse,
+  AccountUnclaimedError,
 } from '@/types/auth';
 import type { AxiosError } from 'axios';
 
 /**
  * Attempt to log in via the unified multi-channel endpoint.
  * Throws an enriched error with `retryAfterSeconds` on 429
- * and `lockoutEnd` on 423.
+ * and `lockoutEnd` on 423, and `code: 'ACCOUNT_UNCLAIMED'` on 403 with unclaimed code.
  */
 export async function login(
   credentials: LoginRequest,
@@ -21,7 +24,18 @@ export async function login(
     );
     return data;
   } catch (err) {
-    const axiosErr = err as AxiosError<ApiError>;
+    const axiosErr = err as AxiosError<ApiError | AccountUnclaimedError>;
+
+    // 403 Forbidden — check if it's an ACCOUNT_UNCLAIMED error
+    if (axiosErr.response?.status === 403) {
+      const errorData = axiosErr.response.data as any;
+      if (errorData?.code === 'ACCOUNT_UNCLAIMED') {
+        throw {
+          code: 'ACCOUNT_UNCLAIMED',
+          message: errorData.message || 'Compte non réclamé. Veuillez d\'abord réclamer votre compte.',
+        };
+      }
+    }
 
     // 423 Locked — account temporarily locked
     if (axiosErr.response?.status === 423) {
@@ -50,6 +64,84 @@ export async function login(
         axiosErr.response?.data?.message ?? 'Invalid credentials.',
     };
   }
+}
+
+/**
+ * Attempt to log in via the admin-only endpoint (email + password).
+ */
+export async function adminLogin(
+  email: string,
+  password: string,
+): Promise<JwtAuthenticationResponse> {
+  try {
+    const { data } = await apiClient.post<JwtAuthenticationResponse>(
+      '/api/auth/login',
+      { email, password },
+    );
+    return data;
+  } catch (err) {
+    const axiosErr = err as AxiosError<ApiError>;
+
+    if (axiosErr.response?.status === 423) {
+      const lockoutEnd =
+        (axiosErr.response.data as any)?.lockoutEnd ?? null;
+      throw { code: 'LOCKED', lockoutEnd, message: 'Account is locked.' };
+    }
+
+    if (axiosErr.response?.status === 429) {
+      const retryAfter = Number.parseInt(
+        axiosErr.response.headers?.['retry-after'] as string,
+        10,
+      );
+      throw {
+        code: 'RATE_LIMITED',
+        retryAfterSeconds: Number.isNaN(retryAfter) ? 60 : retryAfter,
+        message: 'Too many requests. Please wait.',
+      };
+    }
+
+    throw {
+      code: 'AUTH_FAILED',
+      message:
+        axiosErr.response?.data?.message ?? 'Invalid credentials.',
+    };
+  }
+}
+
+/**
+ * Claim a promoted CHEF_ATELIER account by setting its password.
+ */
+export async function claimAccount(
+  payload: ClaimAccountRequest,
+): Promise<JwtAuthenticationResponse> {
+  try {
+    const { data } = await apiClient.post<JwtAuthenticationResponse>(
+      '/api/auth/claim',
+      payload,
+    );
+    return data;
+  } catch (err) {
+    const axiosErr = err as AxiosError<ApiError>;
+    throw {
+      code: axiosErr.response?.data as any,
+      message:
+        axiosErr.response?.data?.message ?? 'Failed to claim account.',
+    };
+  }
+}
+
+/**
+ * Check matricule existence and eligibility to claim.
+ * Returns boolean-only response (zero PII exposure).
+ */
+export async function checkMatricule(
+  matricule: string,
+): Promise<CheckMatriculeResponse> {
+  const { data } = await apiClient.get<CheckMatriculeResponse>(
+    '/api/auth/check-matricule',
+    { params: { matricule } },
+  );
+  return data;
 }
 
 /**

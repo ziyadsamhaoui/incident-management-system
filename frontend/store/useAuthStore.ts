@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { AuthState, AuthLane, LoginRequest, JwtAuthenticationResponse } from '@/types/auth';
+import type { AuthState, UserRole, LoginRequest, JwtAuthenticationResponse } from '@/types/auth';
 import { configureApiClient } from '@/lib/api-client';
 
 // ──────────────────────────────────────────────────
@@ -9,7 +9,7 @@ import { configureApiClient } from '@/lib/api-client';
 
 interface AuthActions {
   /** Persist login response into the store */
-  loginSucceeded: (res: JwtAuthenticationResponse, lane: AuthLane) => void;
+  loginSucceeded: (res: JwtAuthenticationResponse, lane: UserRole) => void;
   /** Store user identity fields populated after login */
   setUserIdentity: (firstName: string, lastName: string) => void;
   /** Replace the access token (used by 401 refresh interceptor) */
@@ -49,7 +49,7 @@ export const useAuthStore = create<AuthStore>()(
     (set, get) => ({
       ...initialState,
 
-      loginSucceeded: (res: JwtAuthenticationResponse, lane: AuthLane) => {
+      loginSucceeded: (res: JwtAuthenticationResponse, lane: UserRole) => {
         set({
           accessToken: res.accessToken,
           refreshToken: res.refreshToken,

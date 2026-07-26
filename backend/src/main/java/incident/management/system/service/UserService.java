@@ -36,4 +36,11 @@ public interface UserService {
     void unsubscribeFromDepartment(Long adminId, Long departmentId);
 
     List<DepartmentResponse> getSubscribedDepartments(Long adminId);
+
+    /**
+     * Promotes a SOUS_CHEF user to CHEF_ATELIER.
+     * The promoted user will have {@code passwordHash = null},
+     * requiring them to claim their account on first login.
+     */
+    UserResponse promoteToChefAtelier(Long id);
 }

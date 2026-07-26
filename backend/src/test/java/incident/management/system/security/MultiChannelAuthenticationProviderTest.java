@@ -374,12 +374,11 @@ class MultiChannelAuthenticationProviderTest {
         }
 
         @Test
-        @DisplayName("SOUS_CHEF user cannot authenticate via CHEF_ATELIER lane (wrong password — mismatched lane)")
+        @DisplayName("SOUS_CHEF user cannot authenticate via CHEF_ATELIER lane (rejected at role check before password)")
         void sousChefUser_cannotUseChefAtelierLane() {
-            // SOUS_CHEF user with no matching passwordHash for the provided password
+            // SOUS_CHEF user — role check fires before password verification
             UserEntity sousChef = createUser(1001, "Alice", "Martin", "some-hash", UserRole.SOUS_CHEF);
             when(userRepository.findByMatricule(1001)).thenReturn(Optional.of(sousChef));
-            when(passwordEncoder.matches("anyPassword", "some-hash")).thenReturn(false);
 
             MultiChannelAuthenticationToken token = new MultiChannelAuthenticationToken(
                     "1001", "anyPassword", UserRole.CHEF_ATELIER, "Alice", "Martin");
@@ -388,7 +387,8 @@ class MultiChannelAuthenticationProviderTest {
                     .isInstanceOf(BadCredentialsException.class)
                     .hasMessage("Invalid credentials");
 
-            verify(passwordEncoder).matches("anyPassword", "some-hash");
+            // Role check fires before password check — passwordEncoder should NOT be called
+            verify(passwordEncoder, never()).matches(anyString(), anyString());
         }
 
         @Test

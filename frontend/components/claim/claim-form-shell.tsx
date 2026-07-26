@@ -2,7 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { useTheme } from 'next-themes';
-import { UserPlus, Sun, Moon } from 'lucide-react';
+import { UserCheck, Sun, Moon } from 'lucide-react';
 import type { Lang } from '@/lib/i18n';
 
 // Grid animation — moving lines (80px tiles, 12s loop) + pulsing glow
@@ -31,7 +31,7 @@ const glowTransition = {
 
 // Props
 
-interface RegisterFormShellProps {
+interface ClaimFormShellProps {
   language: Lang;
   onLanguageChange: (lang: Lang) => void;
   fieldSlot: React.ReactNode;
@@ -92,7 +92,7 @@ function HeaderControls({
 
 // Main Component
 
-export function RegisterFormShell({
+export function ClaimFormShell({
   language,
   onLanguageChange,
   fieldSlot,
@@ -101,26 +101,23 @@ export function RegisterFormShell({
   disabled = false,
   t,
   isRtl,
-}: RegisterFormShellProps) {
-  const { theme } = useTheme();
+}: ClaimFormShellProps) {
+  const { resolvedTheme } = useTheme();
 
   return (
     <div
       dir={isRtl ? 'rtl' : 'ltr'}
-      className={[
-        'relative flex min-h-screen items-center justify-center',
-        'bg-white dark:bg-slate-900',
-        'lg:bg-slate-50/60 lg:dark:bg-slate-950',
-        'px-4 py-8 sm:px-6',
-      ].join(' ')}
+      className="relative flex min-h-screen items-center justify-center px-4 py-8 sm:px-6"
     >
-      {/* Background: diagonal gradient mesh + moving grid */}
-      <div className="fixed inset-0 -z-10 overflow-hidden">
+      {/* Background layer: solid color + glow + moving grid */}
+      <div className="fixed inset-0 z-0">
+        {/* Solid base color */}
+        <div className="absolute inset-0 bg-white dark:bg-slate-900 lg:bg-slate-50/60 lg:dark:bg-slate-950" />
         <motion.div
           className="absolute inset-0"
           style={{
-            backgroundImage: theme === 'dark'
-              ? `radial-gradient(ellipse at 15% 85%, rgba(59, 130, 246, 0.10) 0%, transparent 55%), radial-gradient(ellipse at 80% 15%, rgba(59, 130, 246, 0.08) 0%, transparent 55%), radial-gradient(ellipse at 50% 50%, rgba(59, 130, 246, 0.06) 0%, transparent 60%)`
+            backgroundImage: resolvedTheme === 'dark'
+              ? `radial-gradient(ellipse at 15% 85%, rgba(59, 130, 246, 0.07) 0%, transparent 55%), radial-gradient(ellipse at 80% 15%, rgba(59, 130, 246, 0.05) 0%, transparent 55%), radial-gradient(ellipse at 50% 50%, rgba(59, 130, 246, 0.03) 0%, transparent 60%)`
               : `radial-gradient(ellipse at 15% 85%, rgba(15, 98, 254, 0.06) 0%, transparent 55%), radial-gradient(ellipse at 80% 15%, rgba(15, 98, 254, 0.06) 0%, transparent 55%), radial-gradient(ellipse at 50% 50%, rgba(3, 83, 233, 0.04) 0%, transparent 60%)`,
           }}
           animate={glowAnimation}
@@ -129,10 +126,10 @@ export function RegisterFormShell({
         <motion.div
           className="absolute inset-0"
           style={{
-            backgroundImage: theme === 'dark'
+            backgroundImage: resolvedTheme === 'dark'
               ? [
-                  'repeating-linear-gradient(0deg, transparent, transparent 79px, rgba(59, 130, 246, 0.18) 79px, rgba(59, 130, 246, 0.18) 80px)',
-                  'repeating-linear-gradient(90deg, transparent, transparent 79px, rgba(59, 130, 246, 0.18) 79px, rgba(59, 130, 246, 0.18) 80px)',
+                  'repeating-linear-gradient(0deg, transparent, transparent 79px, rgba(59, 130, 246, 0.12) 79px, rgba(59, 130, 246, 0.12) 80px)',
+                  'repeating-linear-gradient(90deg, transparent, transparent 79px, rgba(59, 130, 246, 0.12) 79px, rgba(59, 130, 246, 0.12) 80px)',
                 ].join(', ')
               : [
                   'repeating-linear-gradient(0deg, transparent, transparent 79px, rgba(15, 98, 254, 0.05) 79px, rgba(15, 98, 254, 0.05) 80px)',
@@ -152,6 +149,7 @@ export function RegisterFormShell({
       {/* Card / Full-bleed container */}
       <div
         className={[
+          'relative z-10',
           'w-full max-w-sm sm:max-w-xl lg:max-w-lg',
           'lg:rounded-2xl lg:border lg:border-slate-200 lg:bg-white lg:p-8 lg:shadow-xl lg:shadow-slate-200/50 lg:dark:border-slate-800 lg:dark:bg-slate-900 lg:dark:shadow-none',
           'max-lg:min-h-screen max-lg:rounded-none max-lg:border-0 max-lg:bg-transparent max-lg:shadow-none',
@@ -162,18 +160,18 @@ export function RegisterFormShell({
         {/* 1. Badge */}
         <div className="mb-6 flex justify-center">
           <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-[#0F62FE] to-[#0353E9] shadow-md shadow-blue-500/20 dark:shadow-blue-500/30">
-            <UserPlus className="h-7 w-7 text-white" aria-hidden="true" />
+            <UserCheck className="h-7 w-7 text-white" aria-hidden="true" />
           </div>
         </div>
 
         {/* 2. Title */}
         <h1 className="text-center text-2xl font-semibold tracking-tight text-gray-900 dark:text-slate-100">
-          {t.registerTitle}
+          {t.claimTitle}
         </h1>
 
         {/* 3. Subtitle */}
         <p className="mt-1.5 text-center text-sm text-gray-600 dark:text-slate-400">
-          {t.registerSubtitle}
+          {t.claimSubtitle}
         </p>
 
         {/* 4. Form */}
@@ -195,10 +193,10 @@ export function RegisterFormShell({
               {isSubmitting ? (
                 <span className="flex items-center gap-2">
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  {t.submittingRegister}
+                  {t.claiming}
                 </span>
               ) : (
-                t.submitRegister
+                t.claimSubmit
               )}
             </button>
           </div>
@@ -206,12 +204,12 @@ export function RegisterFormShell({
 
         {/* 6. Login Link */}
         <div className="mt-8 text-center text-sm text-gray-500 dark:text-slate-400">
-          {t.alreadyHaveAccount}{' '}
+          {t.claimLoginLink}{' '}
           <a
             href="/login"
             className="ms-1 font-semibold text-[#0F62FE] transition-colors hover:text-[#0353E9] hover:underline dark:text-blue-400 dark:hover:text-blue-300"
           >
-            {t.loginLink}
+            {t.claimLoginAction}
           </a>
         </div>
       </div>

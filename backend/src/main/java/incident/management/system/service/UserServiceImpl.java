@@ -143,6 +143,31 @@ public class UserServiceImpl implements UserService {
     }
 
     //  ========================================================================
+    //  Promotion: SOUS_CHEF → CHEF_ATELIER
+    //  ========================================================================
+
+    @Override
+    public UserResponse promoteToChefAtelier(Long id) {
+        UserEntity user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+
+        if (user.getRole() != UserRole.SOUS_CHEF) {
+            throw new IllegalArgumentException(
+                    "Seuls les utilisateurs avec le rôle SOUS_CHEF peuvent être promus Chef d'atelier.");
+        }
+
+        user.setRole(UserRole.CHEF_ATELIER);
+        // Set passwordHash to null to signal the account is unclaimed
+        user.setPasswordHash(null);
+
+        UserEntity saved = userRepository.save(user);
+        log.info("User {} (matricule: {}) promoted from SOUS_CHEF to CHEF_ATELIER. Account needs claiming.",
+                saved.getId(), saved.getMatricule());
+
+        return toResponse(saved);
+    }
+
+    //  ========================================================================
     //  Admin Department Subscriptions
     //  ========================================================================
 

@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -25,7 +26,30 @@ import java.util.Map;
 public class GlobalExceptionHandler {
 
     // ──────────────────────────────────────────────
-    //  A. Resource & Entity Not Found → 404
+    //  A. Account Unclaimed → 403
+    // ──────────────────────────────────────────────
+
+    /**
+     * Handles {@link AccountUnclaimedException} thrown when a CHEF_ATELIER
+     * user tries to log in but has not claimed their account yet
+     * ({@code passwordHash IS NULL}).
+     * <p>
+     * Returns a structured JSON payload the frontend can use to redirect
+     * the user to the claim-account flow.
+     */
+    @ExceptionHandler(AccountUnclaimedException.class)
+    public ResponseEntity<Map<String, String>> handleAccountUnclaimed(AccountUnclaimedException ex) {
+        log.warn("Account unclaimed: {}", ex.getMessage());
+        Map<String, String> body = new LinkedHashMap<>();
+        body.put("code", ex.getCode());
+        body.put("message", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(body);
+    }
+
+    // ──────────────────────────────────────────────
+    //  B. Resource & Entity Not Found → 404
     // ──────────────────────────────────────────────
 
     /**

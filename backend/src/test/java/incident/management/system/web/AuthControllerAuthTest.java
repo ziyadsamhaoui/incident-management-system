@@ -47,11 +47,15 @@ class AuthControllerAuthTest extends StandaloneWebMvcTestBase {
     @Mock
     private AuthService authService;
 
+    @Mock
+    private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+
     @BeforeEach
     void setUp() {
         var authController = new AuthController(
                 authenticationManager, jwtService, userRepository,
-                refreshTokenRepository, tokenBlacklistService, authService);
+                refreshTokenRepository, tokenBlacklistService, authService,
+                passwordEncoder);
         buildMockMvc(authController);
     }
 
@@ -159,8 +163,8 @@ class AuthControllerAuthTest extends StandaloneWebMvcTestBase {
         }
 
         @Test
-        @DisplayName("locked account → 403 Forbidden")
-        void lockedAccount_returns403() throws Exception {
+        @DisplayName("locked account → 423 Locked")
+        void lockedAccount_returns423() throws Exception {
             var payload = """
                     {
                         "matricule": "2002",
@@ -176,7 +180,7 @@ class AuthControllerAuthTest extends StandaloneWebMvcTestBase {
             mockMvc.perform(post("/api/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(payload))
-                    .andExpect(status().isForbidden())
+                    .andExpect(status().isLocked())
                     .andExpect(jsonPath("$.error").value("Account is locked. Try again later."));
         }
     }

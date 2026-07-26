@@ -1,6 +1,7 @@
 package incident.management.system.security;
 
 import incident.management.system.enums.UserRole;
+import incident.management.system.exception.AccountUnclaimedException;
 import incident.management.system.model.UserEntity;
 import incident.management.system.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -61,10 +62,23 @@ public class MultiChannelAuthenticationProvider implements AuthenticationProvide
         int matricule = parseMatricule((String) token.getPrincipal());
         UserEntity user = findActiveUserByMatricule(matricule);
 
-        // Identity text verification
+        // Identity text verification (case-insensitive, trimmed)
         if (!matchesIdentity(user, token.getFirstName(), token.getLastName())) {
             log.warn("CHEF_ATELIER identity mismatch for matricule: {}", matricule);
             throw new BadCredentialsException("Invalid credentials");
+        }
+
+        // Enforce role == CHEF_ATELIER
+        if (user.getRole() != UserRole.CHEF_ATELIER) {
+            log.warn("Role mismatch for CHEF_ATELIER lane, user {} has role {}", matricule, user.getRole());
+            throw new BadCredentialsException("Invalid credentials");
+        }
+
+        // Check if account is unclaimed (passwordHash IS NULL)
+        if (user.getPasswordHash() == null || user.getPasswordHash().isBlank()) {
+            log.warn("CHEF_ATELIER account unclaimed for matricule: {}", matricule);
+            throw new AccountUnclaimedException(
+                    "Compte non réclamé. Veuillez d'abord réclamer votre compte.");
         }
 
         // BCrypt password verification
@@ -137,7 +151,11 @@ public class MultiChannelAuthenticationProvider implements AuthenticationProvide
     }
 
     private boolean matchesIdentity(UserEntity user, String firstName, String lastName) {
-        return user.getFirstName().equals(firstName) && user.getLastName().equals(lastName);
+        if (firstName == null || lastName == null) {
+            return false;
+        }
+        return user.getFirstName().trim().equalsIgnoreCase(firstName.trim())
+                && user.getLastName().trim().equalsIgnoreCase(lastName.trim());
     }
 
     @Override

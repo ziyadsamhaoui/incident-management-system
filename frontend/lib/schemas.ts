@@ -16,46 +16,39 @@ export const chefAtelierSchema = sousChefSchema.extend({
   password: z.string().min(4, 'Le mot de passe doit contenir au moins 4 caractères'),
 });
 
-// ADMIN: email + password
+// Floor login schema: SOUS_CHEF | CHEF_ATELIER only (no ADMIN)
 
-export const adminSchema = z.object({
-  lane: z.literal('ADMIN'),
+export const floorLoginSchema = z.discriminatedUnion('lane', [
+  sousChefSchema,
+  chefAtelierSchema,
+]);
+
+// Inferred type for floor login
+
+export type FloorLoginFormValues = z.infer<typeof floorLoginSchema>;
+
+// Admin login schema (corporate credentials)
+
+export const adminLoginSchema = z.object({
   email: z.string().email('Adresse email invalide'),
   password: z.string().min(4, 'Le mot de passe doit contenir au moins 4 caractères'),
 });
 
-// Discriminated union — each lane validates its own fields
+export type AdminLoginFormValues = z.infer<typeof adminLoginSchema>;
 
-export const loginSchema = z.discriminatedUnion('lane', [
-  sousChefSchema,
-  chefAtelierSchema,
-  adminSchema,
-]);
+// Claim account schema
 
-// Inferred type
-
-export type LoginFormValues = z.infer<typeof loginSchema>;
-
-// Per-lane error paths for inline display
-
-export type LoginFormErrors = z.inferFlattenedErrors<typeof loginSchema>;
-
-// Registration schema
-
-const roleOptions = ['ADMIN', 'CHEF_ATELIER', 'SOUS_CHEF'] as const;
-
-export const registerSchema = z
+export const claimSchema = z
   .object({
-    fullName: z.string().min(2, 'Le nom complet est requis'),
     matricule: z.string().min(1, 'Le matricule est requis'),
-    email: z.string().email('Adresse email invalide'),
-    password: z.string().min(4, 'Le mot de passe doit contenir au moins 4 caractères'),
+    firstName: z.string().min(1, 'Le prénom est requis'),
+    lastName: z.string().min(1, 'Le nom est requis'),
+    newPassword: z.string().min(4, 'Le mot de passe doit contenir au moins 4 caractères'),
     confirmPassword: z.string().min(1, 'Veuillez confirmer le mot de passe'),
-    role: z.enum(roleOptions, { errorMap: () => ({ message: 'Veuillez sélectionner un rôle' }) }),
   })
-  .refine((data) => data.password === data.confirmPassword, {
+  .refine((data) => data.newPassword === data.confirmPassword, {
     message: 'Les mots de passe ne correspondent pas',
     path: ['confirmPassword'],
   });
 
-export type RegisterFormValues = z.infer<typeof registerSchema>;
+export type ClaimFormValues = z.infer<typeof claimSchema>;

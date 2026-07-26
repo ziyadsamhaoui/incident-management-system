@@ -10,6 +10,20 @@ export interface LoginRequest {
   lastName?: string;
 }
 
+/** Mirrors the backend `ClaimAccountRequest` record */
+export interface ClaimAccountRequest {
+  matricule: string;
+  firstName: string;
+  lastName: string;
+  newPassword: string;
+}
+
+/** Mirrors the backend `CheckMatriculeResponse` */
+export interface CheckMatriculeResponse {
+  exists: boolean;
+  eligibleToClaim: boolean;
+}
+
 /** Mirrors the backend `JwtAuthenticationResponse` record */
 export interface JwtAuthenticationResponse {
   accessToken: string;
@@ -58,15 +72,35 @@ export interface ApiError {
   errors?: Record<string, string>;
 }
 
-/** Detection lane for the login page */
-export type AuthLane = 'SOUS_CHEF' | 'CHEF_ATELIER' | 'ADMIN';
+/** ACCOUNT_UNCLAIMED error payload from backend */
+export interface AccountUnclaimedError {
+  code: 'ACCOUNT_UNCLAIMED';
+  message: string;
+}
+
+/** Detection lane for the login page (floor terminal: 2 lanes only) */
+export type AuthLane = 'SOUS_CHEF' | 'CHEF_ATELIER';
 
 /** Zod schema shape for login form validation */
 export interface LoginFormValues {
   lane: AuthLane;
   matricule?: string;
-  email?: string;
   password?: string;
   firstName?: string;
   lastName?: string;
+}
+
+/** Zod schema shape for claim account form */
+export interface ClaimFormValues {
+  matricule: string;
+  firstName: string;
+  lastName: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+/** Zod schema shape for admin login form */
+export interface AdminLoginFormValues {
+  email: string;
+  password: string;
 }

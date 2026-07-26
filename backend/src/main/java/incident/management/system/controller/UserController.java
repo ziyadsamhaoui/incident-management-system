@@ -66,6 +66,12 @@ public class UserController {
         return ResponseEntity.noContent().build();
     }
 
+    @PutMapping("/{id}/promote")
+    public ResponseEntity<UserResponse> promoteToChefAtelier(@PathVariable Long id) {
+        UserResponse response = userService.promoteToChefAtelier(id);
+        return ResponseEntity.ok(response);
+    }
+
     //  Admin Department Subscriptions
 
     @PostMapping("/{userId}/subscriptions/{departmentId}")
