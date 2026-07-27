@@ -37,6 +37,7 @@ build/
 ### Misc ###
 misc.txt
 /docs/AGENT_SUMMARY.md
+/docs/EMPTY.md
 cp.txt
 test.log
 /frontend/nul
