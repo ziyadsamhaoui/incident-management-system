@@ -483,13 +483,16 @@ CRUD for: categories, departments, sections, production-lines, stations.
 
 ### Phase 2 (Frontend): Core Incident Management & Real-Time Lifecycle UI
 
-**Status:** ⬜ NOT STARTED
+**Status:** 🟡 PARTIALLY COMPLETED
 
 | # | Task | Description | Status |
 |---|---|---|---|
 | F2.1 | Declaration Form | CreateIncidentRequest form with Zod validation, cascading dropdowns | ⬜ |
-| F2.2 | List & Board Views | Paginated table + Kanban board per status with drag/drop | ⬜ |
-| F2.3 | Evaluation Modal | RESOLVED/NON_RESOLVED outcome, mandatory note enforcement | ⬜ |
+| F2.2 | Chef d'atelier My Incidents Table & Interface | Paginated table, responsive toolbar, compact 2x2 stats grid, welcome overlay, floating action button, View action column, compact metrics cards | ✅ |
+| F2.3 | Incident Detail View | Role-based detail page with stepper, evaluation modal, PII masking, auto-progress | ✅ |
+| F2.4 | List & Board Views | Paginated table + Kanban board per status with drag/drop | ⬜ |
+| F2.5 | Evaluation Modal | RESOLVED/NON_RESOLVED outcome, mandatory note enforcement | ✅ (built into Incident Detail View) |
+| F2.6 | My Incidents Layout Rework | Compact metrics cards (p-4, text-2xl), restructured table columns (7 cols with View action), detail drawer below nav bar, meta grid reordered (Dept+Station / Category+Type) | ✅ |
 
 ### Phase 3 (Frontend): Administrative Control, Department Subscriptions & Audit Trails
 
@@ -517,6 +520,10 @@ CRUD for: categories, departments, sections, production-lines, stations.
 | F4.6 | E2E Tests | Playwright/Cypress for all major flows | ⬜ |
 
 **Milestone Log:**
+- **2026-07-27 (Chef d'atelier UI Refactoring):**
+  - Removed Dashboard link and All Incidents view for CHEF_ATELIER / SOUS_CHEF roles
+  - Deployed updated "My Incidents" table layout at `/chef-atelier` with responsive toolbar, 2x2 statistics grid, and floating action button
+  - Integrated dynamic `[Last Name] [First Name]` welcome transition overlay with Framer Motion
 - **2026-07-23 (Iteration 4):** Refactored responsive breakpoint from 768px to 1024px — SM & MD share full-bleed layout, LG+ gets centered card. Simplified header controls to single top-right instance with responsive sizing (`text-xs` compact / `text-sm` expanded). Added `dir="ltr"` on the role switcher track to prevent RTL state inversion between ADMIN and Opérateur. Inverted Admin slot order (Password above Email). Removed all ASCII divider comments in favor of plain inline comments.
 - **2026-07-23 (Iteration 5):** Created `lib/i18n.ts` with consolidated translation dictionaries and `useTranslation()` hook (localStorage `app-lang` key). Set theme persistence via `storageKey="app-theme"` in `next-themes`. Deployed animated moving grid background (Framer Motion `backgroundPosition` drift, 20-second loop). Unified SM/MD surface color to match card (`bg-white dark:bg-slate-900`) — eliminating page-vs-card color split. Added three-tier responsive card scaling (`max-w-sm` SM / `max-w-lg` MD / `max-w-md` LG+). Wrapped header controls in `dir="ltr"` to prevent RTL button swap. Hid forgot-password link for Operator lane. Reverted Admin slot to standard order (Email above Password). Removed all local translation dictionaries from shell and page — strings now injected via props from `useTranslation()`.
 - **2026-07-23 (Iteration 6):** Built registration workflow end-to-end. Added `GET /api/auth/check-matricule` and `POST /api/auth/register` backend endpoints with `RegisterRequest` DTO and `existsByMatricule` repository query. Created `app/register/page.tsx` with React Hook Form + Zod (`registerSchema` with password confirm `.refine()`), `onBlur` matricule availability check with loading spinner/inline error. Created `components/register/register-form-shell.tsx` matching login visual design (moving grid, header controls, `UserPlus` badge). Extended `lib/i18n.ts` with 14 registration translation keys (FR/AR). Updated global grid visuals — 80px tiles, 12s animation speed, dark mode opacity 0.18.

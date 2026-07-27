@@ -13,10 +13,10 @@ export default function DashboardLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <AuthGuard>
+    <AuthGuard allowedRoles={['ADMIN']}>
       <div className="flex h-screen overflow-hidden bg-background">
-        {/* Sidebar — hidden on mobile, togglable */}
-        <Sidebar open={sidebarOpen} onOpenChange={setSidebarOpen} />
+        {/* Full command sidebar for ADMIN */}
+        <Sidebar open={sidebarOpen} onOpenChange={setSidebarOpen} variant="admin" />
 
         {/* Main content area */}
         <div className="flex flex-1 flex-col overflow-hidden">

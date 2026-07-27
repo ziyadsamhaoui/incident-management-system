@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 
 /**
  * This page redirects to the Claim Account page (/claim)
- * which is the only way to activate a pre-promoted CHEF_ATELIER account.
+ * which is the only way to activate a CHEF_ATELIER account.
+ * user type = sous_chef must be manually promoted to a type = chef_atelier by an admin
  */
 export default function RegisterPage() {
   const router = useRouter();

@@ -1278,3 +1278,74 @@ const showForgotPassword = activeLane !== 'SOUS_CHEF';
 ---
 
 > **Document generated for operational reference.** This document describes the system as implemented through Phase 10 (Event-Driven Notification Engine). For upcoming features and roadmap items, see `PROJECT_STATUS.md`.
+
+---
+
+## 18. Chef d'atelier Interface & Table Specifications
+
+### Sidebar Navigation Trimming
+
+For CHEF_ATELIER and SOUS_CHEF roles, the sidebar navigation is restricted to:
+- **My Incidents** (only entry point, at `/chef-atelier`)
+- **Notifications**
+
+The following links are **hidden** from CHEF_ATELIER / SOUS_CHEF users:
+- Dashboard (ADMIN only)
+- Incidents / All Incidents (ADMIN only)
+- User Management (ADMIN only)
+- Admin Settings (ADMIN only)
+- Reference Data (ADMIN only)
+
+### View Access Isolation
+
+- CHEF_ATELIER and SOUS_CHEF users can ONLY access incidents they have personally created ("My Incidents").
+- The "All Incidents" global view is removed entirely for these roles.
+- Backend API filters (or frontend query parameters) enforce `created_by = current_user_id`.
+
+### Table Column Adjustments
+
+| Column | Status | Notes |
+|---|---|---|---|
+| Checkbox | ✅ Included | Selection checkbox as first column |
+| Incident ID | ✅ Included | Formatted reference code (e.g., `INC-20260714-0001`) |
+| Date/Time | ✅ Included | Formatted timestamp (`DD/MM/YYYY HH:mm`) |
+| Type Badge | ✅ Included | Colored pill badges (`Safety` Amber, `Accident` Red, `Complaint` Blue) |
+| Status Badge | ✅ Included | Status pill badges (`New` Blue, `Under Review` Yellow, `Closed` Green) |
+| Claimed by | ✅ Included | Maps from `claimedBy.firstName` (or legacy `assignedTo?.firstName`) — displays Admin's first name or `—` if unclaimed |
+| View Action | ✅ Included | Dedicated eye-icon button that opens the Incident Detail slide-over drawer for that row |
+| Employee | ❌ Removed | Completely removed from table |
+| Actions (legacy dropdown) | ❌ Removed | Replaced by the dedicated View action button |
+
+### Detail View Slide-Over Meta Grid Layout
+
+The incident detail drawer's metadata grid has been restructured into two rows:
+- **Line 1:** `Département` (Department) + `Station` (Station only — production line removed from heading)
+- **Line 2:** `Catégorie / Type` (Category) + `Déclaré le` (Declared at timestamp)
+
+The drawer panel is positioned below the top navigation bar (`top-14`) on LG+ screens, offsetting it cleanly from the page header.
+
+### 2-Line Toolbar Split (MD/SM Screens)
+
+On screens < 1024px, the toolbar splits into two stacked lines:
+- **Line 1:** Search bar spanning full width (`w-full`)
+- **Line 2:** Flex container containing Status Filter, Type Filter, and More Filters button
+
+### 2x2 Statistics Grid (MD/SM Screens)
+
+On tablet and mobile viewports, the KPI/statistics cards reorganize into a compact **2-column by 2-row grid**:
+- Row 1: Total Incidents | Open Incidents
+- Row 2: In Progress | Closed Incidents
+
+### Horizontal Table Scroll (MD/SM Screens)
+
+The table is wrapped in an `overflow-x-auto` container with custom scrollbar styling to ensure horizontal scrollability on tablet and mobile viewports without breaking page bounds.
+
+### Responsive Create Incident Button
+
+- **Large screens (≥1024px):** Expanded blue button with text "+ Create Incident"
+- **Medium screens & lower (<1024px):** Compact rounded icon button displaying only the `+` icon
+
+### Welcome Transition Overlay
+
+- Framer Motion `AnimatePresence` fade-out overlay (0.6s after 1.5s delay)
+- Dynamic greeting formatted as `[Last Name] [First Name]` (e.g., "Bienvenue, BENANI Mohamed")

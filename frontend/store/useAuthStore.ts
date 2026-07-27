@@ -12,6 +12,8 @@ interface AuthActions {
   loginSucceeded: (res: JwtAuthenticationResponse, lane: UserRole) => void;
   /** Store user identity fields populated after login */
   setUserIdentity: (firstName: string, lastName: string) => void;
+  /** Set the user's department (from profile fetch or onboarding) */
+  setDepartment: (departmentId: string, departmentName: string) => void;
   /** Replace the access token (used by 401 refresh interceptor) */
   setAccessToken: (token: string) => void;
   /** Set lockout timestamp */
@@ -35,6 +37,8 @@ const initialState: AuthState = {
   roles: [],
   firstName: null,
   lastName: null,
+  departmentId: null,
+  departmentName: null,
   isAuthenticated: false,
   lane: null,
   lockoutEnd: null,
@@ -65,6 +69,10 @@ export const useAuthStore = create<AuthStore>()(
         set({ firstName, lastName });
       },
 
+      setDepartment: (departmentId: string, departmentName: string) => {
+        set({ departmentId, departmentName });
+      },
+
       setAccessToken: (token: string) => {
         set({ accessToken: token });
       },
@@ -91,6 +99,8 @@ export const useAuthStore = create<AuthStore>()(
         roles: state.roles,
         firstName: state.firstName,
         lastName: state.lastName,
+        departmentId: state.departmentId,
+        departmentName: state.departmentName,
         isAuthenticated: state.isAuthenticated,
         lane: state.lane,
       }),

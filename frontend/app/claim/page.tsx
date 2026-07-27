@@ -61,10 +61,14 @@ export default function ClaimPage() {
 
   const currentMatricule = watch('matricule');
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated — route based on role
   useEffect(() => {
     if (isAuthenticated) {
-      router.replace('/dashboard');
+      const userRole = useAuthStore.getState().roles?.[0]?.replace('ROLE_', '');
+      if (userRole === 'ADMIN') router.replace('/dashboard');
+      else if (userRole === 'CHEF_ATELIER') router.replace('/chef-atelier');
+      else if (userRole === 'SOUS_CHEF') router.replace('/sous-chef');
+      else router.replace('/dashboard');
     }
   }, [isAuthenticated, router]);
 
@@ -116,7 +120,7 @@ export default function ClaimPage() {
         useAuthStore.getState().setUserIdentity(data.firstName.trim(), data.lastName.trim());
 
         setSuccessMessage(fl.claimSuccess);
-        setTimeout(() => router.replace('/dashboard'), 1500);
+        setTimeout(() => router.replace('/chef-atelier'), 1500);
       } catch (err: any) {
         const code = err?.code;
         const message = err?.message;

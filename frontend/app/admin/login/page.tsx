@@ -25,7 +25,7 @@ const inputClass = [
 
 const errorTextClass = 'mt-1.5 text-xs font-medium text-red-500 dark:text-red-400';
 
-// Grid animation — moving lines (80px tiles, 12s loop) + pulsing glow
+// Grid animation : moving lines (80px tiles, 12s loop) + pulsing glow
 
 const gridAnimation = {
   backgroundPosition: ['0px 0px', '80px 80px'],

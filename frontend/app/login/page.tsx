@@ -74,10 +74,14 @@ export default function LoginPage() {
     setAccountUnclaimed(false);
   }, [activeLane]);
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated — route based on role to avoid access denied
   useEffect(() => {
     if (isAuthenticated) {
-      router.replace('/dashboard');
+      const userRole = useAuthStore.getState().roles?.[0]?.replace('ROLE_', '');
+      if (userRole === 'ADMIN') router.replace('/dashboard');
+      else if (userRole === 'CHEF_ATELIER') router.replace('/chef-atelier');
+      else if (userRole === 'SOUS_CHEF') router.replace('/sous-chef');
+      else router.replace('/dashboard');
     }
   }, [isAuthenticated, router]);
 
@@ -156,7 +160,9 @@ export default function LoginPage() {
         loginSucceeded(response, data.lane);
         const displayName = data.firstName!;
         useAuthStore.getState().setUserIdentity(displayName, data.lastName!);
-        router.replace('/dashboard');
+        // Route to the correct home based on lane
+        if (data.lane === 'SOUS_CHEF') router.replace('/sous-chef');
+        else router.replace('/chef-atelier');
       } catch (err: any) {
         if (err?.code === 'ACCOUNT_UNCLAIMED') {
           setAccountUnclaimed(true);

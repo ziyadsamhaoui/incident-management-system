@@ -47,6 +47,10 @@ export interface AuthState {
   firstName: string | null;
   /** Human-readable last name */
   lastName: string | null;
+  /** Department assigned to the user (null = unassigned, triggers onboarding) */
+  departmentId: string | null;
+  /** Human-readable department name */
+  departmentName: string | null;
   /** Whether the user has an active session */
   isAuthenticated: boolean;
   /** The detected authentication lane */
