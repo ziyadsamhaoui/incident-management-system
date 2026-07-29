@@ -26,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { StatusDotLabel, getStatusConfig } from '@/lib/constants/incidentStatus';
 import { IncidentDetailDrawer } from '@/components/incidents/incident-detail-drawer';
 
 // ── Types ─────────────────────────────────────────
@@ -41,14 +42,13 @@ interface IncidentRow {
 }
 
 // ── Mock data for demonstration ────────────────────
-// Will be replaced with real API calls once backend is connected.
 
 const MOCK_INCIDENTS: IncidentRow[] = [
   {
     id: 1,
     reference: 'INC-20260714-0001',
     declaredAt: '2026-07-14T08:23:15',
-    category: 'Safety',
+    category: 'Sécurité',
     status: 'DECLARED',
     claimedByFirstName: null,
   },
@@ -64,7 +64,7 @@ const MOCK_INCIDENTS: IncidentRow[] = [
     id: 3,
     reference: 'INC-20260714-0003',
     declaredAt: '2026-07-14T10:02:33',
-    category: 'Complaint',
+    category: 'Réclamation',
     status: 'IN_PROGRESS',
     claimedByFirstName: 'Fatima',
   },
@@ -72,7 +72,7 @@ const MOCK_INCIDENTS: IncidentRow[] = [
     id: 4,
     reference: 'INC-20260714-0004',
     declaredAt: '2026-07-14T11:45:00',
-    category: 'Safety',
+    category: 'Sécurité',
     status: 'RESOLVED',
     claimedByFirstName: 'Mohamed',
   },
@@ -88,7 +88,7 @@ const MOCK_INCIDENTS: IncidentRow[] = [
     id: 6,
     reference: 'INC-20260714-0006',
     declaredAt: '2026-07-14T14:30:00',
-    category: 'Complaint',
+    category: 'Réclamation',
     status: 'NON_RESOLVED',
     claimedByFirstName: null,
   },
@@ -96,7 +96,7 @@ const MOCK_INCIDENTS: IncidentRow[] = [
     id: 7,
     reference: 'INC-20260714-0007',
     declaredAt: '2026-07-14T15:00:10',
-    category: 'Safety',
+    category: 'Sécurité',
     status: 'DECLARED',
     claimedByFirstName: null,
   },
@@ -112,51 +112,9 @@ const MOCK_INCIDENTS: IncidentRow[] = [
 
 // ── Helpers ────────────────────────────────────────
 
-type BadgeVariant =
-  | 'default'
-  | 'secondary'
-  | 'destructive'
-  | 'outline'
-  | 'declared'
-  | 'claimed'
-  | 'in_progress'
-  | 'resolved'
-  | 'non_resolved'
-  | 'closed';
+const CATEGORIES = ['Sécurité', 'Accident', 'Réclamation', 'Mécanique', 'Électrique'];
 
-const STATUS_LABELS: Record<string, string> = {
-  DECLARED: 'New',
-  CLAIMED: 'Under Review',
-  IN_PROGRESS: 'In Progress',
-  RESOLVED: 'Resolved',
-  NON_RESOLVED: 'Not Resolved',
-  CLOSED: 'Closed',
-};
-
-const STATUS_VARIANTS: Record<string, BadgeVariant> = {
-  DECLARED: 'declared',
-  CLAIMED: 'claimed',
-  IN_PROGRESS: 'in_progress',
-  RESOLVED: 'resolved',
-  NON_RESOLVED: 'non_resolved',
-  CLOSED: 'closed',
-};
-
-const CATEGORY_COLORS: Record<string, string> = {
-  Safety: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800',
-  Accident:
-    'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border-red-200 dark:border-red-800',
-  Complaint:
-    'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 border-blue-200 dark:border-blue-800',
-  Mechanical:
-    'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 border-purple-200 dark:border-purple-800',
-  Electrical:
-    'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800',
-};
-
-const CATEGORIES = ['Safety', 'Accident', 'Complaint', 'Mechanical', 'Electrical'];
-
-// ── Compact Stat Card ──────────────────────────────
+// ── Stat Card ──────────────────────────────────────
 
 interface StatCardProps {
   label: string;
@@ -186,10 +144,8 @@ function StatCard({ label, value, icon: Icon, color }: StatCardProps) {
 export default function MyIncidentsPage() {
   const { firstName, lastName, roles } = useAuthStore();
 
-  // Welcome overlay state
+  // Welcome overlay
   const [showWelcome, setShowWelcome] = useState(true);
-
-  // Dismiss welcome after 1.5s + 0.6s fade
   useEffect(() => {
     const timer = setTimeout(() => setShowWelcome(false), 2100);
     return () => clearTimeout(timer);
@@ -204,7 +160,7 @@ export default function MyIncidentsPage() {
   // Drawer state
   const [drawerIncidentId, setDrawerIncidentId] = useState<string | null>(null);
 
-  // Derived data
+  // Stats
   const stats = {
     total: MOCK_INCIDENTS.length,
     open: MOCK_INCIDENTS.filter((i) => i.status === 'DECLARED').length,
@@ -213,16 +169,10 @@ export default function MyIncidentsPage() {
   };
 
   const filteredIncidents = MOCK_INCIDENTS.filter((inc) => {
-    // Search filter
-    if (
-      searchQuery &&
-      !inc.reference.toLowerCase().includes(searchQuery.toLowerCase())
-    ) {
+    if (searchQuery && !inc.reference.toLowerCase().includes(searchQuery.toLowerCase())) {
       return false;
     }
-    // Status filter
     if (statusFilter !== 'all' && inc.status !== statusFilter) return false;
-    // Category filter
     if (categoryFilter !== 'all' && inc.category !== categoryFilter) return false;
     return true;
   });
@@ -242,16 +192,12 @@ export default function MyIncidentsPage() {
   const handleSelectOne = useCallback((id: number) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }, []);
 
-  // Format name as [Last Name] [First Name]
   const displayName =
     lastName && firstName ? `${lastName} ${firstName}` : firstName ?? 'Utilisateur';
 
@@ -313,37 +259,16 @@ export default function MyIncidentsPage() {
           </p>
         </div>
 
-        {/* ── Compact Statistics Grid ──────────────── */}
+        {/* ── Statistics Grid ──────────────────────── */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            label="Total Incidents"
-            value={stats.total}
-            icon={FileText}
-            color="text-blue-600 dark:text-blue-400"
-          />
-          <StatCard
-            label="Open Incidents"
-            value={stats.open}
-            icon={AlertTriangle}
-            color="text-amber-600 dark:text-amber-400"
-          />
-          <StatCard
-            label="In Progress"
-            value={stats.inProgress}
-            icon={Activity}
-            color="text-violet-600 dark:text-violet-400"
-          />
-          <StatCard
-            label="Closed Incidents"
-            value={stats.closed}
-            icon={CheckCircle2}
-            color="text-emerald-600 dark:text-emerald-400"
-          />
+          <StatCard label="Total Incidents" value={stats.total} icon={FileText} color="text-blue-600 dark:text-blue-400" />
+          <StatCard label="Open Incidents" value={stats.open} icon={AlertTriangle} color="text-amber-600 dark:text-amber-400" />
+          <StatCard label="In Progress" value={stats.inProgress} icon={Activity} color="text-violet-600 dark:text-violet-400" />
+          <StatCard label="Closed Incidents" value={stats.closed} icon={CheckCircle2} color="text-emerald-600 dark:text-emerald-400" />
         </div>
 
         {/* ── Toolbar ──────────────────────────────── */}
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          {/* Line 1 / Left: Search (full width on <1024px) */}
           <div className="relative w-full lg:w-72">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -354,25 +279,22 @@ export default function MyIncidentsPage() {
             />
           </div>
 
-          {/* Line 2 / Right: Filters & Actions */}
           <div className="flex flex-wrap items-center gap-3">
-            {/* Status filter */}
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="h-10 w-[150px]">
                 <SelectValue placeholder="All Status" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="DECLARED">New</SelectItem>
-                <SelectItem value="CLAIMED">Under Review</SelectItem>
-                <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
-                <SelectItem value="RESOLVED">Resolved</SelectItem>
-                <SelectItem value="NON_RESOLVED">Not Resolved</SelectItem>
-                <SelectItem value="CLOSED">Closed</SelectItem>
+                <SelectItem value="DECLARED">Déclaré</SelectItem>
+                <SelectItem value="CLAIMED">Pris en charge</SelectItem>
+                <SelectItem value="IN_PROGRESS">En cours</SelectItem>
+                <SelectItem value="RESOLVED">Résolu</SelectItem>
+                <SelectItem value="NON_RESOLVED">Non résolu</SelectItem>
+                <SelectItem value="CLOSED">Clôturé</SelectItem>
               </SelectContent>
             </Select>
 
-            {/* Type filter */}
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="h-10 w-[150px]">
                 <SelectValue placeholder="All Types" />
@@ -380,14 +302,11 @@ export default function MyIncidentsPage() {
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
                 {CATEGORIES.map((cat) => (
-                  <SelectItem key={cat} value={cat}>
-                    {cat}
-                  </SelectItem>
+                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
 
-            {/* More Filters button */}
             <Button variant="outline" size="sm" className="h-10 gap-2">
               <SlidersHorizontal className="h-4 w-4" />
               <span className="hidden sm:inline">More Filters</span>
@@ -399,7 +318,7 @@ export default function MyIncidentsPage() {
         <Card>
           <CardContent className="p-0">
             <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent">
-              <table className="w-full min-w-[780px] lg:min-w-0">
+              <table className="w-full min-w-[780px] lg:min-w-0 border-collapse">
                 <thead>
                   <tr className="border-b text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     <th className="w-10 px-3 py-3">
@@ -413,18 +332,15 @@ export default function MyIncidentsPage() {
                     <th className="px-3 py-3">Incident ID</th>
                     <th className="px-3 py-3">Date/Time</th>
                     <th className="px-3 py-3">Type</th>
-                    <th className="px-3 py-3">Status</th>
-                    <th className="px-3 py-3">Claimed by</th>
+                    <th className="px-3 py-3">Statut</th>
+                    <th className="px-3 py-3">Réclamé par</th>
                     <th className="w-16 px-3 py-3 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {filteredIncidents.length === 0 ? (
                     <tr>
-                      <td
-                        colSpan={7}
-                        className="px-4 py-12 text-center text-sm text-muted-foreground"
-                      >
+                      <td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
                         <div className="flex flex-col items-center gap-2">
                           <Clock className="h-8 w-8 text-muted-foreground/50" />
                           <p>No incidents found.</p>
@@ -433,18 +349,14 @@ export default function MyIncidentsPage() {
                     </tr>
                   ) : (
                     filteredIncidents.map((inc) => {
-                      const statusLabel = STATUS_LABELS[inc.status] ?? inc.status;
-                      const statusVariant =
-                        STATUS_VARIANTS[inc.status] ?? 'outline';
-                      const categoryColor =
-                        CATEGORY_COLORS[inc.category] ??
-                        'bg-gray-100 text-gray-800 dark:bg-gray-800/50 dark:text-gray-400';
-
+                      const barClass = getStatusConfig(inc.status).barClass;
                       return (
                         <tr
                           key={inc.id}
                           className={cn(
                             'transition-colors hover:bg-muted/50',
+                            'border-l-4',
+                            barClass,
                             selectedIds.has(inc.id) && 'bg-primary/5',
                           )}
                         >
@@ -457,9 +369,7 @@ export default function MyIncidentsPage() {
                             />
                           </td>
                           <td className="px-3 py-2.5">
-                            <span className="font-mono text-sm font-medium">
-                              {inc.reference}
-                            </span>
+                            <span className="font-mono text-sm font-medium">{inc.reference}</span>
                           </td>
                           <td className="whitespace-nowrap px-3 py-2.5">
                             <span className="text-sm text-muted-foreground">
@@ -467,27 +377,18 @@ export default function MyIncidentsPage() {
                             </span>
                           </td>
                           <td className="px-3 py-2.5">
-                            <span
-                              className={cn(
-                                'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium',
-                                categoryColor,
-                              )}
-                            >
+                            <span className="text-sm font-normal text-slate-500 dark:text-slate-400">
                               {inc.category}
                             </span>
                           </td>
                           <td className="px-3 py-2.5">
-                            <Badge variant={statusVariant}>{statusLabel}</Badge>
+                            <StatusDotLabel status={inc.status} />
                           </td>
                           <td className="px-3 py-2.5">
                             {inc.claimedByFirstName ? (
-                              <span className="text-sm font-medium">
-                                {inc.claimedByFirstName}
-                              </span>
+                              <span className="text-sm font-medium">{inc.claimedByFirstName}</span>
                             ) : (
-                              <span className="text-sm text-muted-foreground/60">
-                                —
-                              </span>
+                              <span className="text-sm text-muted-foreground/60">—</span>
                             )}
                           </td>
                           <td className="px-3 py-2.5 text-right">
@@ -512,33 +413,24 @@ export default function MyIncidentsPage() {
           </CardContent>
         </Card>
 
-        {/* ── Table Footer — selection count ───────── */}
         {selectedIds.size > 0 && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground animate-fade-in">
             <div className="h-2 w-2 rounded-full bg-primary" />
-            <span>
-              {selectedIds.size} incident{selectedIds.size > 1 ? 's' : ''}{' '}
-              selected
-            </span>
+            <span>{selectedIds.size} incident{selectedIds.size > 1 ? 's' : ''} selected</span>
           </div>
         )}
       </div>
 
-      {/* ── Incident Detail Drawer ────────────────── */}
       <IncidentDetailDrawer
         incidentId={drawerIncidentId}
         onClose={() => setDrawerIncidentId(null)}
       />
 
-      {/* ── Floating Action Button ─────────────────── */}
       <div className="fixed bottom-6 right-6 z-30">
-        {/* Expanded LG+ */}
         <Button className="hidden h-12 gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-medium text-white shadow-lg transition-all duration-200 hover:bg-blue-700 hover:shadow-xl active:scale-95 lg:inline-flex">
           <Plus className="h-5 w-5" />
           Create Incident
         </Button>
-
-        {/* Compact MD/SM */}
         <Button
           size="icon"
           className="flex h-14 w-14 rounded-xl bg-blue-600 text-white shadow-lg transition-all duration-200 hover:bg-blue-700 hover:shadow-xl active:scale-95 lg:hidden"

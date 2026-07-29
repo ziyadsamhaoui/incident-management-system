@@ -165,13 +165,12 @@ export function IncidentDetailDrawer({
             exit="exit"
             className={[
               'fixed z-50 bg-background shadow-2xl',
-              // Right-side panel spanning full viewport height
-              'inset-y-0 right-0 w-full max-w-2xl border-l',
+              // Full viewport height — no external top offset, no margin/padding
+              'top-0 right-0 h-screen w-full max-w-2xl border-l',
               // Flex column so body fills remaining height
               'flex flex-col',
               // Consistent right panel on all screens
               'md:w-full md:max-w-2xl',
-              'lg:right-0 lg:left-auto lg:max-w-2xl lg:w-full',
             ].join(' ')}
           >
             {/* ── Header bar ───────────────────────── */}

@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { IncidentStepper } from '@/components/incidents/incident-stepper';
 import { EvaluationModal } from '@/components/incidents/evaluation-modal';
+import { StatusDotLabel } from '@/lib/constants/incidentStatus';
 import {
   claimIncident,
   progressIncident,
@@ -39,36 +40,6 @@ import type {
 // ── Types ─────────────────────────────────────────
 
 type UserRole = 'ADMIN' | 'CHEF_ATELIER' | 'SOUS_CHEF';
-
-type BadgeVariant =
-  | 'default'
-  | 'secondary'
-  | 'destructive'
-  | 'outline'
-  | 'declared'
-  | 'claimed'
-  | 'in_progress'
-  | 'resolved'
-  | 'non_resolved'
-  | 'closed';
-
-const STATUS_LABELS: Record<IncidentStatus, string> = {
-  DECLARED: 'New',
-  CLAIMED: 'Under Review',
-  IN_PROGRESS: 'In Progress',
-  RESOLVED: 'Resolved',
-  NON_RESOLVED: 'Not Resolved',
-  CLOSED: 'Closed',
-};
-
-const STATUS_VARIANTS: Record<IncidentStatus, BadgeVariant> = {
-  DECLARED: 'declared',
-  CLAIMED: 'claimed',
-  IN_PROGRESS: 'in_progress',
-  RESOLVED: 'resolved',
-  NON_RESOLVED: 'non_resolved',
-  CLOSED: 'closed',
-};
 
 const PRIORITY_VARIANTS: Record<IncidentPriority, string> = {
   LOW: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
@@ -163,15 +134,10 @@ function AuditEntry({ entry }: { entry: IncidentHistoryEntry }) {
 // ── Props ─────────────────────────────────────────
 
 export interface IncidentDetailContentProps {
-  /** The incident data to render */
   incident: IncidentDetailDTO;
-  /** Called when the incident data is updated (after claim/progress/evaluate) */
   onIncidentUpdated?: (updated: IncidentDetailDTO) => void;
-  /** If true, shows loading overlay on action buttons */
   actionLoading?: string | null;
-  /** Called to set action loading state from parent */
   onActionLoadingChange?: (key: string | null) => void;
-  /** If true, render in a compact mode suitable for drawer layout */
   compact?: boolean;
 }
 
@@ -187,12 +153,10 @@ export function IncidentDetailContent({
   const { roles } = useAuthStore();
   const primaryRole = (roles[0]?.replace('ROLE_', '') ?? 'CHEF_ATELIER') as UserRole;
 
-  // Internal state (used when parent doesn't provide external action loading)
   const [internalActionLoading, setInternalActionLoading] = useState<string | null>(null);
   const [incident, setIncident] = useState(initialIncident);
   const [evaluationModalOpen, setEvaluationModalOpen] = useState(false);
 
-  // Sync with external incident data
   useEffect(() => {
     setIncident(initialIncident);
   }, [initialIncident]);
@@ -283,8 +247,6 @@ export function IncidentDetailContent({
   );
 
   // ── Derived values ───────────────────────────────
-  const statusLabel = STATUS_LABELS[incident.status];
-  const statusVariant = STATUS_VARIANTS[incident.status];
   const claimedBy = incident.assignedTo;
   const resolvedBy = incident.resolvedBy;
   const isSousChef = primaryRole === 'SOUS_CHEF';
@@ -301,14 +263,16 @@ export function IncidentDetailContent({
       {/* ── Header Section ───────────────────────── */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-3">
             <h1 className={cn(
               'font-bold tracking-tight font-mono',
               compact ? 'text-xl' : 'text-2xl',
             )}>
               {incident.reference}
             </h1>
-            <Badge variant={statusVariant}>{statusLabel}</Badge>
+            {/* Status — Dot + Text indicator */}
+            <StatusDotLabel status={incident.status} />
+            {/* Priority badge */}
             <span
               className={cn(
                 'inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold',
@@ -320,7 +284,6 @@ export function IncidentDetailContent({
           </div>
         </div>
 
-        {/* ── Role badge ─────────────────────────── */}
         {isAdmin && (
           <Badge variant="outline" className="gap-1.5 shrink-0">
             <Shield className="h-3 w-3" />
@@ -330,23 +293,13 @@ export function IncidentDetailContent({
       </div>
 
       {/* ── Meta Grid ────────────────────────────── */}
-      {/* Line 1: Department + Station */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <MetaItem
-          icon={Building2}
-          label="Département"
-          value={incident.department}
-        />
+        <MetaItem icon={Building2} label="Département" value={incident.department} />
         <MetaItem icon={Cpu} label="Station" value={incident.station} />
       </div>
-      {/* Line 2: Category/Type + Déclaré le */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <MetaItem icon={Tag} label="Catégorie / Type" value={incident.category} />
-        <MetaItem
-          icon={Clock}
-          label="Déclaré le"
-          value={formatDateTime(incident.declaredAt)}
-        />
+        <MetaItem icon={Clock} label="Déclaré le" value={formatDateTime(incident.declaredAt)} />
       </div>
 
       {/* ── Description Block ────────────────────── */}
@@ -406,8 +359,6 @@ export function IncidentDetailContent({
               <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">
                 {incident.resolutionNote}
               </p>
-
-              {/* Resolved by — PII handling per role */}
               <div className="mt-3 flex items-center gap-2 border-t pt-3 text-xs text-muted-foreground">
                 <UserCheck className="h-3.5 w-3.5" />
                 {isSousChef ? (
@@ -430,13 +381,8 @@ export function IncidentDetailContent({
       {/* ── Action Controls (ADMIN only) ──────────── */}
       {isAdmin && (
         <div className={cn('flex flex-wrap gap-3', compact && 'sticky bottom-0 bg-background pt-2 pb-1 border-t')}>
-          {/* Claim button */}
           {incident.status === 'DECLARED' && (
-            <Button
-              onClick={handleClaim}
-              disabled={actionLoading === 'claim'}
-              className="gap-2"
-            >
+            <Button onClick={handleClaim} disabled={actionLoading === 'claim'} className="gap-2">
               {actionLoading === 'claim' ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
@@ -445,14 +391,8 @@ export function IncidentDetailContent({
               Claim Incident
             </Button>
           )}
-
-          {/* Evaluate button */}
           {incident.status === 'IN_PROGRESS' && (
-            <Button
-              onClick={() => setEvaluationModalOpen(true)}
-              disabled={actionLoading === 'evaluate'}
-              className="gap-2"
-            >
+            <Button onClick={() => setEvaluationModalOpen(true)} disabled={actionLoading === 'evaluate'} className="gap-2">
               {actionLoading === 'evaluate' ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
@@ -461,8 +401,6 @@ export function IncidentDetailContent({
               Evaluate Incident
             </Button>
           )}
-
-          {/* Auto-progress indicator */}
           {incident.status === 'CLAIMED' && actionLoading === 'progress' && (
             <div className="flex items-center gap-2 rounded-lg border bg-blue-50 px-4 py-2 text-sm text-blue-700 dark:bg-blue-950/30 dark:text-blue-400">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -499,9 +437,7 @@ export function IncidentDetailContent({
                     Résolu par
                   </p>
                   <p className="text-sm font-medium">
-                    {isSousChef
-                      ? maskAdminName(resolvedBy)
-                      : formatAuditLabel(resolvedBy)}
+                    {isSousChef ? maskAdminName(resolvedBy) : formatAuditLabel(resolvedBy)}
                   </p>
                 </div>
               )}
@@ -540,7 +476,6 @@ export function IncidentDetailContent({
         </div>
       )}
 
-      {/* ── Evaluation Modal ───────────────────────── */}
       <EvaluationModal
         open={evaluationModalOpen}
         onClose={() => setEvaluationModalOpen(false)}
