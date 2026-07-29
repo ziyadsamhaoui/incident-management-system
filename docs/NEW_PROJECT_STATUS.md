@@ -1,5 +1,5 @@
 # ICGLMA IMS — Project Status
-
+This is a project status document that has been overwritten by mistake. The original content is not lost but rather saved locally, but the current state of the project is summarized below.
 ## ✅ COMPLETED
 
 ### UI System Overhaul (Current Sprint)

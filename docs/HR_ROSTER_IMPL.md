@@ -251,7 +251,7 @@ public UserResponse promoteToChefAtelier(Long id) {
 **Key Behaviors:**
 1. Only `SOUS_CHEF` can be promoted — throws `IllegalArgumentException` (400) otherwise
 2. Sets `passwordHash = null` — the promoted user must claim their account before logging in
-3. The claim flow is handled by `POST /api/auth/claim` (see [WORKFLOW.md §16](WORKFLOW.md))
+3. The claim flow is handled by `POST /api/auth/claim` (see [WORKFLOW.md §16](NEW_WORKFLOW.md))
 
 ---
 

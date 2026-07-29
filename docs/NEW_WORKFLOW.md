@@ -1,5 +1,5 @@
 # ICGLMA IMS — Workflow & Architecture
-
+This is a workflow document that has been overwritten by mistake.
 ## Incident Status Badge Strategy
 
 ### Linear/Vercel-Inspired Dot + Text Indicator
