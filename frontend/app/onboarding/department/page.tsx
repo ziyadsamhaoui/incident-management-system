@@ -30,7 +30,7 @@ import {
 import apiClient from '@/lib/api-client';
 import type { SetDepartmentPayload } from '@/types/user';
 
-// ── Mock departments (will be replaced by API call) ──
+//  Mock departments (will be replaced by API call) 
 
 const MOCK_DEPARTMENTS = [
   { id: 'dept_1', name: 'Assembly Line A' },
@@ -42,7 +42,7 @@ const MOCK_DEPARTMENTS = [
   { id: 'dept_7', name: 'Packaging' },
 ];
 
-// ── Page ──────────────────────────────────────────
+//  Page 
 
 export default function OnboardingDepartmentPage() {
   const router = useRouter();

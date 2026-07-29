@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useCallback } from 'react';
 import {
   Eye,
   Plus,
@@ -14,8 +13,6 @@ import {
   Clock,
 } from 'lucide-react';
 import { cn, formatDateTime } from '@/lib/utils';
-import { useAuthStore } from '@/store/useAuthStore';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -28,8 +25,9 @@ import {
 } from '@/components/ui/select';
 import { StatusDotLabel, getStatusConfig } from '@/lib/constants/incidentStatus';
 import { IncidentDetailDrawer } from '@/components/incidents/incident-detail-drawer';
+import { WelcomeOverlay } from '@/components/auth/WelcomeOverlay';
 
-// ── Types ─────────────────────────────────────────
+//  Types 
 
 interface IncidentRow {
   id: number;
@@ -41,7 +39,7 @@ interface IncidentRow {
   selected?: boolean;
 }
 
-// ── Mock data for demonstration ────────────────────
+//  Mock data for demonstration 
 
 const MOCK_INCIDENTS: IncidentRow[] = [
   {
@@ -110,11 +108,11 @@ const MOCK_INCIDENTS: IncidentRow[] = [
   },
 ];
 
-// ── Helpers ────────────────────────────────────────
+//  Helpers 
 
 const CATEGORIES = ['Sécurité', 'Accident', 'Réclamation', 'Mécanique', 'Électrique'];
 
-// ── Stat Card ──────────────────────────────────────
+//  Stat Card 
 
 interface StatCardProps {
   label: string;
@@ -139,17 +137,11 @@ function StatCard({ label, value, icon: Icon, color }: StatCardProps) {
   );
 }
 
-// ── Main Page ──────────────────────────────────────
+//  Main Page 
 
 export default function MyIncidentsPage() {
-  const { firstName, lastName, roles } = useAuthStore();
-
   // Welcome overlay
   const [showWelcome, setShowWelcome] = useState(true);
-  useEffect(() => {
-    const timer = setTimeout(() => setShowWelcome(false), 2100);
-    return () => clearTimeout(timer);
-  }, []);
 
   // Table state
   const [searchQuery, setSearchQuery] = useState('');
@@ -198,60 +190,20 @@ export default function MyIncidentsPage() {
     });
   }, []);
 
-  const displayName =
-    lastName && firstName ? `${lastName} ${firstName}` : firstName ?? 'Utilisateur';
 
-  const primaryRole = (roles[0]?.replace('ROLE_', '') ?? 'CHEF_ATELIER') as string;
 
   return (
     <>
-      {/* ── Welcome Overlay ────────────────────────── */}
-      <AnimatePresence>
-        {showWelcome && (
-          <motion.div
-            key="welcome-overlay"
-            initial={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.6, ease: 'easeInOut' }}
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-background/95 backdrop-blur-sm"
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: -10 }}
-              transition={{ duration: 0.5, ease: 'easeOut' }}
-              className="text-center"
-            >
-              <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
-                <FileText className="h-8 w-8 text-primary" />
-              </div>
-              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Bienvenue,{' '}
-                <span className="text-primary">{displayName}</span>
-              </h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Tableau de bord — Mes incidents déclarés
-              </p>
-              <div className="mt-6 flex items-center justify-center gap-2">
-                <Badge variant="secondary" className="capitalize">
-                  {primaryRole === 'CHEF_ATELIER'
-                    ? "Chef d'atelier"
-                    : primaryRole === 'SOUS_CHEF'
-                      ? 'Opérateur'
-                      : primaryRole}
-                </Badge>
-                <span className="text-xs text-muted-foreground">
-                  Chargement des données...
-                </span>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/*  Welcome Overlay  */}
+      <WelcomeOverlay
+        isVisible={showWelcome}
+        onDismiss={() => setShowWelcome(false)}
+        autoDismissMs={2100}
+      />
 
-      {/* ── Page Content ──────────────────────────── */}
+      {/*  Page Content  */}
       <div className="space-y-6">
-        {/* ── Header ──────────────────────────────── */}
+        {/*  Header  */}
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Mes Incidents</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -259,7 +211,7 @@ export default function MyIncidentsPage() {
           </p>
         </div>
 
-        {/* ── Statistics Grid ──────────────────────── */}
+        {/*  Statistics Grid  */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Total Incidents" value={stats.total} icon={FileText} color="text-blue-600 dark:text-blue-400" />
           <StatCard label="Open Incidents" value={stats.open} icon={AlertTriangle} color="text-amber-600 dark:text-amber-400" />
@@ -267,7 +219,7 @@ export default function MyIncidentsPage() {
           <StatCard label="Closed Incidents" value={stats.closed} icon={CheckCircle2} color="text-emerald-600 dark:text-emerald-400" />
         </div>
 
-        {/* ── Toolbar ──────────────────────────────── */}
+        {/*  Toolbar  */}
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative w-full lg:w-72">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -314,7 +266,7 @@ export default function MyIncidentsPage() {
           </div>
         </div>
 
-        {/* ── Incidents Table ──────────────────────── */}
+        {/*  Incidents Table  */}
         <Card>
           <CardContent className="p-0">
             <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent">
@@ -349,18 +301,20 @@ export default function MyIncidentsPage() {
                     </tr>
                   ) : (
                     filteredIncidents.map((inc) => {
-                      const barClass = getStatusConfig(inc.status).barClass;
+                      const cfg = getStatusConfig(inc.status);
+                      const accentStyle = {
+                        boxShadow: 'inset 4px 0 0 0 ' + cfg.barColor,
+                      };
                       return (
                         <tr
                           key={inc.id}
                           className={cn(
                             'transition-colors hover:bg-muted/50',
-                            'border-l-4',
-                            barClass,
                             selectedIds.has(inc.id) && 'bg-primary/5',
                           )}
                         >
-                          <td className="px-3 py-2.5">
+                          {/* First cell gets the accent bar — spans full row height via box-shadow */}
+                          <td className="overflow-hidden px-3 py-2.5" style={accentStyle}>
                             <input
                               type="checkbox"
                               checked={selectedIds.has(inc.id)}

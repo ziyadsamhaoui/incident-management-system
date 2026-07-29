@@ -6,6 +6,17 @@ module.exports = {
     './components/**/*.{ts,tsx}',
     './app/**/*.{ts,tsx}',
     './src/**/*.{ts,tsx}',
+    './lib/**/*.{ts,tsx}',
+  ],
+  safelist: [
+    // Status accent border colors — applied via barClass on all viewports
+    'border-l-slate-500',
+    'border-l-blue-500',
+    'border-l-amber-500',
+    'border-l-emerald-500',
+    'border-l-red-500',
+    'border-l-slate-900',
+    'dark:border-l-slate-200',
   ],
   theme: {
     container: {

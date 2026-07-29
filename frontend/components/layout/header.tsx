@@ -128,16 +128,15 @@ export function Header({ onToggleSidebar, kiosk = false }: HeaderProps) {
 
           {/* Brand */}
           <div className="flex items-center gap-2.5">
-            {/* IC logo badge */}
+            {/* IC logo badge — always visible */}
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 font-bold text-white text-sm">
               IC
             </div>
-            {/* Title */}
-            <span className="font-bold text-lg tracking-tight text-white">
+            {/* Wordmark + breadcrumb — restored on md+ */}
+            <span className="hidden md:inline font-bold text-lg tracking-tight text-white">
               ICGLMA
             </span>
-            {/* Divider + sub-label */}
-            <span className="hidden sm:inline text-xs text-slate-400 border-l border-slate-700 pl-2.5 ml-0.5">
+            <span className="hidden md:inline text-xs text-slate-400 border-l border-slate-700 pl-2.5 ml-0.5">
               Incidents
             </span>
           </div>
@@ -162,14 +161,14 @@ export function Header({ onToggleSidebar, kiosk = false }: HeaderProps) {
             </Button>
           )}
 
-          {/* Notification bell */}
+          {/* Notification bell — 44px touch target */}
           <Button
             variant="ghost"
             size="icon"
-            className="relative text-slate-400 hover:text-slate-100 hover:bg-slate-800"
+            className="relative text-slate-400 hover:text-slate-100 hover:bg-slate-800 min-w-[44px] min-h-[44px]"
           >
             <Bell className="h-5 w-5" />
-            <span className="absolute -right-0.5 -top-0.5 flex h-2 w-2">
+            <span className="absolute right-1 top-1 flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400/40" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
             </span>
@@ -181,17 +180,18 @@ export function Header({ onToggleSidebar, kiosk = false }: HeaderProps) {
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
-                className="relative h-9 gap-2 rounded-full px-2 text-slate-300 hover:text-slate-100 hover:bg-slate-800"
+                className="relative min-w-[44px] min-h-[44px] gap-2 rounded-full px-2 text-slate-300 hover:text-slate-100 hover:bg-slate-800"
               >
                 <Avatar className="h-7 w-7">
                   <AvatarFallback className="bg-blue-600 text-xs font-bold text-white">
                     {initials || 'U'}
                   </AvatarFallback>
                 </Avatar>
-                <span className="hidden text-sm font-medium sm:inline">
+                {/* Full name — restored on md+ */}
+                <span className="hidden md:inline text-sm font-medium">
                   {displayName}
                 </span>
-                <ChevronDown className="hidden h-3.5 w-3.5 text-slate-500 sm:inline-block" />
+                <ChevronDown className="hidden h-3.5 w-3.5 text-slate-500 md:inline-block" />
               </Button>
             </DropdownMenuTrigger>
 

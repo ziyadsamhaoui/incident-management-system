@@ -26,25 +26,25 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-// ── Empty departments (will be populated from API) ─
+//  Empty departments (will be populated from API) 
 
 const DEPARTMENTS: { id: string; name: string }[] = [];
 
-// ── Language options ──────────────────────────────
+//  Language options 
 
 const LANG_OPTIONS = [
   { value: 'FR', label: 'FR - Français', flag: '🇫🇷' },
   { value: 'AR', label: 'AR - العربية', flag: '🇲🇦' },
 ];
 
-// ── Theme options (no System mode) ────────────────
+//  Theme options (no System mode) 
 
 const THEME_OPTIONS = [
   { value: 'light', label: 'Clair', icon: Sun },
   { value: 'dark', label: 'Sombre', icon: Moon },
 ];
 
-// ── Card-based picker (language & theme) ──────────
+//  Card-based picker (language & theme) 
 
 interface PickerCardProps {
   value: string;
@@ -74,7 +74,7 @@ function PickerCard({ value, current, onChange, children }: PickerCardProps) {
   );
 }
 
-// ── Page ──────────────────────────────────────────
+//  Page 
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -100,7 +100,7 @@ export default function SettingsPage() {
         ? "Chef d'atelier"
         : 'Opérateur';
 
-  // ── Department change handler (wired when API endpoint is ready) ──
+  //  Department change handler (wired when API endpoint is ready) 
   const handleDepartmentChange = async (value: string) => {
     if (!value) return;
     const dept = DEPARTMENTS.find((d) => d.id === value);
@@ -110,7 +110,7 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto w-full max-w-lg px-4 py-6 sm:px-0 sm:py-8 space-y-5">
-      {/* ── Back button + header ───────────────────── */}
+      {/*  Back button + header  */}
       <div>
         <button
           onClick={() => router.back()}
@@ -125,7 +125,7 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      {/* ── Identity & Department Card ──────────────── */}
+      {/*  Identity & Department Card  */}
       <Card>
         <CardHeader className="px-4 py-4 sm:px-6">
           <div className="flex items-center gap-3">
@@ -141,7 +141,7 @@ export default function SettingsPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4 px-4 pb-5 sm:px-6">
-          {/* ── Row 1: Prénom · Nom ──────────────────── */}
+          {/*  Row 1: Prénom · Nom  */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
@@ -161,7 +161,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* ── Row 2: Matricule · Département ───────── */}
+          {/*  Row 2: Matricule · Département  */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
@@ -201,7 +201,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* ── Rôle ──────────────────────────────────── */}
+          {/*  Rôle  */}
           <div className="space-y-1">
             <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
               Rôle
@@ -214,7 +214,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* ── Language & Theme Card ──────────────────── */}
+      {/*  Language & Theme Card  */}
       <Card>
         <CardHeader className="px-4 py-4 sm:px-6">
           <div className="flex items-center gap-3">
@@ -230,7 +230,7 @@ export default function SettingsPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-5 px-4 pb-5 sm:px-6">
-          {/* ── Language ──────────────────────────────── */}
+          {/*  Language  */}
           <div className="space-y-2.5">
             <label className="text-sm font-medium flex items-center gap-2">
               <Languages className="h-4 w-4 text-muted-foreground" />
@@ -256,10 +256,10 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* ── Divider ───────────────────────────────── */}
+          {/*  Divider  */}
           <div className="border-t border-slate-200 dark:border-slate-700" />
 
-          {/* ── Theme ─────────────────────────────────── */}
+          {/*  Theme  */}
           <div className="space-y-2.5">
             <label className="text-sm font-medium flex items-center gap-2">
               <Sun className="h-4 w-4 text-muted-foreground" />

@@ -10,7 +10,7 @@ export default function SousChefLayout({
 }) {
   return (
     <AuthGuard allowedRoles={['SOUS_CHEF']}>
-      <div className="flex h-screen flex-col overflow-hidden bg-background">
+      <div className="flex h-screen flex-col overflow-hidden bg-slate-50 dark:bg-slate-900/60">
         {/* Kiosk TopNav — no sidebar, prominent CTA */}
         <Header kiosk />
 

@@ -20,8 +20,10 @@ export interface StatusConfig {
   dotClass: string;
   /** CSS class for the status text label */
   textClass: string;
-  /** CSS class for the left-edge status bar indicator */
+  /** CSS class for the 4px left-edge status accent border */
   barClass: string;
+  /** Hex color for the left-edge status bar (used via inline style to bypass JIT purging) */
+  barColor: string;
   /** Legacy full badge className (kept for backward compat / badge component) */
   className: string;
 }
@@ -33,7 +35,8 @@ export const INCIDENT_STATUS_MAP: Record<IncidentState, StatusConfig> = {
     variant: 'outline',
     dotClass: 'bg-slate-400',
     textClass: 'text-slate-600 dark:text-slate-400',
-    barClass: 'border-l-slate-400',
+    barClass: 'border-l-slate-500',
+    barColor: '#334155',
     className:
       'bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-800 dark:text-slate-200',
   },
@@ -44,6 +47,7 @@ export const INCIDENT_STATUS_MAP: Record<IncidentState, StatusConfig> = {
     dotClass: 'bg-blue-500',
     textClass: 'text-blue-700 dark:text-blue-400',
     barClass: 'border-l-blue-500',
+    barColor: '#3b82f6',
     className:
       'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300',
   },
@@ -54,6 +58,7 @@ export const INCIDENT_STATUS_MAP: Record<IncidentState, StatusConfig> = {
     dotClass: 'bg-amber-500',
     textClass: 'text-amber-700 dark:text-amber-400',
     barClass: 'border-l-amber-500',
+    barColor: '#f59e0b',
     className:
       'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300',
   },
@@ -63,7 +68,8 @@ export const INCIDENT_STATUS_MAP: Record<IncidentState, StatusConfig> = {
     variant: 'success',
     dotClass: 'bg-green-500',
     textClass: 'text-green-700 dark:text-green-400',
-    barClass: 'border-l-green-500',
+    barClass: 'border-l-emerald-500',
+    barColor: '#10b981',
     className:
       'bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300',
   },
@@ -74,6 +80,7 @@ export const INCIDENT_STATUS_MAP: Record<IncidentState, StatusConfig> = {
     dotClass: 'bg-red-500',
     textClass: 'text-red-700 dark:text-red-400',
     barClass: 'border-l-red-500',
+    barColor: '#ef4444',
     className:
       'bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300',
   },
@@ -83,7 +90,8 @@ export const INCIDENT_STATUS_MAP: Record<IncidentState, StatusConfig> = {
     variant: 'default',
     dotClass: 'bg-slate-800 dark:bg-slate-200',
     textClass: 'text-slate-900 dark:text-slate-100',
-    barClass: 'border-l-slate-800 dark:border-l-slate-200',
+    barClass: 'border-l-slate-900 dark:border-l-slate-200',
+    barColor: '#0f172a',
     className:
       'bg-slate-900 text-slate-50 dark:bg-slate-100 dark:text-slate-900',
   },
