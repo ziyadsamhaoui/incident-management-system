@@ -104,9 +104,10 @@ export function Header({ onToggleSidebar, kiosk = false }: HeaderProps) {
     <>
       <header
         className={cn(
-          // Dark slate header bar
+          // Dark slate header bar — stays above slide-over drawers
           'flex h-16 items-center justify-between px-4',
           'bg-slate-900 border-b border-slate-800 text-slate-100',
+          'relative z-10',
           kiosk && 'shadow-sm',
         )}
       >
