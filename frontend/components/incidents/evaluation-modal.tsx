@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -9,6 +10,7 @@ import {
   AlertTriangle,
   Loader2,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
 // ── Props ─────────────────────────────────────────
@@ -24,9 +26,9 @@ interface EvaluationModalProps {
   isSubmitting?: boolean;
 }
 
-// ── Component ─────────────────────────────────────
+// ── Inner Modal Content ───────────────────────────
 
-export function EvaluationModal({
+function EvaluationModalContent({
   open,
   onClose,
   onSubmit,
@@ -61,7 +63,7 @@ export function EvaluationModal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm"
             onClick={() => !isSubmitting && onClose()}
           />
 
@@ -71,9 +73,25 @@ export function EvaluationModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2"
+            className={cn(
+              'fixed z-[10000]',
+              // Large displays: centered card
+              'left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2',
+              'w-full max-w-lg',
+              // Medium & below: full-bleed (inset-0 with no max-width constraint)
+              'lg:max-w-lg',
+              'max-lg:inset-0 max-lg:flex max-lg:items-center max-lg:justify-center max-lg:p-0 max-lg:max-w-full max-lg:-translate-x-0 max-lg:-translate-y-0 max-lg:left-0 max-lg:top-0',
+            )}
           >
-            <div className="mx-4 rounded-xl border bg-card p-6 shadow-2xl">
+            <div
+              className={cn(
+                'bg-card shadow-2xl',
+                // Large: rounded card with padding
+                'lg:rounded-xl lg:border lg:p-6 lg:mx-4',
+                // Medium & below: full-screen with no border-radius, overflow scroll
+                'max-lg:rounded-none max-lg:border-0 max-lg:h-full max-lg:w-full max-lg:overflow-y-auto max-lg:p-4',
+              )}
+            >
               {/* Header */}
               <div className="mb-6 flex items-center justify-between">
                 <h2 className="text-lg font-semibold">Évaluer l'incident</h2>
@@ -225,5 +243,19 @@ export function EvaluationModal({
         </>
       )}
     </AnimatePresence>
+  );
+}
+
+// ── Portal Wrapper ────────────────────────────────
+
+export function EvaluationModal(props: EvaluationModalProps) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  if (!mounted) return null;
+
+  return createPortal(
+    <EvaluationModalContent {...props} />,
+    document.body,
   );
 }

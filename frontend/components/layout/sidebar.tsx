@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -16,11 +16,28 @@ import {
   X,
   Building2,
   ChevronLeft,
+  ChevronRight,
   ChevronDown,
   User,
   Bookmark,
   Circle,
 } from 'lucide-react';
+
+// ── Badge hook for attention counts ──────────────
+// These are mock counts; replace with real API data when backend is connected.
+
+function useAttentionBadges() {
+  const [pendingUsers, setPendingUsers] = useState(0);
+  const [criticalIncidents, setCriticalIncidents] = useState(0);
+
+  useEffect(() => {
+    // Mock data — replace with API calls
+    setPendingUsers(3);
+    setCriticalIncidents(2);
+  }, []);
+
+  return { pendingUsers, criticalIncidents };
+}
 
 // ── Navigation item types ─────────────────────────
 
@@ -30,6 +47,10 @@ interface NavItem {
   icon: React.ElementType;
   /** If set, only users with at least one of these roles can see this item. */
   roles?: UserRole[];
+  /** Optional count badge */
+  badge?: number | null;
+  /** Optional badge color class */
+  badgeClass?: string;
 }
 
 interface NavGroup {
@@ -53,25 +74,41 @@ const CHEF_ATELIER_ITEMS: NavEntry[] = [
   { label: 'Profile', href: '/profile', icon: User, roles: ['CHEF_ATELIER'] },
 ];
 
-const ADMIN_ITEMS: NavEntry[] = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['ADMIN'] },
-  { label: 'Incidents', href: '/incidents', icon: FileWarning, roles: ['ADMIN'] },
-  { label: 'Users', href: '/users', icon: Users, roles: ['ADMIN'] },
-  {
-    label: 'Reference Data',
-    icon: Building2,
-    roles: ['ADMIN'],
-    children: [
-      { label: 'Categories', href: '/admin/reference/categories', icon: Circle },
-      { label: 'Departments', href: '/admin/reference/departments', icon: Circle },
-      { label: 'Sections', href: '/admin/reference/sections', icon: Circle },
-      { label: 'Production Lines', href: '/admin/reference/production-lines', icon: Circle },
-      { label: 'Stations', href: '/admin/reference/stations', icon: Circle },
-    ],
-  } as NavGroup,
-  { label: 'My Subscriptions', href: '/admin/subscriptions', icon: Bookmark, roles: ['ADMIN'] },
-  { label: 'Settings', href: '/admin/settings', icon: Settings, roles: ['ADMIN'] },
-];
+function buildAdminItems(pendingUsers: number, criticalIncidents: number): NavEntry[] {
+  return [
+    { label: 'Tableau de bord', href: '/dashboard', icon: LayoutDashboard, roles: ['ADMIN'] },
+    {
+      label: 'Incidents',
+      href: '/admin/incidents',
+      icon: FileWarning,
+      roles: ['ADMIN'],
+      badge: criticalIncidents > 0 ? criticalIncidents : null,
+      badgeClass: 'bg-rose-600 text-white',
+    },
+    {
+      label: 'Utilisateurs',
+      href: '/users',
+      icon: Users,
+      roles: ['ADMIN'],
+      badge: pendingUsers > 0 ? pendingUsers : null,
+      badgeClass: 'bg-amber-500 text-white',
+    },
+    {
+      label: 'Données de référence',
+      icon: Building2,
+      roles: ['ADMIN'],
+      children: [
+        { label: 'Catégories', href: '/admin/reference?tab=categories', icon: Circle },
+        { label: 'Départements', href: '/admin/reference?tab=departments', icon: Circle },
+        { label: 'Sections', href: '/admin/reference?tab=sections', icon: Circle },
+        { label: 'Lignes de production', href: '/admin/reference?tab=production-lines', icon: Circle },
+        { label: 'Stations', href: '/admin/reference?tab=stations', icon: Circle },
+      ],
+    } as NavGroup,
+    { label: 'Mes abonnements', href: '/admin/subscriptions', icon: Bookmark, roles: ['ADMIN'] },
+    { label: 'Paramètres', href: '/admin/settings', icon: Settings, roles: ['ADMIN'] },
+  ];
+}
 
 // ── Props ─────────────────────────────────────────
 
@@ -90,13 +127,42 @@ function brandHref(userRoles: UserRole[]): string {
   return '/sous-chef';
 }
 
+// ── localStorage helper for group expansion ──────
+
+function getStoredExpandedGroups(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const stored = localStorage.getItem('admin_sidebar_refdata_expanded');
+    if (stored) {
+      return new Set(JSON.parse(stored));
+    }
+  } catch {
+    // ignore
+  }
+  return new Set(); // Default: collapsed
+}
+
+function storeExpandedGroups(groups: Set<string>) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(
+      'admin_sidebar_refdata_expanded',
+      JSON.stringify(Array.from(groups)),
+    );
+  } catch {
+    // ignore
+  }
+}
+
 // ── Sidebar component ────────────────────────────
 
 export function Sidebar({ open, onOpenChange, variant = 'chef-atelier' }: SidebarProps) {
   const pathname = usePathname();
   const roles = useAuthStore((s) => s.roles);
   const [collapsed, setCollapsed] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['Reference Data']));
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(getStoredExpandedGroups);
+  const { pendingUsers, criticalIncidents } = useAttentionBadges();
+
   const mobileOpen = open ?? false;
   const setMobileOpen = onOpenChange ?? (() => {});
 
@@ -104,16 +170,19 @@ export function Sidebar({ open, onOpenChange, variant = 'chef-atelier' }: Sideba
 
   // Pick nav items based on variant
   const navEntries: NavEntry[] =
-    variant === 'admin' ? ADMIN_ITEMS : CHEF_ATELIER_ITEMS;
+    variant === 'admin'
+      ? buildAdminItems(pendingUsers, criticalIncidents)
+      : CHEF_ATELIER_ITEMS;
 
-  const toggleGroup = (label: string) => {
+  const toggleGroup = useCallback((label: string) => {
     setExpandedGroups((prev) => {
       const next = new Set(prev);
       if (next.has(label)) next.delete(label);
       else next.add(label);
+      storeExpandedGroups(next);
       return next;
     });
-  };
+  }, []);
 
   return (
     <>
@@ -139,7 +208,7 @@ export function Sidebar({ open, onOpenChange, variant = 'chef-atelier' }: Sideba
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
                 I
               </div>
-              <span className="text-sm font-semibold">ICGLMA IMS</span>
+              <span className="text-sm font-semibold">ICGLMA</span>
             </Link>
           )}
           {collapsed && (
@@ -150,23 +219,24 @@ export function Sidebar({ open, onOpenChange, variant = 'chef-atelier' }: Sideba
               I
             </Link>
           )}
+          {/* Collapse chevron — desktop only (≥768px) */}
           <button
             onClick={() => {
               setCollapsed(!collapsed);
               setMobileOpen(false);
             }}
-            className="hidden rounded-md p-1 hover:bg-muted md:block"
+            className="hidden md:flex rounded-md p-1 hover:bg-muted items-center"
           >
-            <ChevronLeft
-              className={cn(
-                'h-4 w-4 text-muted-foreground transition-transform',
-                collapsed && 'rotate-180',
-              )}
-            />
+            {collapsed ? (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+            )}
           </button>
+          {/* Close button — mobile only (<768px) */}
           <button
             onClick={() => setMobileOpen(false)}
-            className="rounded-md p-1 hover:bg-muted md:hidden"
+            className="md:hidden rounded-md p-1 hover:bg-muted"
           >
             <X className="h-4 w-4" />
           </button>
@@ -247,13 +317,25 @@ export function Sidebar({ open, onOpenChange, variant = 'chef-atelier' }: Sideba
                 className={cn(
                   'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                   isActive
-                    ? 'bg-primary/10 text-primary'
+                    ? 'bg-blue-600/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 font-semibold border-r-2 border-blue-600'
                     : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
                 )}
                 onClick={() => setMobileOpen(false)}
               >
                 <Icon className="h-5 w-5 shrink-0" />
-                {!collapsed && <span>{entry.label}</span>}
+                {!collapsed && (
+                  <span className="flex-1">{entry.label}</span>
+                )}
+                {!collapsed && entry.badge != null && (
+                  <span
+                    className={cn(
+                      'rounded-full text-xs px-2 py-0.5 font-bold',
+                      entry.badgeClass ?? 'bg-primary text-primary-foreground',
+                    )}
+                  >
+                    {entry.badge}
+                  </span>
+                )}
               </Link>
             );
           })}

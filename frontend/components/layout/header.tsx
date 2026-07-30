@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useState, useEffect, useRef, useMemo } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import {
   Menu,
   LogOut,
@@ -27,14 +27,31 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 
+// ── Route → Breadcrumb label map ─────────────────
+
+const BREADCRUMB_LABELS: Record<string, string> = {
+  '/dashboard': 'Tableau de bord',
+  '/incidents': 'Incidents',
+  '/users': 'Utilisateurs',
+  '/admin/reference': 'Données de référence',
+  '/admin/subscriptions': 'Mes abonnements',
+  '/admin/settings': 'Paramètres',
+  '/settings': 'Paramètres',
+};
+
+// ── Props ─────────────────────────────────────────
+
 interface HeaderProps {
   onToggleSidebar?: () => void;
   /** If true, render the kiosk variant (SOUS_CHEF) with prominent CTA and no sidebar toggle */
   kiosk?: boolean;
+  /** Override breadcrumb label (e.g., from mobile nav) */
+  breadcrumbOverride?: string | null;
 }
 
-export function Header({ onToggleSidebar, kiosk = false }: HeaderProps) {
+export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: HeaderProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const {
     firstName,
     lastName,
@@ -46,9 +63,22 @@ export function Header({ onToggleSidebar, kiosk = false }: HeaderProps) {
 
   const primaryRole = roles[0]?.replace('ROLE_', '') ?? 'CHEF_ATELIER';
   const initials = (firstName?.[0] ?? '') + (lastName?.[0] ?? '');
+  const safeMatricule = matricule && matricule > 0 ? String(matricule) : 'ADM-0001';
   const displayName = firstName
     ? `${firstName} ${lastName ?? ''}`.trim()
-    : `User #${matricule}`;
+    : `User #${safeMatricule}`;
+
+  // ── Dynamic breadcrumb ───────────────────────────
+  const breadcrumb = useMemo(() => {
+    if (breadcrumbOverride) return breadcrumbOverride;
+    // Try exact match first, then prefix match
+    if (BREADCRUMB_LABELS[pathname]) return BREADCRUMB_LABELS[pathname];
+    // Match prefix routes like /admin/reference/categories/something
+    const prefix = Object.keys(BREADCRUMB_LABELS).find(
+      (key) => pathname.startsWith(key + '/') || pathname === key
+    );
+    return prefix ? BREADCRUMB_LABELS[prefix] : 'Incidents';
+  }, [pathname, breadcrumbOverride]);
 
   // Cmd+K search state (admin only)
   const [searchOpen, setSearchOpen] = useState(false);
@@ -98,7 +128,9 @@ export function Header({ onToggleSidebar, kiosk = false }: HeaderProps) {
         : 'Opérateur';
 
   const roleMatriculeLabel =
-    primaryRole === 'ADMIN' ? `Admin · #${matricule}` : `Opérateur · #${matricule}`;
+    primaryRole === 'ADMIN'
+      ? `Admin · #${safeMatricule}`
+      : `Opérateur · #${safeMatricule}`;
 
   return (
     <>
@@ -132,32 +164,47 @@ export function Header({ onToggleSidebar, kiosk = false }: HeaderProps) {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 font-bold text-white text-sm">
               IC
             </div>
-            {/* Wordmark + breadcrumb — restored on md+ */}
+            {/* Wordmark + dynamic breadcrumb — restored on md+ */}
             <span className="hidden md:inline font-bold text-lg tracking-tight text-white">
               ICGLMA
             </span>
             <span className="hidden md:inline text-xs text-slate-400 border-l border-slate-700 pl-2.5 ml-0.5">
-              Incidents
+              {breadcrumb}
             </span>
           </div>
         </div>
 
         {/* ── Right side: actions + user ───────────── */}
         <div className="flex items-center gap-2">
-          {/* Admin Cmd+K search trigger */}
+          {/* Admin Cmd+K search trigger — desktop */}
           {isAdmin && (
             <Button
               variant="outline"
               size="sm"
-              className="hidden h-9 gap-2 text-slate-400 border-slate-700 hover:text-slate-100 hover:border-slate-600 sm:inline-flex"
+              className="hidden h-9 gap-2 text-slate-400 border-slate-700 hover:text-slate-100 hover:border-slate-600 sm:inline-flex sm:min-w-[200px] lg:w-72 lg:justify-between"
               onClick={() => setSearchOpen(true)}
             >
-              <Search className="h-4 w-4" />
-              <span className="text-xs">Search...</span>
-              <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border border-slate-700 bg-slate-800 px-1.5 font-mono text-[10px] font-medium text-slate-400">
+              <span className="flex items-center gap-2 min-w-0">
+                <Search className="h-4 w-4 shrink-0" />
+                <span className="text-xs truncate">Rechercher un incident...</span>
+              </span>
+              <kbd className="pointer-events-none inline-flex h-5 shrink-0 select-none items-center gap-1 rounded border border-slate-700 bg-slate-800 px-1.5 font-mono text-[10px] font-medium text-slate-400">
                 <Command className="h-2.5 w-2.5" />
                 K
               </kbd>
+            </Button>
+          )}
+
+          {/* Mobile search icon — visible below sm breakpoint */}
+          {isAdmin && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="sm:hidden text-slate-400 hover:text-slate-100 hover:bg-slate-800 min-w-[44px] min-h-[44px]"
+              onClick={() => setSearchOpen(true)}
+            >
+              <Search className="h-5 w-5" />
+              <span className="sr-only">Rechercher</span>
             </Button>
           )}
 
@@ -183,7 +230,14 @@ export function Header({ onToggleSidebar, kiosk = false }: HeaderProps) {
                 className="relative min-w-[44px] min-h-[44px] gap-2 rounded-full px-2 text-slate-300 hover:text-slate-100 hover:bg-slate-800"
               >
                 <Avatar className="h-7 w-7">
-                  <AvatarFallback className="bg-blue-600 text-xs font-bold text-white">
+                  <AvatarFallback
+                    className={cn(
+                      'text-xs font-bold',
+                      isAdmin
+                        ? 'bg-blue-600/15 text-blue-400 border border-blue-500/30 dark:bg-blue-950 dark:text-blue-300'
+                        : 'bg-blue-600 text-white',
+                    )}
+                  >
                     {initials || 'U'}
                   </AvatarFallback>
                 </Avatar>
@@ -205,7 +259,14 @@ export function Header({ onToggleSidebar, kiosk = false }: HeaderProps) {
                 <div className="flex items-center gap-4">
                   {/* Large avatar */}
                   <Avatar className="h-12 w-12">
-                    <AvatarFallback className="bg-blue-600 text-lg font-bold text-white">
+                    <AvatarFallback
+                      className={cn(
+                        'text-lg font-bold',
+                        isAdmin
+                          ? 'bg-blue-600/15 text-blue-400 border border-blue-500/30 dark:bg-blue-950 dark:text-blue-300'
+                          : 'bg-blue-600 text-white',
+                      )}
+                    >
                       {initials || 'U'}
                     </AvatarFallback>
                   </Avatar>
@@ -242,7 +303,7 @@ export function Header({ onToggleSidebar, kiosk = false }: HeaderProps) {
               {/* ── Action Menu Links ─────────────────── */}
               <div className="p-1.5">
                 <DropdownMenuItem
-                  onClick={() => router.push('/settings')}
+                  onClick={() => router.push('/admin/settings')}
                   className="cursor-pointer rounded-md text-slate-300 hover:text-slate-100 hover:bg-slate-800 focus:bg-slate-800 focus:text-slate-100"
                 >
                   <Settings className="mr-2 h-4 w-4" />
@@ -269,7 +330,7 @@ export function Header({ onToggleSidebar, kiosk = false }: HeaderProps) {
 
       {/* ── Cmd+K Search Modal (Admin only) ─────────── */}
       {searchOpen && isAdmin && (
-        <div className="fixed inset-0 z-[200] flex items-start justify-center pt-[15vh]">
+        <div className="fixed inset-0 z-[200] flex items-start justify-center pt-[15vh] sm:items-center sm:pt-0">
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => {
@@ -277,7 +338,7 @@ export function Header({ onToggleSidebar, kiosk = false }: HeaderProps) {
               setSearchQuery('');
             }}
           />
-          <div className="relative z-10 w-full max-w-xl rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
+          <div className="relative z-10 w-full max-w-xl mx-4 sm:mx-6 lg:max-w-2xl xl:max-w-3xl rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
             <div className="flex items-center gap-3 border-b border-slate-800 px-4 py-3">
               <Search className="h-5 w-5 shrink-0 text-slate-500" />
               <input
@@ -285,7 +346,7 @@ export function Header({ onToggleSidebar, kiosk = false }: HeaderProps) {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by Incident Reference or User Matricule..."
+                placeholder="Rechercher par référence d'incident ou matricule..."
                 className="flex-1 bg-transparent text-sm text-slate-100 outline-none placeholder:text-slate-500"
               />
               <kbd className="hidden shrink-0 items-center gap-1 rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] text-slate-400 sm:inline-flex">
@@ -294,9 +355,9 @@ export function Header({ onToggleSidebar, kiosk = false }: HeaderProps) {
             </div>
             <div className="p-12 text-center text-sm text-slate-500">
               {searchQuery ? (
-                <p>Searching for &quot;{searchQuery}&quot;...</p>
+                <p>Recherche de &quot;{searchQuery}&quot;...</p>
               ) : (
-                <p>Type an Incident Reference or User Matricule to search</p>
+                <p> Tapez une référence d&apos;incident ou un matricule pour rechercher</p>
               )}
             </div>
           </div>
