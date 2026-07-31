@@ -3,12 +3,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useNavigationProgress } from '@/components/ui/navigation-progress';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/useAuthStore';
 import type { UserRole } from '@/types/auth';
 import {
   LayoutDashboard,
-  FileWarning,
+  Flame,
   Users,
   Settings,
   Bell,
@@ -20,7 +21,10 @@ import {
   ChevronDown,
   User,
   Bookmark,
-  Circle,
+  Folder,
+  Grid3x3,
+  Cable,
+  Cpu,
 } from 'lucide-react';
 
 // ── Badge hook for attention counts ──────────────
@@ -80,7 +84,7 @@ function buildAdminItems(pendingUsers: number, criticalIncidents: number): NavEn
     {
       label: 'Incidents',
       href: '/admin/incidents',
-      icon: FileWarning,
+      icon: Flame,
       roles: ['ADMIN'],
       badge: criticalIncidents > 0 ? criticalIncidents : null,
       badgeClass: 'bg-rose-600 text-white',
@@ -98,11 +102,11 @@ function buildAdminItems(pendingUsers: number, criticalIncidents: number): NavEn
       icon: Building2,
       roles: ['ADMIN'],
       children: [
-        { label: 'Catégories', href: '/admin/reference?tab=categories', icon: Circle },
-        { label: 'Départements', href: '/admin/reference?tab=departments', icon: Circle },
-        { label: 'Sections', href: '/admin/reference?tab=sections', icon: Circle },
-        { label: 'Lignes de production', href: '/admin/reference?tab=production-lines', icon: Circle },
-        { label: 'Stations', href: '/admin/reference?tab=stations', icon: Circle },
+        { label: 'Catégories', href: '/admin/reference?tab=categories', icon: Folder },
+        { label: 'Départements', href: '/admin/reference?tab=departments', icon: Building2 },
+        { label: 'Sections', href: '/admin/reference?tab=sections', icon: Grid3x3 },
+        { label: 'Lignes de production', href: '/admin/reference?tab=production-lines', icon: Cable },
+        { label: 'Stations', href: '/admin/reference?tab=stations', icon: Cpu },
       ],
     } as NavGroup,
     { label: 'Mes abonnements', href: '/admin/subscriptions', icon: Bookmark, roles: ['ADMIN'] },
@@ -158,6 +162,7 @@ function storeExpandedGroups(groups: Set<string>) {
 
 export function Sidebar({ open, onOpenChange, variant = 'chef-atelier' }: SidebarProps) {
   const pathname = usePathname();
+  const { startNavigation } = useNavigationProgress();
   const roles = useAuthStore((s) => s.roles);
   const [collapsed, setCollapsed] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(getStoredExpandedGroups);
@@ -202,11 +207,11 @@ export function Sidebar({ open, onOpenChange, variant = 'chef-atelier' }: Sideba
         )}
       >
         {/* Brand header */}
-        <div className="flex h-14 items-center justify-between border-b px-4">
+        <div className={cn('flex h-14 items-center justify-between border-b', collapsed ? 'px-1.5' : 'px-4')}>
           {!collapsed && (
-            <Link href={brandHref(userRoles)} className="flex items-center gap-2">
+            <Link href={brandHref(userRoles)} onClick={startNavigation} className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
-                I
+                IC
               </div>
               <span className="text-sm font-semibold">ICGLMA</span>
             </Link>
@@ -214,9 +219,10 @@ export function Sidebar({ open, onOpenChange, variant = 'chef-atelier' }: Sideba
           {collapsed && (
             <Link
               href={brandHref(userRoles)}
-              className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground"
+              onClick={startNavigation}
+              className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-xs font-bold text-primary-foreground shrink-0"
             >
-              I
+              IC
             </Link>
           )}
           {/* Collapse chevron — desktop only (≥768px) */}
@@ -225,12 +231,15 @@ export function Sidebar({ open, onOpenChange, variant = 'chef-atelier' }: Sideba
               setCollapsed(!collapsed);
               setMobileOpen(false);
             }}
-            className="hidden md:flex rounded-md p-1 hover:bg-muted items-center"
+            className={cn(
+              'rounded-md hover:bg-muted items-center justify-center',
+              collapsed ? 'hidden md:flex h-6 w-6' : 'hidden md:flex h-6 w-6',
+            )}
           >
             {collapsed ? (
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
             ) : (
-              <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+              <ChevronLeft className="h-3.5 w-3.5 text-muted-foreground" />
             )}
           </button>
           {/* Close button — mobile only (<768px) */}
@@ -292,7 +301,10 @@ export function Sidebar({ open, onOpenChange, variant = 'chef-atelier' }: Sideba
                                 ? 'bg-primary/10 text-primary'
                                 : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
                             )}
-                            onClick={() => setMobileOpen(false)}
+                            onClick={() => {
+                              setMobileOpen(false);
+                              startNavigation();
+                            }}
                           >
                             <ChildIcon className="h-3.5 w-3.5 shrink-0" />
                             <span>{child.label}</span>
@@ -320,7 +332,10 @@ export function Sidebar({ open, onOpenChange, variant = 'chef-atelier' }: Sideba
                     ? 'bg-blue-600/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 font-semibold border-r-2 border-blue-600'
                     : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
                 )}
-                onClick={() => setMobileOpen(false)}
+                onClick={() => {
+                  setMobileOpen(false);
+                  startNavigation();
+                }}
               >
                 <Icon className="h-5 w-5 shrink-0" />
                 {!collapsed && (

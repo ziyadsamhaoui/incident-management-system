@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
 import { AuthGuard } from '@/components/auth/auth-guard';
+import { NavigationProgressProvider } from '@/components/ui/navigation-progress';
 import { useAuthStore } from '@/store/useAuthStore';
 
 export default function ChefAtelierLayout({
@@ -33,18 +34,20 @@ export default function ChefAtelierLayout({
 
   return (
     <AuthGuard allowedRoles={['CHEF_ATELIER']}>
-      <div className="flex h-screen overflow-hidden bg-background">
-        {/* Scoped sidebar for CHEF_ATELIER */}
-        <Sidebar open={sidebarOpen} onOpenChange={setSidebarOpen} variant="chef-atelier" />
+      <NavigationProgressProvider>
+        <div className="flex h-screen overflow-hidden bg-background">
+          {/* Scoped sidebar for CHEF_ATELIER */}
+          <Sidebar open={sidebarOpen} onOpenChange={setSidebarOpen} variant="chef-atelier" />
 
-        {/* Main content area */}
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <Header onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
-          <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-            {children}
-          </main>
+          {/* Main content area */}
+          <div className="flex flex-1 flex-col overflow-hidden">
+            <Header onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
+            <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+              {children}
+            </main>
+          </div>
         </div>
-      </div>
+      </NavigationProgressProvider>
     </AuthGuard>
   );
 }

@@ -13,6 +13,7 @@ import {
   Settings,
   Shield,
 } from 'lucide-react';
+import { useNavigationProgress } from '@/components/ui/navigation-progress';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -51,6 +52,7 @@ interface HeaderProps {
 
 export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: HeaderProps) {
   const router = useRouter();
+  const { startNavigation } = useNavigationProgress();
   const pathname = usePathname();
   const {
     firstName,
@@ -127,11 +129,6 @@ export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: H
         ? "Chef d'atelier"
         : 'Opérateur';
 
-  const roleMatriculeLabel =
-    primaryRole === 'ADMIN'
-      ? `Admin · #${safeMatricule}`
-      : `Opérateur · #${safeMatricule}`;
-
   return (
     <>
       <header
@@ -143,8 +140,8 @@ export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: H
           kiosk && 'shadow-sm',
         )}
       >
-        {/* ── Left side: Branding ──────────────────── */}
-        <div className="flex items-center gap-3">
+        {/* ── Left side: Search bar (admin only, furthest left) ──── */}
+        <div className="flex items-center gap-3 flex-1">
           {/* Mobile sidebar toggle (hidden in kiosk mode) */}
           {!kiosk && onToggleSidebar && (
             <Button
@@ -158,30 +155,12 @@ export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: H
             </Button>
           )}
 
-          {/* Brand */}
-          <div className="flex items-center gap-2.5">
-            {/* IC logo badge — always visible */}
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 font-bold text-white text-sm">
-              IC
-            </div>
-            {/* Wordmark + dynamic breadcrumb — restored on md+ */}
-            <span className="hidden md:inline font-bold text-lg tracking-tight text-white">
-              ICGLMA
-            </span>
-            <span className="hidden md:inline text-xs text-slate-400 border-l border-slate-700 pl-2.5 ml-0.5">
-              {breadcrumb}
-            </span>
-          </div>
-        </div>
-
-        {/* ── Right side: actions + user ───────────── */}
-        <div className="flex items-center gap-2">
-          {/* Admin Cmd+K search trigger — desktop */}
+          {/* Admin search trigger — far left, wider */}
           {isAdmin && (
             <Button
               variant="outline"
               size="sm"
-              className="hidden h-9 gap-2 text-slate-400 border-slate-700 hover:text-slate-100 hover:border-slate-600 sm:inline-flex sm:min-w-[200px] lg:w-72 lg:justify-between"
+              className="h-9 gap-2 text-slate-400 border-slate-700 hover:text-slate-100 hover:border-slate-600 sm:min-w-[280px] lg:min-w-[400px] xl:min-w-[480px] justify-between"
               onClick={() => setSearchOpen(true)}
             >
               <span className="flex items-center gap-2 min-w-0">
@@ -194,7 +173,10 @@ export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: H
               </kbd>
             </Button>
           )}
+        </div>
 
+        {/* ── Right side: actions + user ───────────── */}
+        <div className="flex items-center gap-2">
           {/* Mobile search icon — visible below sm breakpoint */}
           {isAdmin && (
             <Button
@@ -208,19 +190,25 @@ export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: H
             </Button>
           )}
 
-          {/* Notification bell — 44px touch target */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="relative text-slate-400 hover:text-slate-100 hover:bg-slate-800 min-w-[44px] min-h-[44px]"
-          >
-            <Bell className="h-5 w-5" />
-            <span className="absolute right-1 top-1 flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400/40" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
-            </span>
-            <span className="sr-only">Notifications</span>
-          </Button>
+          {/* Notification bell — admin only, links to notifications page */}
+          {isAdmin && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                startNavigation();
+                router.push('/admin/notifications');
+              }}
+              className="relative text-slate-400 hover:text-slate-100 hover:bg-slate-800 min-w-[44px] min-h-[44px]"
+            >
+              <Bell className="h-5 w-5" />
+              <span className="absolute right-1 top-1 flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400/40" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+              </span>
+              <span className="sr-only">Notifications</span>
+            </Button>
+          )}
 
           {/* ── User Profile Dropdown ────────────────── */}
           <DropdownMenu>
@@ -276,11 +264,18 @@ export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: H
                     </p>
                     <span
                       className={cn(
-                        'inline-flex items-center border border-blue-500/30 rounded-md px-2.5 py-0.5 text-xs font-medium',
-                        'bg-blue-500/15 text-blue-400',
+                        'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border',
+                        primaryRole === 'ADMIN'
+                          ? 'bg-blue-500/10 border-blue-500/25 text-blue-400'
+                          : primaryRole === 'CHEF_ATELIER'
+                            ? 'bg-amber-500/10 border-amber-500/25 text-amber-400'
+                            : 'bg-slate-500/10 border-slate-500/25 text-slate-400',
                       )}
                     >
-                      {roleMatriculeLabel}
+                      <Shield className="h-3 w-3" />
+                      <span className="font-semibold">{roleLabel}</span>
+                      <span className="opacity-50">·</span>
+                      <span className="font-mono">#{safeMatricule}</span>
                     </span>
                   </div>
                 </div>
@@ -303,11 +298,16 @@ export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: H
               {/* ── Action Menu Links ─────────────────── */}
               <div className="p-1.5">
                 <DropdownMenuItem
-                  onClick={() => router.push('/admin/settings')}
+                  onClick={() => {
+                    startNavigation();
+                    if (isAdmin) router.push('/admin/settings');
+                    else if (primaryRole === 'CHEF_ATELIER') router.push('/chef-atelier/settings');
+                    else router.push('/sous-chef/settings');
+                  }}
                   className="cursor-pointer rounded-md text-slate-300 hover:text-slate-100 hover:bg-slate-800 focus:bg-slate-800 focus:text-slate-100"
                 >
-                  <Settings className="mr-2 h-4 w-4" />
-                  Profil / Paramètres
+                  <User className="mr-2 h-4 w-4" />
+                  Profile
                 </DropdownMenuItem>
               </div>
 

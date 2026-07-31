@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useNavigationProgress } from '@/components/ui/navigation-progress';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard,
@@ -48,6 +49,7 @@ interface MobileBottomNavProps {
 export function MobileBottomNav({ isVisible = true, onNavigate }: MobileBottomNavProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const { startNavigation } = useNavigationProgress();
   const [moreOpen, setMoreOpen] = useState(false);
   const [refDataExpanded, setRefDataExpanded] = useState(false);
 
@@ -68,6 +70,7 @@ export function MobileBottomNav({ isVisible = true, onNavigate }: MobileBottomNa
       return;
     }
     onNavigate?.(href);
+    startNavigation();
     router.push(href);
   };
 
@@ -204,6 +207,7 @@ export function MobileBottomNav({ isVisible = true, onNavigate }: MobileBottomNa
                                     onClick={() => {
                                       setMoreOpen(false);
                                       onNavigate?.(child.href);
+                                      startNavigation();
                                     }}
                                     className={cn(
                                       'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
@@ -236,6 +240,7 @@ export function MobileBottomNav({ isVisible = true, onNavigate }: MobileBottomNa
                       onClick={() => {
                         setMoreOpen(false);
                         onNavigate?.(route.href!);
+                        startNavigation();
                       }}
                       className={cn(
                         'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',

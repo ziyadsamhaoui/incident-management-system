@@ -272,7 +272,14 @@ export function LoginFormShell({
         </div>
 
         {/* 5. Form with animated Field Slot */}
-        <form onSubmit={onSubmit} className="mt-7" noValidate>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSubmit?.(e);
+          }}
+          className="mt-7"
+          noValidate
+        >
           <AnimatePresence mode="wait" custom={direction}>
             <motion.div
               key={activeLane}

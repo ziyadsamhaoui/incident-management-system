@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useNavigationProgress } from '@/components/ui/navigation-progress';
 import { motion } from 'framer-motion';
 import {
   Search,
@@ -16,7 +17,6 @@ import {
   Eye,
   UserCheck,
   X,
-  ArrowLeft,
   ShieldAlert,
   Wrench,
   MessageSquare,
@@ -435,6 +435,7 @@ function KanbanColumn({
 
 export default function AdminIncidentsPage() {
   const router = useRouter();
+  const { startNavigation } = useNavigationProgress();
   const searchParams = useSearchParams();
 
   const [mounted, setMounted] = useState(false);
@@ -602,15 +603,7 @@ export default function AdminIncidentsPage() {
     <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
 
-        {/* Back to dashboard */}
-        <button
-          type="button"
-          onClick={() => router.push('/dashboard')}
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Retour au tableau de bord
-        </button>
+
 
         {/* ── 2.1 — Page Header ─────────────────────── */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -644,7 +637,7 @@ export default function AdminIncidentsPage() {
               <span className="hidden sm:inline">Tableau</span>
             </button>
           </div>
-          <Button size="sm" variant="outline" className="h-9 gap-1.5 text-xs">
+          <Button size="sm" className="h-9 gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white">
             <Plus className="h-3.5 w-3.5" />
             Déclarer
           </Button>
@@ -864,7 +857,10 @@ export default function AdminIncidentsPage() {
                               <td className="px-5 py-4" style={{ boxShadow: `inset 4px 0 0 0 ${cfg.barColor}` }} />
                               <td className="px-5 py-4">
                                 <button
-                                  onClick={() => router.push(`/admin/incidents/${inc.id}`)}
+                                  onClick={() => {
+                                    startNavigation();
+                                    router.push(`/admin/incidents/${inc.id}`);
+                                  }}
                                   className="font-mono text-sm font-semibold text-blue-600 hover:underline dark:text-blue-400"
                                 >
                                   {inc.reference}
@@ -920,7 +916,10 @@ export default function AdminIncidentsPage() {
                               <td className="px-5 py-4 text-right">
                                 <button
                                   type="button"
-                                  onClick={() => router.push(`/admin/incidents/${inc.id}`)}
+                                  onClick={() => {
+                                    startNavigation();
+                                    router.push(`/admin/incidents/${inc.id}`);
+                                  }}
                                   className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                                   title="Voir les détails"
                                 >

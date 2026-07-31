@@ -258,7 +258,14 @@ export default function AdminLoginPage() {
           {fl.adminLoginSubtitle}
         </p>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="mt-7" noValidate>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSubmit(onSubmit)(e)['catch'](console.error);
+          }}
+          className="mt-7"
+          noValidate
+        >
           <div className="space-y-5">
             {/* Email */}
             <div className="space-y-1.5">

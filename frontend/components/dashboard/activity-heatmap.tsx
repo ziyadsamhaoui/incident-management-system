@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,9 +23,10 @@ function generateMockData(): number[][] {
 }
 
 // ── Color intensity levels ────────────────────────
+// 0 = dark gray (light) / light gray (dark), then soft green → deep green
 
 const INTENSITY_LEVELS = [
-  { threshold: 0, className: 'bg-green-50 dark:bg-green-950/40' },
+  { threshold: 0, className: 'bg-slate-300 dark:bg-slate-700' },
   { threshold: 1, className: 'bg-green-200 dark:bg-green-900/40' },
   { threshold: 2, className: 'bg-green-400 dark:bg-green-700/50' },
   { threshold: 4, className: 'bg-green-600 dark:bg-green-600/60' },
@@ -51,7 +52,6 @@ function getMonthLabels(): { index: number; label: string }[] {
   const labels: { index: number; label: string }[] = [];
   for (let i = 0; i < 12; i++) {
     const monthIndex = (currentMonth - 11 + i + 12) % 12;
-    // Only include months that align with week boundaries (approximate)
     const weekIndex = Math.floor(i * 52 / 12);
     if (i === 0 || labels[labels.length - 1].label !== MONTH_LABELS[monthIndex]) {
       labels.push({ index: weekIndex, label: MONTH_LABELS[monthIndex] });
@@ -64,11 +64,53 @@ function getMonthLabels(): { index: number; label: string }[] {
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven']; // Mon — Fri
 
+// ── Hover Tooltip ─────────────────────────────────
+
+function HeatmapTooltip({
+  count,
+  x,
+  y,
+}: {
+  count: number;
+  x: number;
+  y: number;
+}) {
+  return (
+    <div
+      className="fixed z-50 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium shadow-lg dark:border-slate-700 dark:bg-slate-800"
+      style={{
+        left: x + 10,
+        top: y - 30,
+        pointerEvents: 'none',
+      }}
+    >
+      {count > 0
+        ? `${count} évaluation${count > 1 ? 's' : ''}`
+        : 'Aucune évaluation'}
+    </div>
+  );
+}
+
 // ── Component ─────────────────────────────────────
 
 export function ActivityHeatmap() {
   const data = useMemo(() => generateMockData(), []);
   const monthLabels = useMemo(() => getMonthLabels(), []);
+
+  // Tooltip state
+  const [tooltip, setTooltip] = useState<{ count: number; x: number; y: number } | null>(null);
+
+  const handleMouseEnter = useCallback(
+    (count: number, e: React.MouseEvent<HTMLDivElement>) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setTooltip({ count, x: rect.left, y: rect.top });
+    },
+    [],
+  );
+
+  const handleMouseLeave = useCallback(() => {
+    setTooltip(null);
+  }, []);
 
   // Calculate total actions
   const totalActions = useMemo(
@@ -89,7 +131,8 @@ export function ActivityHeatmap() {
             Contribution
           </CardTitle>
         </CardHeader>
-        <CardContent className="px-4 pb-4 flex flex-col h-full">            <div className="flex items-start gap-1.5 flex-1">
+        <CardContent className="px-4 pb-4 flex flex-col h-full">
+          <div className="flex items-start gap-1.5 flex-1">
             {/* Day labels column */}
             <div className="flex flex-col gap-[3px] pt-5 mr-1">
               {DAY_LABELS.map((label) => (
@@ -106,7 +149,8 @@ export function ActivityHeatmap() {
                 {monthLabels.map(({ index, label }) => (
                   <span
                     key={index}
-                    className="text-[8px] font-medium text-muted-foreground"                      style={{ marginLeft: index > 0 ? `${(index - monthLabels[monthLabels.findIndex(m => m.index === index) - 1]?.index ?? 0) * 100}px` : undefined }}
+                    className="text-[8px] font-medium text-muted-foreground"
+                    style={{ marginLeft: index > 0 ? `${(index - (monthLabels[monthLabels.findIndex(m => m.index === index) - 1]?.index ?? 0)) * 100}px` : undefined }}
                   >
                     {label}
                   </span>
@@ -120,8 +164,10 @@ export function ActivityHeatmap() {
                     {week.map((count, dIdx) => (
                       <div
                         key={dIdx}
+                        onMouseEnter={(e) => handleMouseEnter(count, e)}
+                        onMouseLeave={handleMouseLeave}
                         className={cn(
-                          'h-4 w-4 rounded-sm transition-colors',
+                          'h-4 w-4 rounded-sm transition-colors cursor-pointer',
                           getIntensityClass(count),
                           count > 0 && 'hover:ring-1 hover:ring-green-500/50',
                         )}
@@ -133,6 +179,11 @@ export function ActivityHeatmap() {
               </div>
             </div>
           </div>
+
+          {/* Tooltip */}
+          {tooltip && (
+            <HeatmapTooltip count={tooltip.count} x={tooltip.x} y={tooltip.y} />
+          )}
 
           {/* Legend & Stats */}
           <div className="flex items-center justify-between mt-auto pt-4">

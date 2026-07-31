@@ -39,13 +39,9 @@ function EvaluationModalContent({
   const [noteError, setNoteError] = useState<string | null>(null);
 
   async function handleSubmit() {
-    // Validate: NON_RESOLVED requires a note
+    // Validate: only NON_RESOLVED requires a note
     if (selectedStatus === 'NON_RESOLVED' && !note.trim()) {
       setNoteError('Une note de résolution est requise pour les incidents non résolus.');
-      return;
-    }
-    if (!note.trim()) {
-      setNoteError('Veuillez fournir une note de résolution.');
       return;
     }
 
@@ -72,24 +68,15 @@ function EvaluationModalContent({
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-            className={cn(
-              'fixed z-[10000]',
-              // Large displays: centered card
-              'left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2',
-              'w-full max-w-lg',
-              // Medium & below: full-bleed (inset-0 with no max-width constraint)
-              'lg:max-w-lg',
-              'max-lg:inset-0 max-lg:flex max-lg:items-center max-lg:justify-center max-lg:p-0 max-lg:max-w-full max-lg:-translate-x-0 max-lg:-translate-y-0 max-lg:left-0 max-lg:top-0',
-            )}
+            transition={{ duration: 0.2, ease: 'easeOut' }}              className="fixed inset-0 z-[10000] flex items-center justify-center p-4 sm:p-6"
           >
             <div
               className={cn(
-                'bg-card shadow-2xl',
-                // Large: rounded card with padding
-                'lg:rounded-xl lg:border lg:p-6 lg:mx-4',
-                // Medium & below: full-screen with no border-radius, overflow scroll
-                'max-lg:rounded-none max-lg:border-0 max-lg:h-full max-lg:w-full max-lg:overflow-y-auto max-lg:p-4',
+                'bg-card shadow-2xl w-full',
+                // Large: centered rounded card
+                'max-w-lg rounded-xl border p-6',
+                // Medium & below: full-bleed max-w with scrolling
+                'max-sm:max-w-full max-sm:h-full max-sm:rounded-none max-sm:border-0 max-sm:overflow-y-auto max-sm:p-4',
               )}
             >
               {/* Header */}
@@ -178,7 +165,9 @@ function EvaluationModalContent({
                   className="text-sm font-medium text-muted-foreground"
                 >
                   Note de résolution{' '}
-                  <span className="text-destructive">*</span>
+                  {selectedStatus === 'NON_RESOLVED' && (
+                    <span className="text-destructive">*</span>
+                  )}
                 </label>
                 <textarea
                   id="eval-note"

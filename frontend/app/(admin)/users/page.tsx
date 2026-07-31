@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useNavigationProgress } from '@/components/ui/navigation-progress';
 import { motion } from 'framer-motion';
 import {
   Search,
@@ -11,7 +12,6 @@ import {
   ChevronRight,
   CheckCircle2,
   XCircle,
-  ArrowLeft,
   UserPlus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -122,6 +122,7 @@ const ROLE_COLORS: Record<string, string> = {
 
 export default function UsersPage() {
   const router = useRouter();
+  const { startNavigation } = useNavigationProgress();
   const [users] = useState(MOCK_USERS);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -157,16 +158,6 @@ export default function UsersPage() {
   return (
     <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8">
       <div className="max-w-5xl mx-auto space-y-6">
-        {/* Back button */}
-        <button
-          type="button"
-          onClick={() => router.push('/dashboard')}
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Retour au tableau de bord
-        </button>
-
         {/* Header with actions */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>

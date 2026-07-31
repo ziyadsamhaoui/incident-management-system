@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
+import { useNavigationProgress } from '@/components/ui/navigation-progress';
 import {
   Activity,
   AlertTriangle,
@@ -202,6 +203,7 @@ function CriticalBannerItem({
   incident: typeof MOCK_INCIDENTS[0];
   index: number;
 }) {
+  const { startNavigation } = useNavigationProgress();
   return (
     <motion.div
       initial={{ opacity: 0, x: -10 }}
@@ -210,6 +212,7 @@ function CriticalBannerItem({
     >
       <Link
         href={`/incidents/${incident.id}`}
+        onClick={startNavigation}
         className="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 hover:bg-rose-100/50 dark:hover:bg-rose-950/30 transition-colors group"
       >
         <div className="flex items-center gap-3 min-w-0">
@@ -261,6 +264,7 @@ function ActivityIcon({ type }: { type: string }) {
 // ── Page ──────────────────────────────────────────
 
 export default function AdminDashboardPage() {
+  const { startNavigation } = useNavigationProgress();
   const incidents = MOCK_INCIDENTS;
 
   // 4.1 — 6-card stat grid
@@ -546,6 +550,7 @@ export default function AdminDashboardPage() {
                             <td className="px-4 py-3" style={{ boxShadow: `inset 3px 0 0 0 ${cfg.barColor}` }}>
                               <Link
                                 href={`/incidents/${inc.id}`}
+                                onClick={startNavigation}
                                 className="font-mono text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
                               >
                                 {inc.reference}
@@ -572,6 +577,7 @@ export default function AdminDashboardPage() {
                             <td className="px-4 py-3 text-right">
                               <Link
                                 href={`/incidents/${inc.id}`}
+                                onClick={startNavigation}
                                 className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
                               >
                                 <Eye className="h-3.5 w-3.5" />

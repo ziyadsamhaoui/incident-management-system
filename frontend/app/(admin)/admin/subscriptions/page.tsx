@@ -60,16 +60,6 @@ export default function AdminSubscriptionsPage() {
   return (
     <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8">
       <div className="max-w-2xl mx-auto space-y-6">
-        {/* Back button */}
-        <button
-          type="button"
-          onClick={() => router.push('/dashboard')}
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Retour au tableau de bord
-        </button>
-
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
