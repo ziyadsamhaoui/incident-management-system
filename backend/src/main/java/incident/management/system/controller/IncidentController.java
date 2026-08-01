@@ -56,9 +56,9 @@ public class IncidentController {
 
 
     //  DECLARED
-    //  Actor: SOUS_CHEF or CHEF_ATELIER
+    //  Actor: SOUS_CHEF, CHEF_ATELIER or ADMIN (admin declare flow from the incidents console)
     @PostMapping
-    @PreAuthorize("hasAnyRole('SOUS_CHEF', 'CHEF_ATELIER')")
+    @PreAuthorize("hasAnyRole('SOUS_CHEF', 'CHEF_ATELIER', 'ADMIN')")
     public ResponseEntity<IncidentResponse> createIncident(@Valid @RequestBody CreateIncidentRequest request) {
         IncidentResponse response = incidentService.createIncident(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);

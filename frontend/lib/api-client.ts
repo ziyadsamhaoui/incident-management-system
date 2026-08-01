@@ -94,7 +94,17 @@ apiClient.interceptors.response.use(
     }
 
     // ── 401 Unauthorised — attempt token refresh ──
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Exception: auth endpoints (login/refresh/claim) must surface their own
+    // 401s so the login page can render inline errors — never trigger the
+    // session-expired full-page reload for those.
+    const url = originalRequest.url ?? '';
+    const isAuthEndpoint =
+      url.includes('/api/auth/login') ||
+      url.includes('/api/auth/refresh') ||
+      url.includes('/api/auth/claim') ||
+      url.includes('/api/auth/password-reset');
+
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       const refreshToken = getRefreshToken();
       if (!refreshToken) {
         onSessionExpired?.();

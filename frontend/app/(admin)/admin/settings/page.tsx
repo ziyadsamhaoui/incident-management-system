@@ -224,10 +224,10 @@ export default function AdminSettingsPage() {
 
           {/* Rôle */}
           <div className="space-y-1">
-            <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+            <label className="mb-2 block text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
               Rôle :
             </label>
-            <Badge variant="secondary" className="gap-1.5 capitalize">
+            <Badge variant="secondary" className="mt-0.5 gap-1.5 capitalize">
               <Shield className="h-3 w-3" />
               Administrateur
             </Badge>

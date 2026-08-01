@@ -157,8 +157,9 @@ public class UserServiceImpl implements UserService {
         }
 
         user.setRole(UserRole.CHEF_ATELIER);
-        // Set passwordHash to null to signal the account is unclaimed
-        user.setPasswordHash(null);
+        // Empty passwordHash signals the account is unclaimed (satisfies the DB NOT NULL
+        // constraint — see DevSeedConfig roster seeding which uses the same sentinel).
+        user.setPasswordHash("");
 
         UserEntity saved = userRepository.save(user);
         log.info("User {} (matricule: {}) promoted from SOUS_CHEF to CHEF_ATELIER. Account needs claiming.",

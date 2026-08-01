@@ -42,6 +42,11 @@ import {
   createSection,
   createProductionLine,
   createStation,
+  updateCategory,
+  updateDepartment,
+  updateSection,
+  updateProductionLine,
+  updateStation,
   deleteCategory,
   deleteDepartment,
   deleteSection,
@@ -72,6 +77,7 @@ interface RefTab {
   /** Raw fetch result — each tab maps it to { id, name, parent? } */
   fetch: () => Promise<unknown[]>;
   create: (name: string) => Promise<unknown>;
+  update: (id: number, name: string) => Promise<unknown>;
   remove: (id: number) => Promise<void>;
   emptyTitle: string;
   emptyCta: string;
@@ -86,6 +92,7 @@ const REF_TABS: RefTab[] = [
     icon: FolderTree,
     fetch: getCategories,
     create: createCategory,
+    update: updateCategory,
     remove: deleteCategory,
     emptyTitle: 'Aucune catégorie configurée.',
     emptyCta: '+ Ajouter une catégorie',
@@ -97,6 +104,7 @@ const REF_TABS: RefTab[] = [
     icon: Building2,
     fetch: getDepartments,
     create: createDepartment,
+    update: updateDepartment,
     remove: deleteDepartment,
     emptyTitle: 'Aucun département disponible.',
     emptyCta: '+ Créer un département',
@@ -108,6 +116,7 @@ const REF_TABS: RefTab[] = [
     icon: LayoutGrid,
     fetch: getSections,
     create: createSection,
+    update: updateSection,
     remove: deleteSection,
     emptyTitle: 'Aucune section enregistrée.',
     emptyCta: '+ Ajouter',
@@ -119,6 +128,7 @@ const REF_TABS: RefTab[] = [
     icon: MapPin,
     fetch: getProductionLines,
     create: (name) => createProductionLine(name, null),
+    update: (id, name) => updateProductionLine(id, name, null),
     remove: deleteProductionLine,
     emptyTitle: 'Aucune ligne de production enregistrée.',
     emptyCta: '+ Ajouter',
@@ -133,6 +143,7 @@ const REF_TABS: RefTab[] = [
     icon: Cpu,
     fetch: getStations,
     create: (name) => createStation(name, null),
+    update: (id, name) => updateStation(id, name, null),
     remove: deleteStation,
     emptyTitle: 'Aucune station enregistrée.',
     emptyCta: '+ Ajouter',
@@ -190,6 +201,7 @@ function ReferenceDataContent() {
   const [search, setSearch] = useState('');
   const [deleteGuard, setDeleteGuard] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<{ id: string; name: string } | null>(null);
   const [newName, setNewName] = useState('');
   const [adding, setAdding] = useState(false);
   const [busyDeleteId, setBusyDeleteId] = useState<number | null>(null);
@@ -214,15 +226,43 @@ function ReferenceDataContent() {
     router.replace(`/admin/reference?tab=${key}`, { scroll: false });
   };
 
-  const handleAdd = async () => {
+  const openCreateDialog = () => {
+    setEditTarget(null);
+    setNewName('');
+    setDeleteGuard(null);
+    setAddOpen(true);
+  };
+
+  const openEditDialog = (item: { id: string; name: string }) => {
+    setEditTarget({ id: item.id, name: item.name });
+    setNewName(item.name);
+    setDeleteGuard(null);
+    setAddOpen(true);
+  };
+
+  const closeDialog = () => {
+    setAddOpen(false);
+    setEditTarget(null);
+    setNewName('');
+  };
+
+  const handleSubmit = async () => {
     const name = newName.trim();
     if (!name) return;
     setAdding(true);
     setDeleteGuard(null);
     try {
-      await activeSection.create(name);
-      setAddOpen(false);
-      setNewName('');
+      if (editTarget) {
+        // No-op when the name did not change
+        if (name === editTarget.name) {
+          closeDialog();
+          return;
+        }
+        await activeSection.update(Number(editTarget.id), name);
+      } else {
+        await activeSection.create(name);
+      }
+      closeDialog();
       refetch();
     } catch (err) {
       setDeleteGuard(extractErrorMessage(err));
@@ -305,16 +345,18 @@ function ReferenceDataContent() {
                   className="h-9 w-full pl-9 text-sm"
                 />
               </div>
-              <Dialog open={addOpen} onOpenChange={setAddOpen}>
+              <Dialog open={addOpen} onOpenChange={(open) => { if (!open) closeDialog(); }}>
                 <DialogTrigger asChild>
-                  <Button size="sm" className="h-9 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white">
+                  <Button size="sm" className="h-9 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={openCreateDialog}>
                     <Plus className="h-3.5 w-3.5" />
                     <span className="hidden sm:inline">Ajouter</span>
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-sm">
                   <DialogHeader>
-                    <DialogTitle>Ajouter {activeSection.label.toLowerCase()}</DialogTitle>
+                    <DialogTitle>
+                      {editTarget ? `Modifier ${activeSection.label.toLowerCase()}` : `Ajouter ${activeSection.label.toLowerCase()}`}
+                    </DialogTitle>
                   </DialogHeader>
                   <div className="space-y-1.5 py-2">
                     <Label htmlFor="ref-name">Nom</Label>
@@ -323,16 +365,18 @@ function ReferenceDataContent() {
                       value={newName}
                       onChange={(e) => setNewName(e.target.value)}
                       placeholder="Nom..."
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSubmit(); } }}
+                      autoFocus
                     />
                   </div>
                   <DialogFooter>
                     <Button
-                      onClick={handleAdd}
+                      onClick={handleSubmit}
                       disabled={!newName.trim() || adding}
                       className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
                     >
                       {adding && <Loader2 className="h-4 w-4 animate-spin" />}
-                      Ajouter
+                      {editTarget ? 'Modifier' : 'Ajouter'}
                     </Button>
                   </DialogFooter>
                 </DialogContent>
@@ -366,7 +410,7 @@ function ReferenceDataContent() {
                   title={activeSection.emptyTitle}
                   description="Ajoutez un élément pour commencer à l'utiliser dans le système."
                   actionLabel={activeSection.emptyCta}
-                  onAction={() => setAddOpen(true)}
+                  onAction={openCreateDialog}
                 />
               ) : showFilteredEmpty ? (
                 <EmptyState
@@ -405,8 +449,9 @@ function ReferenceDataContent() {
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             type="button"
+                            onClick={() => openEditDialog(item)}
                             className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
-                            title="Modifier (bientôt disponible)"
+                            title="Modifier"
                           >
                             <Edit3 className="h-3.5 w-3.5" />
                           </button>

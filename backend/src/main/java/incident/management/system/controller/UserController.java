@@ -72,6 +72,11 @@ public class UserController {
         return ResponseEntity.ok(response);
     }
 
+    @PutMapping("/{id}/deactivate")
+    public ResponseEntity<UserResponse> deactivateUser(@PathVariable Long id) {
+        return ResponseEntity.ok(userService.deactivateUser(id));
+    }
+
     //  Admin Department Subscriptions
 
     @PostMapping("/{userId}/subscriptions/{departmentId}")

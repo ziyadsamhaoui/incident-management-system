@@ -52,12 +52,12 @@ class IncidentControllerWebTest extends StandaloneWebMvcTestBase {
     class AnnotationVerification {
 
         @Test
-        @DisplayName("createIncident() has @PreAuthorize('hasAnyRole(\\\"SOUS_CHEF\\\", \\\"CHEF_ATELIER\\\")')")
+        @DisplayName("createIncident() has @PreAuthorize('hasAnyRole(\\\"SOUS_CHEF\\\", \\\"CHEF_ATELIER\\\", \\\"ADMIN\\\")')")
         void createIncident_hasCorrectAnnotation() throws Exception {
             Method method = IncidentController.class.getMethod("createIncident", CreateIncidentRequest.class);
             PreAuthorize annotation = method.getAnnotation(PreAuthorize.class);
             assertThat(annotation).isNotNull();
-            assertThat(annotation.value()).isEqualTo("hasAnyRole('SOUS_CHEF', 'CHEF_ATELIER')");
+            assertThat(annotation.value()).isEqualTo("hasAnyRole('SOUS_CHEF', 'CHEF_ATELIER', 'ADMIN')");
         }
 
         @Test
@@ -101,7 +101,7 @@ class IncidentControllerWebTest extends StandaloneWebMvcTestBase {
         @BeforeEach
         void setUpRbac() {
             RoleEnforcementFilter rbacFilter = new RoleEnforcementFilter();
-            rbacFilter.addRule("/api/incidents", "POST", "ROLE_SOUS_CHEF", "ROLE_CHEF_ATELIER");
+            rbacFilter.addRule("/api/incidents", "POST", "ROLE_SOUS_CHEF", "ROLE_CHEF_ATELIER", "ROLE_ADMIN");
             rbacFilter.addRule("/api/incidents/*/claim", "PUT", "ROLE_ADMIN");
             rbacFilter.addRule("/api/incidents/*/evaluate", "PUT", "ROLE_ADMIN");
 
@@ -112,8 +112,8 @@ class IncidentControllerWebTest extends StandaloneWebMvcTestBase {
         }
 
         @Test
-        @DisplayName("ADMIN → POST /api/incidents → 403 (not allowed)")
-        void adminCreateIncident_returns403() throws Exception {
+        @DisplayName("ADMIN → POST /api/incidents → 400 (allowed, but empty body)")
+        void adminCreateIncident_passesRbac() throws Exception {
             SecurityContextHolder.getContext().setAuthentication(
                     new UsernamePasswordAuthenticationToken("admin", "pass",
                             List.of(() -> "ROLE_ADMIN")));
@@ -121,7 +121,7 @@ class IncidentControllerWebTest extends StandaloneWebMvcTestBase {
             mockMvc.perform(post("/api/incidents")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isBadRequest());
         }
 
         @Test

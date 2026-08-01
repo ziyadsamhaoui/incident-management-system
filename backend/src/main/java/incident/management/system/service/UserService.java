@@ -39,7 +39,7 @@ public interface UserService {
 
     /**
      * Promotes a SOUS_CHEF user to CHEF_ATELIER.
-     * The promoted user will have {@code passwordHash = null},
+     * The promoted user will have an empty {@code passwordHash},
      * requiring them to claim their account on first login.
      */
     UserResponse promoteToChefAtelier(Long id);
