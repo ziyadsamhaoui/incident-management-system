@@ -6,7 +6,6 @@ import { motion } from 'framer-motion';
 import {
   ArrowLeft,
   AlertTriangle,
-  Loader2,
   Clock,
   ShieldAlert,
   Wrench,
@@ -18,6 +17,7 @@ import {
   XCircle,
   FileText,
   Activity,
+  Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,9 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { getStatusConfig } from '@/lib/constants/incidentStatus';
 import { EvaluationModal } from '@/components/incidents/evaluation-modal';
+import { ErrorState } from '@/components/ui/error-state';
+import { useAsync, extractErrorMessage } from '@/lib/use-async';
+import { getIncidentDetail, claimIncident, evaluateIncident } from '@/services/incidentService';
 import type { IncidentDetailDTO, IncidentHistoryEntry } from '@/types/incident';
 
 // ── Category Icon Map ─────────────────────────────
@@ -57,78 +60,36 @@ const PRIORITY_CLASSES: Record<string, string> = {
   CRITICAL: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 };
 
-// ── Mock Data ─────────────────────────────────────
-
-const MOCK_INCIDENT: IncidentDetailDTO = {
-  id: '1',
-  reference: 'INC-20260730-0001',
-  status: 'IN_PROGRESS',
-  priority: 'CRITICAL',
-  department: 'Assemblage',
-  station: 'ASM-L1-S3',
-  category: 'Sécurité',
-  description:
-    'Détecteur de fumée déclenché sans cause identifiée dans la zone d\'assemblage sud. ' +
-    'L\'alarme s\'est déclenchée à 08:23 lors du démarrage de la ligne. ' +
-    'Les techniciens de maintenance ont été dépêchés sur place pour inspection.',
-  createdAt: '2026-07-30T08:23:15',
-  declaredAt: '2026-07-30T08:23:15',
-  claimedAt: '2026-07-30T08:45:00',
-  inProgressAt: '2026-07-30T08:46:00',
-  resolvedAt: null,
-  closedAt: null,
-  assignedTo: {
-    id: '42',
-    firstName: 'Ahmed',
-    lastName: 'Bennani',
-    matricule: '1001',
-  },
-  resolvedBy: null,
-  resolutionNote: null,
-  history: [
-    {
-      id: 'h1',
-      action: 'Incident Declared',
-      performedBy: { id: '5', firstName: 'Mohamed', lastName: 'Amraoui', matricule: '1005' },
-      timestamp: '2026-07-30T08:23:15',
-    },
-    {
-      id: 'h2',
-      action: 'Claimed by',
-      performedBy: { id: '42', firstName: 'Ahmed', lastName: 'Bennani', matricule: '1001' },
-      timestamp: '2026-07-30T08:45:00',
-    },
-    {
-      id: 'h3',
-      action: 'In Progress',
-      performedBy: { id: '42', firstName: 'Ahmed', lastName: 'Bennani', matricule: '1001' },
-      timestamp: '2026-07-30T08:46:00',
-      note: 'Auto-progression from CLAIMED to IN_PROGRESS',
-    },
-  ],
+const STATUS_ACTION_LABELS: Record<string, string> = {
+  DECLARED: 'Incident Declared',
+  CLAIMED: 'Claimed by',
+  IN_PROGRESS: 'In Progress',
+  RESOLVED: 'Resolved',
+  NON_RESOLVED: 'Not Resolved',
+  CLOSED: 'Closed',
 };
 
 // ── Timeline Entry ────────────────────────────────
 
-function TimelineIcon({ action }: { action: string }) {
+function TimelineIcon({ status }: { status: string }) {
   const iconMap: Record<string, React.ElementType> = {
-    'Incident Declared': FileText,
-    'Claimed by': UserCheck,
-    'In Progress': Activity,
-    Resolved: CheckCircle2,
-    'Not Resolved': XCircle,
-    Closed: XCircle,
+    DECLARED: FileText,
+    CLAIMED: UserCheck,
+    IN_PROGRESS: Activity,
+    RESOLVED: CheckCircle2,
+    NON_RESOLVED: XCircle,
+    CLOSED: XCircle,
   };
-  const Icon = Object.entries(iconMap).find(([key]) =>
-    action.toLowerCase().includes(key.toLowerCase()),
-  )?.[1] ?? FileText;
+  const Icon = iconMap[status] ?? FileText;
   return <Icon className="h-3.5 w-3.5" />;
 }
 
 function TimelineEntry({ entry, isLast }: { entry: IncidentHistoryEntry; isLast: boolean }) {
-  const date = new Date(entry.timestamp);
+  const date = new Date(entry.changedAt);
   const timeStr = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   const dateStr = date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+  const action = STATUS_ACTION_LABELS[entry.currentStatus] ?? entry.currentStatus;
+  const actor = entry.actor;
 
   return (
     <div className="relative flex gap-4 pb-6">
@@ -138,25 +99,27 @@ function TimelineEntry({ entry, isLast }: { entry: IncidentHistoryEntry; isLast:
       )}
       {/* Dot */}
       <div className="relative z-10 mt-1 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border bg-card">
-        <TimelineIcon action={entry.action} />
+        <TimelineIcon status={entry.currentStatus} />
       </div>
       {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5">
           <span className="text-sm font-medium text-foreground">
-            {entry.action}
+            {action}
           </span>
           <span className="text-xs text-muted-foreground">
             {dateStr} à {timeStr}
           </span>
         </div>
-        <p className="text-xs text-muted-foreground">
-          {entry.performedBy.firstName} {entry.performedBy.lastName}
-          <span className="font-mono"> #{entry.performedBy.matricule}</span>
-        </p>
-        {entry.note && (
+        {actor && (
+          <p className="text-xs text-muted-foreground">
+            {actor.firstName} {actor.lastName}
+            <span className="font-mono"> #{actor.matricule}</span>
+          </p>
+        )}
+        {entry.comment && (
           <p className="mt-1 text-xs text-muted-foreground/70 italic border-l-2 border-muted pl-2">
-            {entry.note}
+            {entry.comment}
           </p>
         )}
       </div>
@@ -171,59 +134,46 @@ export default function AdminIncidentDetailPage() {
   const router = useRouter();
   const incidentId = params.id as string;
 
-  const [incident, setIncident] = useState<IncidentDetailDTO | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [evalOpen, setEvalOpen] = useState(false);
   const [evalLoading, setEvalLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
+  const { data: incident, loading, error, refetch } = useAsync<IncidentDetailDTO>(
+    () => getIncidentDetail(incidentId),
+    [incidentId],
+  );
+
+  // Re-fetch when the route id changes
+  const [prevId, setPrevId] = useState(incidentId);
   useEffect(() => {
-    async function load() {
-      try {
-        // Try API first, fall back to mock
-        setIncident({ ...MOCK_INCIDENT, id: incidentId });
-      } catch {
-        setError("Impossible de charger l'incident.");
-      } finally {
-        setLoading(false);
-      }
+    if (prevId !== incidentId) {
+      setPrevId(incidentId);
+      refetch();
     }
-    load();
-  }, [incidentId]);
+  }, [incidentId, prevId, refetch]);
 
   const handleClaim = async () => {
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 300));
-    setIncident((prev) => prev ? { ...prev, status: 'CLAIMED', claimedAt: new Date().toISOString() } : prev);
-    setLoading(false);
+    setActionError(null);
+    try {
+      await claimIncident(incidentId);
+      await refetch();
+    } catch (err) {
+      setActionError(extractErrorMessage(err));
+    }
   };
 
   const handleEvaluate = async (status: 'RESOLVED' | 'NON_RESOLVED', note: string) => {
     setEvalLoading(true);
-    await new Promise((r) => setTimeout(r, 500));
-    setIncident((prev) =>
-      prev
-        ? {
-            ...prev,
-            status: status,
-            resolvedAt: new Date().toISOString(),
-            resolvedBy: { id: '1', firstName: 'Admin', lastName: 'User', matricule: 'ADM-0001' },
-            resolutionNote: note,
-            history: [
-              ...prev.history,
-              {
-                id: `h${Date.now()}`,
-                action: status === 'RESOLVED' ? 'Resolved' : 'Not Resolved',
-                performedBy: { id: '1', firstName: 'Admin', lastName: 'User', matricule: 'ADM-0001' },
-                timestamp: new Date().toISOString(),
-                note,
-              },
-            ],
-          }
-        : prev,
-    );
-    setEvalLoading(false);
-    setEvalOpen(false);
+    setActionError(null);
+    try {
+      await evaluateIncident(incidentId, { status, note });
+      await refetch();
+      setEvalOpen(false);
+    } catch (err) {
+      setActionError(extractErrorMessage(err));
+    } finally {
+      setEvalLoading(false);
+    }
   };
 
   if (loading) {
@@ -239,12 +189,10 @@ export default function AdminIncidentDetailPage() {
 
   if (error || !incident) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4">
-        <AlertTriangle className="h-10 w-10 text-destructive" />
-        <h2 className="text-xl font-bold">Erreur</h2>
-        <p className="text-sm text-muted-foreground">{error ?? "Impossible de charger l'incident."}</p>
-        <Button variant="outline" onClick={() => router.back()}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Retour
+      <div className="mx-auto w-full max-w-4xl space-y-4 px-4 pt-6">
+        <ErrorState message={error ?? "Impossible de charger l'incident."} onRetry={refetch} />
+        <Button variant="outline" onClick={() => router.push('/admin/incidents')}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Retour aux incidents
         </Button>
       </div>
     );
@@ -317,6 +265,11 @@ export default function AdminIncidentDetailPage() {
         </div>
       </div>
 
+      {/* ── Action error banner ───────────────────── */}
+      {actionError && (
+        <ErrorState message={actionError} compact onRetry={() => setActionError(null)} />
+      )}
+
       {/* ── Description ───────────────────────────── */}
       <Card>
         <CardContent className="p-4">
@@ -331,8 +284,8 @@ export default function AdminIncidentDetailPage() {
           <CardContent className="p-4">
             <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-1">Déclaré par</p>
             <p className="text-sm font-medium">
-              {incident.history[0]?.performedBy.firstName} {incident.history[0]?.performedBy.lastName}
-              <span className="font-mono text-muted-foreground"> #{incident.history[0]?.performedBy.matricule}</span>
+              {incident.user?.firstName ?? '—'} {incident.user?.lastName ?? ''}
+              <span className="font-mono text-muted-foreground"> #{incident.user?.matricule ?? ''}</span>
             </p>
             <p className="text-xs text-muted-foreground">
               {new Date(incident.declaredAt).toLocaleDateString('fr-FR', {
@@ -396,15 +349,19 @@ export default function AdminIncidentDetailPage() {
       <Card>
         <CardContent className="p-4">
           <h3 className="text-sm font-semibold mb-4">Historique</h3>
-          <div className="space-y-0">
-            {incident.history.map((entry, idx) => (
-              <TimelineEntry
-                key={entry.id}
-                entry={entry}
-                isLast={idx === incident.history.length - 1}
-              />
-            ))}
-          </div>
+          {incident.history.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Aucun événement enregistré pour cet incident.</p>
+          ) : (
+            <div className="space-y-0">
+              {incident.history.map((entry, idx) => (
+                <TimelineEntry
+                  key={entry.id}
+                  entry={entry}
+                  isLast={idx === incident.history.length - 1}
+                />
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -37,6 +37,15 @@ public class NotificationServiceImpl implements NotificationService {
                 .map(this::toResponse);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public Page<NotificationResponse> getAllNotificationsForUser(Long userId, Pageable pageable) {
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+        return notificationRepository.findByRecipient(user, pageable)
+                .map(this::toResponse);
+    }
+
     private NotificationResponse toResponse(NotificationEntity entity) {
         return new NotificationResponse(
                 entity.getId(),

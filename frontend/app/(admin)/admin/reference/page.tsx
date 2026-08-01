@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   Building2,
@@ -12,34 +12,42 @@ import {
   Search,
   Edit3,
   Trash2,
-  ArrowLeft,
   AlertTriangle,
   ShieldAlert,
   Wrench,
   MessageSquare,
   Zap,
   Settings,
+  Loader2,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-
-// ── Reference Data Types ──────────────────────────
-
-interface RefDataItem {
-  id: string;
-  name: string;
-  parent?: string;
-}
-
-interface RefDataTab {
-  key: string;
-  label: string;
-  icon: React.ElementType;
-  items: RefDataItem[];
-}
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useAsync, extractErrorMessage } from '@/lib/use-async';
+import {
+  getCategories,
+  getDepartments,
+  getSections,
+  getProductionLines,
+  getStations,
+  createCategory,
+  createDepartment,
+  createSection,
+  createProductionLine,
+  createStation,
+  deleteCategory,
+  deleteDepartment,
+  deleteSection,
+  deleteProductionLine,
+  deleteStation,
+} from '@/services/referenceService';
 
 // ── Category → Icon Map ───────────────────────────
 
@@ -55,62 +63,83 @@ function getCategoryIcon(name: string): React.ElementType {
   return CATEGORY_ICONS[name] ?? FolderTree;
 }
 
-// ── Mock Data ─────────────────────────────────────
+// ── Tab configuration (real API endpoints) ────────
 
-const REF_DATA: RefDataTab[] = [
+interface RefTab {
+  key: string;
+  label: string;
+  icon: React.ElementType;
+  /** Raw fetch result — each tab maps it to { id, name, parent? } */
+  fetch: () => Promise<unknown[]>;
+  create: (name: string) => Promise<unknown>;
+  remove: (id: number) => Promise<void>;
+  emptyTitle: string;
+  emptyCta: string;
+  /** Map a raw record to the display shape */
+  toItem: (raw: unknown) => { id: number; name: string; parent?: string };
+}
+
+const REF_TABS: RefTab[] = [
   {
     key: 'categories',
     label: 'Catégories',
     icon: FolderTree,
-    items: [
-      { id: '1', name: 'Sécurité' },
-      { id: '2', name: 'Accident' },
-      { id: '3', name: 'Réclamation' },
-      { id: '4', name: 'Mécanique' },
-      { id: '5', name: 'Électrique' },
-    ],
+    fetch: getCategories,
+    create: createCategory,
+    remove: deleteCategory,
+    emptyTitle: 'Aucune catégorie configurée.',
+    emptyCta: '+ Ajouter une catégorie',
+    toItem: (raw) => ({ id: (raw as { id: number }).id, name: (raw as { name: string }).name }),
   },
   {
     key: 'departments',
     label: 'Départements',
     icon: Building2,
-    items: [
-      { id: '1', name: 'Assemblage' },
-      { id: '2', name: 'Usinage' },
-      { id: '3', name: 'Peinture' },
-      { id: '4', name: 'Soudure' },
-      { id: '5', name: 'Logistique' },
-    ],
+    fetch: getDepartments,
+    create: createDepartment,
+    remove: deleteDepartment,
+    emptyTitle: 'Aucun département disponible.',
+    emptyCta: '+ Créer un département',
+    toItem: (raw) => ({ id: (raw as { id: number }).id, name: (raw as { name: string }).name }),
   },
   {
     key: 'sections',
     label: 'Sections',
     icon: LayoutGrid,
-    items: [
-      { id: '1', name: 'Section A', parent: 'Assemblage' },
-      { id: '2', name: 'Section B', parent: 'Usinage' },
-      { id: '3', name: 'Section C', parent: 'Peinture' },
-    ],
+    fetch: getSections,
+    create: createSection,
+    remove: deleteSection,
+    emptyTitle: 'Aucune section enregistrée.',
+    emptyCta: '+ Ajouter',
+    toItem: (raw) => ({ id: (raw as { id: number }).id, name: (raw as { name: string }).name }),
   },
   {
     key: 'production-lines',
     label: 'Lignes de production',
     icon: MapPin,
-    items: [
-      { id: '1', name: 'Ligne 1', parent: 'Assemblage' },
-      { id: '2', name: 'Ligne 2', parent: 'Usinage' },
-      { id: '3', name: 'Ligne 3', parent: 'Peinture' },
-    ],
+    fetch: getProductionLines,
+    create: (name) => createProductionLine(name, null),
+    remove: deleteProductionLine,
+    emptyTitle: 'Aucune ligne de production enregistrée.',
+    emptyCta: '+ Ajouter',
+    toItem: (raw) => {
+      const r = raw as { id: number; name: string; section: { name: string } | null };
+      return { id: r.id, name: r.name, parent: r.section?.name ?? undefined };
+    },
   },
   {
     key: 'stations',
     label: 'Stations',
     icon: Cpu,
-    items: [
-      { id: '1', name: 'Station 1-1', parent: 'Ligne 1' },
-      { id: '2', name: 'Station 1-2', parent: 'Ligne 1' },
-      { id: '3', name: 'Station 2-1', parent: 'Ligne 2' },
-    ],
+    fetch: getStations,
+    create: (name) => createStation(name, null),
+    remove: deleteStation,
+    emptyTitle: 'Aucune station enregistrée.',
+    emptyCta: '+ Ajouter',
+    toItem: (raw) => ({
+      id: (raw as { id: number }).id,
+      name: (raw as { code: string }).code,
+    }),
   },
 ];
 
@@ -122,10 +151,10 @@ function TabButton({
   onClick,
   count,
 }: {
-  tab: RefDataTab;
+  tab: RefTab;
   isActive: boolean;
   onClick: () => void;
-  count: number;
+  count: number | null;
 }) {
   const Icon = tab.icon;
   return (
@@ -141,7 +170,7 @@ function TabButton({
     >
       <Icon className="h-4 w-4 shrink-0" />
       <span className="flex-1">{tab.label}</span>
-      <span className="text-xs text-muted-foreground/60">{count}</span>
+      {count != null && <span className="text-xs text-muted-foreground/60">{count}</span>}
     </button>
   );
 }
@@ -153,15 +182,30 @@ function ReferenceDataContent() {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
 
-  const initialTab = tabParam && REF_DATA.find((t) => t.key === tabParam)
+  const initialTab = tabParam && REF_TABS.some((t) => t.key === tabParam)
     ? tabParam
-    : REF_DATA[0].key;
+    : REF_TABS[0].key;
 
   const [activeTab, setActiveTab] = useState(initialTab);
   const [search, setSearch] = useState('');
   const [deleteGuard, setDeleteGuard] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [busyDeleteId, setBusyDeleteId] = useState<number | null>(null);
 
-  const activeSection = REF_DATA.find((t) => t.key === activeTab)!;
+  const activeSection = REF_TABS.find((t) => t.key === activeTab)!;
+
+  const { data, loading, error, refetch } = useAsync(activeSection.fetch, [activeTab]);
+
+  const items = useMemo(
+    () =>
+      (data ?? []).map((item) => {
+        const mapped = activeSection.toItem(item);
+        return { id: String(mapped.id), name: mapped.name, parent: mapped.parent };
+      }),
+    [data, activeSection],
+  );
 
   const handleTabChange = (key: string) => {
     setActiveTab(key);
@@ -170,25 +214,48 @@ function ReferenceDataContent() {
     router.replace(`/admin/reference?tab=${key}`, { scroll: false });
   };
 
-  const handleDeleteClick = (itemName: string) => {
-    // Simulate checking if item is referenced by incidents
-    const linkedIncidents = Math.floor(Math.random() * 3); // Mock
-    if (linkedIncidents > 0) {
-      setDeleteGuard(
-        `Impossible de supprimer : « ${itemName} » est lié à ${linkedIncidents} incident(s). Supprimez d'abord les incidents associés.`,
-      );
-      setTimeout(() => setDeleteGuard(null), 4000);
-    } else {
-      // Proceed with deletion (mock)
-      setDeleteGuard(null);
+  const handleAdd = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    setAdding(true);
+    setDeleteGuard(null);
+    try {
+      await activeSection.create(name);
+      setAddOpen(false);
+      setNewName('');
+      refetch();
+    } catch (err) {
+      setDeleteGuard(extractErrorMessage(err));
+    } finally {
+      setAdding(false);
     }
   };
 
-  const filteredItems = activeSection.items.filter((item) =>
+  const handleDeleteClick = async (id: string, itemName: string) => {
+    setBusyDeleteId(Number(id));
+    setDeleteGuard(null);
+    try {
+      await activeSection.remove(Number(id));
+      refetch();
+    } catch (err) {
+      // Friendly guard from the backend's 409 handler
+      setDeleteGuard(
+        extractErrorMessage(err) ??
+          `Impossible de supprimer : « ${itemName} » est référencé par des données existantes.`,
+      );
+    } finally {
+      setBusyDeleteId(null);
+    }
+  };
+
+  const filteredItems = items.filter((item) =>
     search
       ? item.name.toLowerCase().includes(search.toLowerCase())
       : true,
   );
+
+  const showEmpty = !loading && !error && items.length === 0 && !search;
+  const showFilteredEmpty = !loading && !error && search && filteredItems.length === 0;
 
   return (
     <>
@@ -200,16 +267,18 @@ function ReferenceDataContent() {
         </p>
       </div>
 
+      {error && <ErrorState message={error} onRetry={refetch} />}
+
       <div className="flex flex-col gap-6 lg:flex-row">
         {/* Left sidebar — section tabs */}
         <div className="w-full lg:w-56 shrink-0 space-y-1">
-          {REF_DATA.map((tab) => (
+          {REF_TABS.map((tab) => (
             <TabButton
               key={tab.key}
               tab={tab}
               isActive={activeTab === tab.key}
               onClick={() => handleTabChange(tab.key)}
-              count={tab.items.length}
+              count={data && tab.key === activeTab ? data.length : null}
             />
           ))}
         </div>
@@ -220,9 +289,11 @@ function ReferenceDataContent() {
             <div className="flex items-center gap-2">
               <activeSection.icon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
               <h2 className="text-lg font-semibold">{activeSection.label}</h2>
-              <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">
-                {activeSection.items.length}
-              </span>
+              {!loading && data && (
+                <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">
+                  {data.length}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-3">
               <div className="relative w-full sm:w-56">
@@ -234,10 +305,38 @@ function ReferenceDataContent() {
                   className="h-9 w-full pl-9 text-sm"
                 />
               </div>
-              <Button size="sm" className="h-9 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white">
-                <Plus className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Ajouter</span>
-              </Button>
+              <Dialog open={addOpen} onOpenChange={setAddOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" className="h-9 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white">
+                    <Plus className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Ajouter</span>
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-sm">
+                  <DialogHeader>
+                    <DialogTitle>Ajouter {activeSection.label.toLowerCase()}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-1.5 py-2">
+                    <Label htmlFor="ref-name">Nom</Label>
+                    <Input
+                      id="ref-name"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      placeholder="Nom..."
+                    />
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      onClick={handleAdd}
+                      disabled={!newName.trim() || adding}
+                      className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      {adding && <Loader2 className="h-4 w-4 animate-spin" />}
+                      Ajouter
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
 
@@ -251,13 +350,32 @@ function ReferenceDataContent() {
 
           <Card>
             <CardContent className="p-0">
-              {filteredItems.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <activeSection.icon className="h-10 w-10 text-muted-foreground/30 mb-3" />
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Aucun élément trouvé.
-                  </p>
+              {loading ? (
+                <div className="divide-y divide-border">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3 px-4 py-3.5">
+                      <Skeleton className="h-8 w-8 rounded-lg" />
+                      <Skeleton className="h-4 w-48" />
+                    </div>
+                  ))}
                 </div>
+              ) : showEmpty ? (
+                <EmptyState
+                  compact
+                  icon={activeSection.icon}
+                  title={activeSection.emptyTitle}
+                  description="Ajoutez un élément pour commencer à l'utiliser dans le système."
+                  actionLabel={activeSection.emptyCta}
+                  onAction={() => setAddOpen(true)}
+                />
+              ) : showFilteredEmpty ? (
+                <EmptyState
+                  compact
+                  icon={activeSection.icon}
+                  title="Aucun résultat ne correspond à vos filtres actuels."
+                  actionLabel="Effacer les filtres"
+                  onAction={() => setSearch('')}
+                />
               ) : (
                 <div className="divide-y divide-border">
                   {filteredItems.map((item) => {
@@ -288,16 +406,22 @@ function ReferenceDataContent() {
                           <button
                             type="button"
                             className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
+                            title="Modifier (bientôt disponible)"
                           >
                             <Edit3 className="h-3.5 w-3.5" />
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDeleteClick(item.name)}
+                            disabled={busyDeleteId === Number(item.id)}
+                            onClick={() => handleDeleteClick(item.id, item.name)}
                             className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
                             title="Supprimer"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            {busyDeleteId === Number(item.id) ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
                           </button>
                         </div>
                       </div>
@@ -316,8 +440,6 @@ function ReferenceDataContent() {
 // ── Page with Suspense boundary ────────────────────
 
 export default function AdminReferenceDataPage() {
-  const router = useRouter();
-
   return (
     <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8">
       <div className="max-w-5xl mx-auto space-y-6">

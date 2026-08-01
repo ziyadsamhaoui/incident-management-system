@@ -27,20 +27,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import apiClient from '@/lib/api-client';
-import type { SetDepartmentPayload } from '@/types/user';
-
-//  Mock departments (will be replaced by API call) 
-
-const MOCK_DEPARTMENTS = [
-  { id: 'dept_1', name: 'Assembly Line A' },
-  { id: 'dept_2', name: 'Assembly Line B' },
-  { id: 'dept_3', name: 'Painting Workshop' },
-  { id: 'dept_4', name: 'Quality Control' },
-  { id: 'dept_5', name: 'Logistics & Supply' },
-  { id: 'dept_6', name: 'Maintenance' },
-  { id: 'dept_7', name: 'Packaging' },
-];
+import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useAsync, extractErrorMessage } from '@/lib/use-async';
+import { getDepartments } from '@/services/referenceService';
+import { setMyDepartment } from '@/services/userService';
 
 //  Page 
 
@@ -54,6 +46,10 @@ export default function OnboardingDepartmentPage() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Real departments from /api/reference-data/departments
+  const { data: departments, loading: depsLoading, error: depsError, refetch: refetchDeps } =
+    useAsync(getDepartments, []);
+
   const primaryRole = roles[0]?.replace('ROLE_', '') ?? '';
   const displayName =
     lastName && firstName
@@ -66,21 +62,20 @@ export default function OnboardingDepartmentPage() {
     setIsSubmitting(true);
     setError(null);
 
-    // Find the selected department name
-    const dept = MOCK_DEPARTMENTS.find((d) => d.id === selectedDept);
+    const deptId = Number(selectedDept);
+    const dept = departments?.find((d) => d.id === deptId);
     const deptName = dept?.name ?? selectedDept;
 
     try {
-      // Try real API first
-      await apiClient.patch('/api/users/me/department', {
-        departmentId: selectedDept,
-      } satisfies SetDepartmentPayload);
-    } catch {
-      // Silently accept in dev mode (backend may not be available)
+      await setMyDepartment({ departmentId: deptId });
+    } catch (err) {
+      setError(extractErrorMessage(err));
+      setIsSubmitting(false);
+      return;
     }
 
     // Update local auth store so the onboarding guard doesn't loop
-    setDepartment(selectedDept, deptName);
+    setDepartment(String(deptId), deptName);
 
     setSuccess(true);
 
@@ -88,7 +83,7 @@ export default function OnboardingDepartmentPage() {
     setTimeout(() => {
       router.replace('/chef-atelier');
     }, 1500);
-  }, [selectedDept, setDepartment, router]);
+  }, [selectedDept, departments, setDepartment, router]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4 dark:from-slate-950 dark:to-slate-900">
@@ -135,24 +130,37 @@ export default function OnboardingDepartmentPage() {
                   <label className="text-sm font-medium text-muted-foreground">
                     Département <span className="text-destructive">*</span>
                   </label>
-                  <Select
-                    value={selectedDept ?? ''}
-                    onValueChange={(val) => {
-                      setSelectedDept(val);
-                      if (error) setError(null);
-                    }}
-                  >
-                    <SelectTrigger className="h-12 w-full rounded-xl">
-                      <SelectValue placeholder="Sélectionnez un département..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MOCK_DEPARTMENTS.map((dept) => (
-                        <SelectItem key={dept.id} value={dept.id}>
-                          {dept.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {depsError ? (
+                    <ErrorState compact message={depsError} onRetry={refetchDeps} />
+                  ) : depsLoading ? (
+                    <Skeleton className="h-12 w-full rounded-xl" />
+                  ) : !departments || departments.length === 0 ? (
+                    <EmptyState
+                      compact
+                      icon={Building2}
+                      title="Aucun département disponible."
+                      description="Contactez un administrateur pour configurer votre département."
+                    />
+                  ) : (
+                    <Select
+                      value={selectedDept ?? ''}
+                      onValueChange={(val) => {
+                        setSelectedDept(val);
+                        if (error) setError(null);
+                      }}
+                    >
+                      <SelectTrigger className="h-12 w-full rounded-xl">
+                        <SelectValue placeholder="Sélectionnez un département..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {departments.map((dept) => (
+                          <SelectItem key={dept.id} value={String(dept.id)}>
+                            {dept.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
 
                 {/* Security notice */}

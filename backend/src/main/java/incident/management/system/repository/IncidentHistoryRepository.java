@@ -1,14 +1,18 @@
 package incident.management.system.repository;
 
+import incident.management.system.enums.IncidentStatus;
 import incident.management.system.model.IncidentEntity;
 import incident.management.system.model.IncidentHistory;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
 public interface IncidentHistoryRepository extends JpaRepository<IncidentHistory, Long> {
 
     List<IncidentHistory> findByIncidentOrderByChangedAtAsc(IncidentEntity incident);
+
+    List<IncidentHistory> findByCurrentStatusInAndChangedAtAfter(List<IncidentStatus> statuses, LocalDateTime after);
 }

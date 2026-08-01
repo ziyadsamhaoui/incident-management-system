@@ -12,47 +12,21 @@ import {
   Shield,
   MessageSquare,
   ShieldCheck,
+  Loader2,
+  AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 import { getStatusConfig } from '@/lib/constants/incidentStatus';
 import { IncidentDetailDrawer } from '@/components/incidents/incident-detail-drawer';
 import { WelcomeOverlay } from '@/components/auth/WelcomeOverlay';
-
-// ── Types ─────────────────────────────────────────
-
-interface IncidentRow {
-  id: number;
-  reference: string;
-  declaredAt: string;
-  category: string;
-  status: string;
-  description: string;
-}
-
-// ── Relative date helpers for mock data ───────────
-
-/** Return an ISO date string `daysAgo` days before now, with a pseudo-unique hour offset. */
-function daysAgo(days: number, hourOffset = 0): string {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  d.setHours(8 + hourOffset, 15 + (hourOffset * 7) % 60, 0, 0);
-  return d.toISOString();
-}
-
-// ── Mock data with timestamps spanning 3 recency buckets ──
-
-const MOCK_INCIDENTS: IncidentRow[] = [
-  // Aujourd'hui (today)
-  { id: 1, reference: 'INC202607290001', declaredAt: daysAgo(0, 1), category: 'Sécurité', status: 'DECLARED', description: 'Barrière de sécurité endommagée sur la ligne 3' },
-  { id: 2, reference: 'INC202607290002', declaredAt: daysAgo(0, 3), category: 'Accident', status: 'CLAIMED', description: "Opérateur a glissé sur une flaque d'huile" },
-  // Cette semaine (within 7 days, not today)
-  { id: 3, reference: 'INC202607260001', declaredAt: daysAgo(3, 2), category: 'Réclamation', status: 'IN_PROGRESS', description: 'Bruit anormal provenant du moteur principal' },
-  { id: 4, reference: 'INC202607240001', declaredAt: daysAgo(5, 4), category: 'Sécurité', status: 'RESOLVED', description: 'Extincteur manquant au poste de soudure' },
-  // Plus ancien (over 7 days)
-  { id: 5, reference: 'INC202607150001', declaredAt: daysAgo(14, 0), category: 'Accident', status: 'CLOSED', description: 'Coupure légère lors du changement de lame' },
-  { id: 6, reference: 'INC202607100001', declaredAt: daysAgo(19, 5), category: 'Réclamation', status: 'NON_RESOLVED', description: 'Pièces de rechange non conformes livrées' },
-];
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
+import { useAsync } from '@/lib/use-async';
+import { getIncidents } from '@/services/incidentService';
+import { getMe } from '@/services/userService';
+import type { IncidentDTO } from '@/types/incident';
 
 // ── Date Helpers ──────────────────────────────────
 
@@ -101,15 +75,15 @@ type BucketKey = 'aujourdhui' | 'cette_semaine' | 'plus_ancien';
 interface Bucket {
   key: BucketKey;
   label: string;
-  incidents: IncidentRow[];
+  incidents: IncidentDTO[];
 }
 
-function getDateBuckets(incidents: IncidentRow[]): Bucket[] {
+function getDateBuckets(incidents: IncidentDTO[]): Bucket[] {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const sevenDaysAgo = new Date(today.getTime() - 7 * 86400000);
 
-  const buckets: Record<BucketKey, IncidentRow[]> = {
+  const buckets: Record<BucketKey, IncidentDTO[]> = {
     aujourdhui: [],
     cette_semaine: [],
     plus_ancien: [],
@@ -127,7 +101,6 @@ function getDateBuckets(incidents: IncidentRow[]): Bucket[] {
     }
   }
 
-  // Return only non-empty buckets, preserving chronological order
   return (
     [
       { key: 'aujourdhui' as const, label: "Aujourd'hui", incidents: buckets.aujourdhui },
@@ -189,7 +162,7 @@ function IncidentCard({
   incident,
   onSelect,
 }: {
-  incident: IncidentRow;
+  incident: IncidentDTO;
   onSelect: (id: string) => void;
 }) {
   const config = getStatusConfig(incident.status);
@@ -245,31 +218,21 @@ function IncidentCard({
   );
 }
 
-// ── Empty State ───────────────────────────────────
+// ── Feed skeleton ─────────────────────────────────
 
-function EmptyState({ onDeclare }: { onDeclare: () => void }) {
+function FeedSkeleton() {
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-      <ShieldCheck className="text-slate-300 dark:text-slate-700 w-16 h-16 mb-4" />
-      <p className="text-base font-medium text-slate-600 dark:text-slate-400 mb-6">
-        Vous n&apos;avez aucun incident en cours.
-      </p>
-      <button
-        type="button"
-        onClick={onDeclare}
-        className={cn(
-          'flex items-center gap-3 rounded-2xl px-6 py-4',
-          'bg-blue-600 hover:bg-blue-700 active:bg-blue-800',
-          'text-white shadow-lg',
-          'transition-all duration-200',
-          'hover:shadow-xl active:shadow-sm',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2',
-        )}
-      >
-        <PlusCircle className="h-6 w-6 shrink-0" />
-        <span className="font-semibold text-base">Déclarer un incident</span>
-        <ChevronRight className="h-5 w-5 ml-auto shrink-0 text-white/70" />
-      </button>
+    <div className="space-y-3">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} className="rounded-xl border border-slate-200/80 dark:border-slate-800 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-3 w-16" />
+          </div>
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="h-4 w-24" />
+        </div>
+      ))}
     </div>
   );
 }
@@ -285,12 +248,21 @@ export default function SousChefIncidentsPage() {
   // Drawer
   const [drawerIncidentId, setDrawerIncidentId] = useState<string | null>(null);
 
+  // Real data — current user + their declared incidents
+  const { data: me } = useAsync(getMe, []);
+  const { data: page, loading, error, refetch } = useAsync(
+    () => (me ? getIncidents({ userId: me.id, page: 0, size: 100 }) : Promise.resolve(null)),
+    [me],
+  );
+
+  const incidents = useMemo(() => page?.content ?? [], [page]);
+
   // Memoised date buckets
-  const buckets = useMemo(() => getDateBuckets(MOCK_INCIDENTS), []);
+  const buckets = useMemo(() => getDateBuckets(incidents), [incidents]);
 
   // Derived counts
-  const totalDeclared = MOCK_INCIDENTS.length;
-  const enCours = MOCK_INCIDENTS.filter(
+  const totalDeclared = incidents.length;
+  const enCours = incidents.filter(
     (i) => i.status === 'IN_PROGRESS' || i.status === 'CLAIMED',
   ).length;
 
@@ -350,23 +322,36 @@ export default function SousChefIncidentsPage() {
             </motion.button>
           </div>
 
+          {/* Error banner */}
+          {error && <ErrorState message={error} onRetry={refetch} />}
+
           {/* Activity summary */}
-          <div className="flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400">
-            <Clock className="h-4 w-4" />
-            <span>
-              {totalDeclared} incident{totalDeclared > 1 ? 's' : ''} déclaré
-              {totalDeclared > 1 ? 's' : ''}
-            </span>
-            <span className="text-slate-300 dark:text-slate-600">·</span>
-            <span>{enCours} en cours</span>
-          </div>
+          {!loading && !error && (
+            <div className="flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400">
+              <Clock className="h-4 w-4" />
+              <span>
+                {totalDeclared} incident{totalDeclared > 1 ? 's' : ''} déclaré
+                {totalDeclared > 1 ? 's' : ''}
+              </span>
+              <span className="text-slate-300 dark:text-slate-600">·</span>
+              <span>{enCours} en cours</span>
+            </div>
+          )}
 
           {/* Sectioned incident feed */}
-          <div className="space-y-6">
-            {totalDeclared === 0 ? (
-              <EmptyState onDeclare={goToDeclare} />
-            ) : (
-              buckets.map((bucket) => (
+          {loading ? (
+            <FeedSkeleton />
+          ) : !error && totalDeclared === 0 ? (
+            <EmptyState
+              icon={ShieldCheck}
+              title="Aucun incident en cours dans le système."
+              description="Vous n'avez pas encore déclaré d'incident. Signalez un problème sur votre poste de travail."
+              actionLabel="Déclarer un incident"
+              onAction={goToDeclare}
+            />
+          ) : (
+            <div className="space-y-6">
+              {buckets.map((bucket) => (
                 <div key={bucket.key} className="space-y-3">
                   <SectionHeader label={bucket.label} />
                   {bucket.incidents.map((inc) => (
@@ -377,9 +362,9 @@ export default function SousChefIncidentsPage() {
                     />
                   ))}
                 </div>
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

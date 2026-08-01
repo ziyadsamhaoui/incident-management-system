@@ -3,10 +3,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Loader2, AlertTriangle } from 'lucide-react';
-import { getIncidentById } from '@/services/incidentService';
+import { X, Loader2, AlertTriangle, RotateCw } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { getIncidentDetail } from '@/services/incidentService';
+import { extractErrorMessage } from '@/lib/use-async';
 import { IncidentDetailContent } from '@/components/incidents/incident-detail-content';
-import type { IncidentDetailDTO } from '@/types/incident';
+import type { IncidentDetailDTO, IncidentDTO } from '@/types/incident';
 
 // ── Framer Motion Variants ───────────────────────
 
@@ -49,9 +51,10 @@ export function IncidentDetailDrawer({
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const [incident, setIncident] = useState<IncidentDetailDTO | null>(null);
+  const [incident, setIncident] = useState<IncidentDTO | IncidentDetailDTO | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
 
   const isOpen = incidentId !== null;
 
@@ -70,33 +73,14 @@ export function IncidentDetailDrawer({
       setLoading(true);
       setError(null);
       try {
-        const data = await getIncidentById(safeId);
+        const data = await getIncidentDetail(safeId);
         if (!cancelled) {
           setIncident(data);
         }
-      } catch {
+      } catch (err) {
         if (!cancelled) {
-          // Mock fallback
-          setIncident({
-            id: safeId,
-            reference: 'INC-' + safeId.padStart(6, '0'),
-            status: 'DECLARED',
-            priority: 'MEDIUM',
-            department: 'Assembly',
-            station: 'Line 1 - Station 3',
-            category: 'Mechanical',
-            description: "Détails de l'incident non disponibles actuellement.",
-            createdAt: new Date().toISOString(),
-            declaredAt: new Date().toISOString(),
-            claimedAt: null,
-            inProgressAt: null,
-            resolvedAt: null,
-            closedAt: null,
-            assignedTo: null,
-            resolvedBy: null,
-            resolutionNote: null,
-            history: [],
-          });
+          setIncident(null);
+          setError(extractErrorMessage(err));
         }
       } finally {
         if (!cancelled) {
@@ -110,7 +94,7 @@ export function IncidentDetailDrawer({
     return () => {
       cancelled = true;
     };
-  }, [incidentId]);
+  }, [incidentId, reloadTick]);
 
   // Escape key listener
   useEffect(() => {
@@ -139,8 +123,13 @@ export function IncidentDetailDrawer({
   }, [isOpen]);
 
   const handleIncidentUpdated = useCallback(
-    (updated: IncidentDetailDTO) => {
-      setIncident(updated);
+    (updated: IncidentDTO | IncidentDetailDTO) => {
+      // Keep the already-loaded audit history visible after an inline action
+      // (mutation responses return a plain IncidentDTO without history).
+      setIncident((prev) => ({
+        ...updated,
+        history: prev && 'history' in prev ? prev.history : [],
+      }));
     },
     [],
   );
@@ -206,12 +195,30 @@ export function IncidentDetailDrawer({
                 <p className="text-sm text-muted-foreground text-center">
                   {error}
                 </p>
-                <button
-                  onClick={onClose}
-                  className="text-sm text-primary underline underline-offset-4 hover:text-primary/80"
-                >
-                  Fermer
-                </button>
+                <div className="flex items-center gap-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setError(null);
+                      setIncident(null);
+                      // Re-run the load effect
+                      setReloadTick((t) => t + 1);
+                    }}
+                    className="gap-1.5"
+                  >
+                    <RotateCw className="h-3.5 w-3.5" />
+                    Réessayer
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={onClose}
+                    className="text-muted-foreground"
+                  >
+                    Fermer
+                  </Button>
+                </div>
               </div>
             )}
 

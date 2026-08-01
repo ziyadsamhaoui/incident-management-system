@@ -28,6 +28,13 @@ public class NotificationController {
         return ResponseEntity.ok(notificationService.getUnreadNotificationsForUser(userId, pageable));
     }
 
+    @GetMapping("/all")
+    public ResponseEntity<Page<NotificationResponse>> getAllNotifications(
+            @RequestParam Long userId,
+            @PageableDefault(size = 50) Pageable pageable) {
+        return ResponseEntity.ok(notificationService.getAllNotificationsForUser(userId, pageable));
+    }
+
     @PutMapping("/{id}/read")
     public ResponseEntity<Void> markAsRead(@PathVariable Long id) {
         notificationService.markAsRead(id);

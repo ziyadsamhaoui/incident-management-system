@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useNavigationProgress } from '@/components/ui/navigation-progress';
 import { motion } from 'framer-motion';
@@ -13,11 +13,14 @@ import {
   CheckCircle2,
   XCircle,
   UserPlus,
+  Loader2,
+  AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -25,41 +28,48 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
+import { useAsync, extractErrorMessage } from '@/lib/use-async';
+import { getUsers, createUser, promoteUser, deactivateUser } from '@/services/userService';
+import { getDepartments } from '@/services/referenceService';
+import type { UserResponseDTO, CreateUserRequestDTO } from '@/types/user';
 
-// ── Mock Data ─────────────────────────────────────
+// ── Labels ────────────────────────────────────────
 
-interface MockUser {
-  id: number;
-  firstName: string;
-  lastName: string;
-  matricule: string;
-  role: 'SOUS_CHEF' | 'CHEF_ATELIER' | 'ADMIN';
-  department: string;
-  status: 'active' | 'pending_approval' | 'pending_activation';
-  claimed: boolean;
-}
+const ROLE_LABELS: Record<string, string> = {
+  SOUS_CHEF: 'Opérateur',
+  CHEF_ATELIER: "Chef d'atelier",
+  ADMIN: 'Administrateur',
+};
 
-const MOCK_USERS: MockUser[] = [
-  { id: 1, firstName: 'Ahmed', lastName: 'Amraoui', matricule: '1005', role: 'CHEF_ATELIER', department: 'Assemblage', status: 'active', claimed: true },
-  { id: 2, firstName: 'Fatima', lastName: 'Zahra', matricule: '1042', role: 'CHEF_ATELIER', department: 'Peinture', status: 'pending_approval', claimed: true },
-  { id: 3, firstName: 'Youssef', lastName: 'El Amrani', matricule: '1085', role: 'SOUS_CHEF', department: 'Usinage', status: 'active', claimed: true },
-  { id: 4, firstName: 'Mohammed', lastName: 'Alaoui', matricule: '1078', role: 'SOUS_CHEF', department: 'Logistique', status: 'active', claimed: true },
-  { id: 5, firstName: 'Khadija', lastName: 'Bennani', matricule: '1102', role: 'CHEF_ATELIER', department: 'Soudure', status: 'pending_activation', claimed: false },
-  { id: 6, firstName: 'Hassan', lastName: 'Ouazzani', matricule: '1125', role: 'SOUS_CHEF', department: 'Assemblage', status: 'active', claimed: true },
-  { id: 7, firstName: 'Nadia', lastName: 'Fassi', matricule: '1141', role: 'CHEF_ATELIER', department: 'Usinage', status: 'pending_approval', claimed: true },
-  { id: 8, firstName: 'Omar', lastName: 'Bennis', matricule: '1158', role: 'SOUS_CHEF', department: 'Peinture', status: 'active', claimed: true },
-];
+const ROLE_COLORS: Record<string, string> = {
+  SOUS_CHEF: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  CHEF_ATELIER: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  ADMIN: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+};
 
-// ── Pending Request Card ──────────────────────────
+// ── Pending Request Card (real SOUS_CHEF users awaiting promotion) ──
 
 function PendingRequestCard({
   user,
   onApprove,
   onReject,
+  busy,
 }: {
-  user: MockUser;
-  onApprove: (id: number) => void;
-  onReject: (id: number) => void;
+  user: UserResponseDTO;
+  onApprove: () => void;
+  onReject: () => void;
+  busy: boolean;
 }) {
   return (
     <motion.div
@@ -76,7 +86,7 @@ function PendingRequestCard({
             {user.firstName} {user.lastName}
           </p>
           <p className="text-xs text-muted-foreground">
-            #{user.matricule} · {user.department}
+            #{user.matricule} · {user.department?.name ?? 'Non assigné'}
             <span className="mx-1">·</span>
             <span className="text-blue-600 dark:text-blue-400 font-medium">
               Promotion Chef d&apos;atelier
@@ -88,17 +98,23 @@ function PendingRequestCard({
         <Button
           size="sm"
           variant="ghost"
-          onClick={() => onReject(user.id)}
+          onClick={onReject}
+          disabled={busy}
           className="h-8 w-8 p-0 text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
         >
           <XCircle className="h-4 w-4" />
         </Button>
         <Button
           size="sm"
-          onClick={() => onApprove(user.id)}
+          onClick={onApprove}
+          disabled={busy}
           className="h-8 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs"
         >
-          <CheckCircle2 className="h-3.5 w-3.5" />
+          {busy ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <CheckCircle2 className="h-3.5 w-3.5" />
+          )}
           Approuver
         </Button>
       </div>
@@ -106,40 +122,206 @@ function PendingRequestCard({
   );
 }
 
+// ── Create User Modal ─────────────────────────────
+
+function CreateUserModal({
+  open,
+  onOpenChange,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreated: () => void;
+}) {
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [matricule, setMatricule] = useState('');
+  const [role, setRole] = useState<'SOUS_CHEF' | 'CHEF_ATELIER' | 'ADMIN'>('SOUS_CHEF');
+  const [departmentId, setDepartmentId] = useState<string>('none');
+  const [password, setPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const { data: departments } = useAsync(getDepartments, []);
+
+  const isValid =
+    firstName.trim() !== '' &&
+    lastName.trim() !== '' &&
+    matricule.trim() !== '' &&
+    password.trim() !== '' &&
+    !Number.isNaN(Number(matricule));
+
+  const handleSubmit = async () => {
+    if (!isValid) return;
+    setSubmitting(true);
+    setError(null);
+    const payload: CreateUserRequestDTO = {
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      password,
+      matricule: Number(matricule),
+      role,
+      departmentId: departmentId === 'none' ? null : Number(departmentId),
+    };
+    try {
+      await createUser(payload);
+      onOpenChange(false);
+      setFirstName('');
+      setLastName('');
+      setMatricule('');
+      setPassword('');
+      setRole('SOUS_CHEF');
+      setDepartmentId('none');
+      onCreated();
+    } catch (err) {
+      setError(extractErrorMessage(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Nouvel utilisateur</DialogTitle>
+          <DialogDescription>
+            Créez un compte opérateur, chef d&apos;atelier ou administrateur.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="new-user-firstname">Prénom</Label>
+              <Input
+                id="new-user-firstname"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder="Ahmed"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="new-user-lastname">Nom</Label>
+              <Input
+                id="new-user-lastname"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                placeholder="Amraoui"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="new-user-matricule">Matricule</Label>
+              <Input
+                id="new-user-matricule"
+                value={matricule}
+                onChange={(e) => setMatricule(e.target.value)}
+                placeholder="1005"
+                inputMode="numeric"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Rôle</Label>
+              <Select value={role} onValueChange={(v) => setRole(v as 'SOUS_CHEF' | 'CHEF_ATELIER' | 'ADMIN')}>
+                <SelectTrigger className="h-10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SOUS_CHEF">Opérateur</SelectItem>
+                  <SelectItem value="CHEF_ATELIER">Chef d'atelier</SelectItem>
+                  <SelectItem value="ADMIN">Administrateur</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Département</Label>
+            <Select value={departmentId} onValueChange={setDepartmentId}>
+              <SelectTrigger className="h-10">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Non assigné</SelectItem>
+                {(departments ?? []).map((dept) => (
+                  <SelectItem key={dept.id} value={String(dept.id)}>
+                    {dept.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="new-user-password">Mot de passe initial</Label>
+            <Input
+              id="new-user-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+            />
+          </div>
+          {error && (
+            <div className="flex items-center gap-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-400">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              {error}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button
+            onClick={handleSubmit}
+            disabled={!isValid || submitting}
+            className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+            Créer l&apos;utilisateur
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Table Skeleton ────────────────────────────────
+
+function TableSkeleton() {
+  return (
+    <div className="space-y-3 p-4">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="flex items-center gap-4">
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-4 w-28" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────
-
-const ROLE_LABELS: Record<string, string> = {
-  SOUS_CHEF: 'Opérateur',
-  CHEF_ATELIER: "Chef d'atelier",
-  ADMIN: 'Administrateur',
-};
-
-const ROLE_COLORS: Record<string, string> = {
-  SOUS_CHEF: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-  CHEF_ATELIER: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  ADMIN: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-};
 
 export default function UsersPage() {
   const router = useRouter();
   const { startNavigation } = useNavigationProgress();
-  const [users] = useState(MOCK_USERS);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
-  const pendingUsers = users.filter(
-    (u) => u.status === 'pending_approval' || u.status === 'pending_activation',
+  const { data, loading, error, refetch } = useAsync(
+    () => getUsers({ page: 0, size: 100 }),
+    [],
   );
 
-  const handleApprove = (id: number) => {
-    console.log('Approve user', id);
-    // TODO: API call
-  };
+  const users = useMemo(() => data?.content ?? [], [data]);
 
-  const handleReject = (id: number) => {
-    console.log('Reject user', id);
-    // TODO: API call
-  };
+  // Real pending-promotion queue: SOUS_CHEF accounts eligible for promotion
+  const pendingUsers = useMemo(
+    () => users.filter((u) => u.role === 'SOUS_CHEF' && u.isActive),
+    [users],
+  );
 
   const filteredUsers = users.filter((u) => {
     if (search) {
@@ -147,13 +329,33 @@ export default function UsersPage() {
       if (
         !u.firstName.toLowerCase().includes(q) &&
         !u.lastName.toLowerCase().includes(q) &&
-        !u.matricule.includes(q)
+        !String(u.matricule).includes(q)
       )
         return false;
     }
     if (roleFilter !== 'all' && u.role !== roleFilter) return false;
     return true;
   });
+
+  const handleApprove = async (id: number) => {
+    setBusyId(id);
+    try {
+      await promoteUser(id);
+      refetch();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleReject = async (id: number) => {
+    setBusyId(id);
+    try {
+      await deactivateUser(id);
+      refetch();
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8">
@@ -168,15 +370,20 @@ export default function UsersPage() {
           </div>
           <button
             type="button"
+            onClick={() => setCreateOpen(true)}
             className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-sm font-medium transition-all active:scale-[0.97]"
           >
             <UserPlus className="h-4 w-4" />
             + Nouvel Utilisateur
           </button>
+          <CreateUserModal open={createOpen} onOpenChange={setCreateOpen} onCreated={refetch} />
         </div>
 
+        {/* Error banner */}
+        {error && <ErrorState message={error} onRetry={refetch} />}
+
         {/* Pending Queue */}
-        {pendingUsers.length > 0 && (
+        {!loading && !error && (
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-amber-500" />
@@ -184,16 +391,30 @@ export default function UsersPage() {
                 Demandes en attente ({pendingUsers.length})
               </span>
             </div>
-            <div className="space-y-2">
-              {pendingUsers.map((user) => (
-                <PendingRequestCard
-                  key={user.id}
-                  user={user}
-                  onApprove={handleApprove}
-                  onReject={handleReject}
-                />
-              ))}
-            </div>
+            {pendingUsers.length === 0 ? (
+              <Card>
+                <CardContent className="p-0">
+                  <EmptyState
+                    compact
+                    icon={CheckCircle2}
+                    title="Aucune demande de promotion en attente"
+                    description="Les opérateurs éligibles à la promotion Chef d'atelier apparaîtront ici."
+                  />
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-2">
+                {pendingUsers.map((user) => (
+                  <PendingRequestCard
+                    key={user.id}
+                    user={user}
+                    busy={busyId === user.id}
+                    onApprove={() => handleApprove(user.id)}
+                    onReject={() => handleReject(user.id)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -224,97 +445,109 @@ export default function UsersPage() {
         {/* Users Table (desktop) / Card List (mobile) */}
         <Card>
           <CardContent className="p-0">
-            {/* Desktop table */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                    <th className="px-4 py-3">Matricule</th>
-                    <th className="px-4 py-3">Nom complet</th>
-                    <th className="px-4 py-3">Rôle</th>
-                    <th className="px-4 py-3">Département</th>
-                    <th className="px-4 py-3">Statut</th>
-                    <th className="px-4 py-3 w-16" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {filteredUsers.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                        Aucun utilisateur trouvé.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredUsers.map((user) => (
-                      <tr key={user.id} className="transition-colors hover:bg-muted/50">
-                        <td className="px-4 py-3">
-                          <span className="font-mono text-sm font-medium">#{user.matricule}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="font-medium text-foreground">
-                            {user.firstName} {user.lastName}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={cn('inline-flex rounded-md px-2 py-0.5 text-xs font-medium', ROLE_COLORS[user.role])}>
-                            {ROLE_LABELS[user.role]}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">{user.department}</td>
-                        <td className="px-4 py-3">
-                          {user.status === 'active' ? (
-                            <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                              <CheckCircle2 className="h-3 w-3" />
-                              Actif
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
-                              <Clock className="h-3 w-3" />
-                              En attente
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <ChevronRight className="inline h-4 w-4 text-muted-foreground" />
-                        </td>
+            {loading ? (
+              <TableSkeleton />
+            ) : filteredUsers.length === 0 ? (
+              <EmptyState
+                icon={Users}
+                title="Aucun utilisateur enregistré."
+                description={
+                  search || roleFilter !== 'all'
+                    ? 'Aucun résultat ne correspond à vos filtres actuels.'
+                    : 'Créez votre premier compte pour commencer.'
+                }
+                actionLabel={search || roleFilter !== 'all' ? 'Effacer les filtres' : '+ Nouvel utilisateur'}
+                onAction={() => {
+                  if (search || roleFilter !== 'all') {
+                    setSearch('');
+                    setRoleFilter('all');
+                  } else {
+                    setCreateOpen(true);
+                  }
+                }}
+              />
+            ) : (
+              <>
+                {/* Desktop table */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                        <th className="px-4 py-3">Matricule</th>
+                        <th className="px-4 py-3">Nom complet</th>
+                        <th className="px-4 py-3">Rôle</th>
+                        <th className="px-4 py-3">Département</th>
+                        <th className="px-4 py-3">Statut</th>
+                        <th className="px-4 py-3 w-16" />
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mobile card list */}
-            <div className="md:hidden divide-y divide-border">
-              {filteredUsers.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <Users className="h-10 w-10 text-muted-foreground/30 mb-3" />
-                  <p className="text-sm text-muted-foreground">Aucun utilisateur trouvé.</p>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {filteredUsers.map((user) => (
+                        <tr key={user.id} className="transition-colors hover:bg-muted/50">
+                          <td className="px-4 py-3">
+                            <span className="font-mono text-sm font-medium">#{user.matricule}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="font-medium text-foreground">
+                              {user.firstName} {user.lastName}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={cn('inline-flex rounded-md px-2 py-0.5 text-xs font-medium', ROLE_COLORS[user.role])}>
+                              {ROLE_LABELS[user.role]}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {user.department?.name ?? '—'}
+                          </td>
+                          <td className="px-4 py-3">
+                            {user.isActive ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                                <CheckCircle2 className="h-3 w-3" />
+                                Actif
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                                <Clock className="h-3 w-3" />
+                                Désactivé
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <ChevronRight className="inline h-4 w-4 text-muted-foreground" />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              ) : (
-                filteredUsers.map((user) => (
-                  <div key={user.id} className="flex items-center gap-3 px-4 py-3.5">
-                    <div className={cn(
-                      'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold',
-                      ROLE_COLORS[user.role],
-                    )}>
-                      {user.firstName[0]}{user.lastName[0]}
+
+                {/* Mobile card list */}
+                <div className="md:hidden divide-y divide-border">
+                  {filteredUsers.map((user) => (
+                    <div key={user.id} className="flex items-center gap-3 px-4 py-3.5">
+                      <div className={cn(
+                        'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold',
+                        ROLE_COLORS[user.role],
+                      )}>
+                        {user.firstName[0]}{user.lastName[0]}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {user.firstName} {user.lastName}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          #{user.matricule} · {user.department?.name ?? 'Non assigné'}
+                        </p>
+                      </div>
+                      <span className={cn('inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium', ROLE_COLORS[user.role])}>
+                        {ROLE_LABELS[user.role]}
+                      </span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {user.firstName} {user.lastName}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        #{user.matricule} · {user.department}
-                      </p>
-                    </div>
-                    <span className={cn('inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium', ROLE_COLORS[user.role])}>
-                      {ROLE_LABELS[user.role]}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
+                  ))}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

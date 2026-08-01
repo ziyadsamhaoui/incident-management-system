@@ -22,33 +22,31 @@ import {
   MessageSquare,
   Zap,
   Settings,
+  Inbox,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { getStatusConfig } from '@/lib/constants/incidentStatus';
 import type { IncidentStatus, IncidentPriority } from '@/types/incident';
+import type { IncidentDTO } from '@/types/incident';
+import {
+  getIncidents,
+  claimIncident,
+  evaluateIncident,
+} from '@/services/incidentService';
+import { getCategories, getDepartments } from '@/services/referenceService';
+import { useAuthStore } from '@/store/useAuthStore';
+import { useAsync, extractErrorMessage } from '@/lib/use-async';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
+import { TableSkeleton } from '@/components/ui/skeleton';
 
-// ── Mock Incidents ────────────────────────────────
+// ── Helpers ───────────────────────────────────────
 
-interface MockIncident {
-  id: string;
-  reference: string;
-  category: string;
-  department: string;
-  priority: IncidentPriority;
-  status: IncidentStatus;
-  declaredBy: { firstName: string; lastName: string; matricule: string };
-  declaredAt: string;
-  claimedAt?: string;
-  inProgressAt?: string;
-  description: string;
-}
-
-const DEPARTMENTS = ['Assemblage', 'Usinage', 'Peinture', 'Soudure', 'Logistique'];
-const CATEGORIES = ['Sécurité', 'Accident', 'Réclamation', 'Mécanique', 'Électrique'];
+const PRIORITY_LABELS: Record<string, string> = { LOW: 'Faible', MEDIUM: 'Moyenne', HIGH: 'Élevée', CRITICAL: 'Critique' };
+const PRIORITY_CLASSES: Record<string, string> = { LOW: 'text-slate-500 bg-slate-100 dark:bg-slate-800', MEDIUM: 'text-amber-600 bg-amber-50 dark:bg-amber-900/20', HIGH: 'text-orange-600 bg-orange-50 dark:bg-orange-900/20', CRITICAL: 'text-red-600 bg-red-50 dark:bg-red-900/20' };
+const PRIORITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
   Sécurité: ShieldAlert,
@@ -58,41 +56,13 @@ const CATEGORY_ICONS: Record<string, React.ElementType> = {
   Électrique: Settings,
 };
 
-const MOCK_INCIDENTS: MockIncident[] = [
-  { id: '1', reference: 'INC-20260730-0001', category: 'Sécurité', department: 'Assemblage', priority: 'CRITICAL', status: 'DECLARED', declaredBy: { firstName: 'Ahmed', lastName: 'Amraoui', matricule: '1005' }, declaredAt: new Date(Date.now() - 30 * 60000).toISOString(), description: 'Détecteur de fumée déclenché sans cause identifiée.' },
-  { id: '2', reference: 'INC-20260730-0002', category: 'Mécanique', department: 'Usinage', priority: 'CRITICAL', status: 'CLAIMED', declaredBy: { firstName: 'Fatima', lastName: 'Zahra', matricule: '1042' }, declaredAt: new Date(Date.now() - 150 * 60000).toISOString(), claimedAt: new Date(Date.now() - 120 * 60000).toISOString(), description: 'Bruit anormal provenant de la fraiseuse CN #3.' },
-  { id: '3', reference: 'INC-20260730-0003', category: 'Électrique', department: 'Peinture', priority: 'HIGH', status: 'IN_PROGRESS', declaredBy: { firstName: 'Youssef', lastName: 'El Amrani', matricule: '1085' }, declaredAt: new Date(Date.now() - 240 * 60000).toISOString(), claimedAt: new Date(Date.now() - 210 * 60000).toISOString(), inProgressAt: new Date(Date.now() - 180 * 60000).toISOString(), description: 'Variation de tension sur la ligne de cabine 2.' },
-  { id: '4', reference: 'INC-20260730-0004', category: 'Réclamation', department: 'Assemblage', priority: 'MEDIUM', status: 'RESOLVED', declaredBy: { firstName: 'Mohammed', lastName: 'Alaoui', matricule: '1078' }, declaredAt: new Date(Date.now() - 1440 * 60000).toISOString(), description: 'Non-conformité signalée sur joint d\'étanchéité.' },
-  { id: '5', reference: 'INC-20260729-0001', category: 'Accident', department: 'Soudure', priority: 'LOW', status: 'CLOSED', declaredBy: { firstName: 'Khadija', lastName: 'Bennani', matricule: '1102' }, declaredAt: new Date(Date.now() - 2880 * 60000).toISOString(), description: 'Petite coupure sans gravité, premier soins administrés.' },
-  { id: '6', reference: 'INC-20260730-0005', category: 'Sécurité', department: 'Logistique', priority: 'CRITICAL', status: 'DECLARED', declaredBy: { firstName: 'Hassan', lastName: 'Ouazzani', matricule: '1125' }, declaredAt: new Date(Date.now() - 10 * 60000).toISOString(), description: 'Fuite d\'huile hydraulique sur le chariot élévateur #4.' },
-  { id: '7', reference: 'INC-20260728-0002', category: 'Mécanique', department: 'Usinage', priority: 'MEDIUM', status: 'CLAIMED', declaredBy: { firstName: 'Nadia', lastName: 'Fassi', matricule: '1141' }, declaredAt: new Date(Date.now() - 4320 * 60000).toISOString(), claimedAt: new Date(Date.now() - 4200 * 60000).toISOString(), description: 'Courroie de transmission à remplir sur le tour #7.' },
-  { id: '8', reference: 'INC-20260727-0003', category: 'Électrique', department: 'Assemblage', priority: 'HIGH', status: 'IN_PROGRESS', declaredBy: { firstName: 'Omar', lastName: 'Bennis', matricule: '1158' }, declaredAt: new Date(Date.now() - 5760 * 60000).toISOString(), description: 'Arrêt intempestif du bras robotisé soudeur.' },
-  { id: '9', reference: 'INC-20260730-0006', category: 'Réclamation', department: 'Peinture', priority: 'LOW', status: 'DECLARED', declaredBy: { firstName: 'Leila', lastName: 'Mokhtar', matricule: '1182' }, declaredAt: new Date(Date.now() - 55 * 60000).toISOString(), description: 'Défaut esthétique sur la peinture des portières.' },
-  { id: '10', reference: 'INC-20260729-0004', category: 'Accident', department: 'Soudure', priority: 'HIGH', status: 'RESOLVED', declaredBy: { firstName: 'Samir', lastName: 'Tazi', matricule: '1205' }, declaredAt: new Date(Date.now() - 1700 * 60000).toISOString(), description: 'Projection de particules incandescentes — opérateur équipé EPI.' },
-];
-
-// ── Helpers ───────────────────────────────────────
-
-const PRIORITY_LABELS: Record<string, string> = { LOW: 'Faible', MEDIUM: 'Moyenne', HIGH: 'Élevée', CRITICAL: 'Critique' };
-const PRIORITY_CLASSES: Record<string, string> = { LOW: 'text-slate-500 bg-slate-100 dark:bg-slate-800', MEDIUM: 'text-amber-600 bg-amber-50 dark:bg-amber-900/20', HIGH: 'text-orange-600 bg-orange-50 dark:bg-orange-900/20', CRITICAL: 'text-red-600 bg-red-50 dark:bg-red-900/20' };
-const PRIORITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
-
-function formatElapsed(iso: string): string {
+function formatElapsed(iso: string | null | undefined): string {
+  if (!iso) return '—';
   const diffMs = Date.now() - new Date(iso).getTime();
   const hours = Math.floor(diffMs / 3600000);
   const mins = Math.floor((diffMs % 3600000) / 60000);
   if (hours > 0) return `${hours}h ${mins}m`;
   return `${mins} min`;
-}
-
-function relativeTime(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return "à l'instant";
-  if (diffMin < 60) return `${diffMin} min`;
-  const hours = Math.floor(diffMin / 60);
-  if (hours < 24) return `${hours}h ${diffMin % 60}m`;
-  return `${Math.floor(hours / 24)}j`;
 }
 
 // ── Types ─────────────────────────────────────────
@@ -259,7 +229,7 @@ function EvaluateModal({
   onSubmit,
   isSubmitting,
 }: {
-  incident: MockIncident;
+  incident: IncidentDTO;
   onClose: () => void;
   onSubmit: (status: 'RESOLVED' | 'NON_RESOLVED', note: string) => Promise<void>;
   isSubmitting: boolean;
@@ -269,10 +239,6 @@ function EvaluateModal({
   const [noteError, setNoteError] = useState<string | null>(null);
 
   async function handleSubmit() {
-    if (!note.trim()) {
-      setNoteError('Veuillez fournir une note de résolution.');
-      return;
-    }
     if (selectedStatus === 'NON_RESOLVED' && !note.trim()) {
       setNoteError('Une note est requise pour les incidents non résolus.');
       return;
@@ -353,7 +319,7 @@ function EvaluateModal({
 
 // ── Kanban Card ───────────────────────────────────
 
-function KanbanCard({ incident, onDragStart }: { incident: MockIncident; onDragStart?: (e: React.DragEvent, id: string) => void }) {
+function KanbanCard({ incident, onDragStart }: { incident: IncidentDTO; onDragStart?: (e: React.DragEvent, id: number) => void }) {
   const cfg = getStatusConfig(incident.status);
   const Icon = CATEGORY_ICONS[incident.category] ?? AlertTriangle;
 
@@ -382,16 +348,14 @@ function KanbanCard({ incident, onDragStart }: { incident: MockIncident; onDragS
 
 function KanbanColumn({
   title,
-  statuses,
   incidents,
   onDrop,
   onDragStart,
 }: {
   title: string;
-  statuses: string[];
-  incidents: MockIncident[];
+  incidents: IncidentDTO[];
   onDrop: (e: React.DragEvent) => void;
-  onDragStart: (e: React.DragEvent, id: string) => void;
+  onDragStart: (e: React.DragEvent, id: number) => void;
 }) {
   const [dragOver, setDragOver] = useState(false);
 
@@ -437,14 +401,19 @@ export default function AdminIncidentsPage() {
   const router = useRouter();
   const { startNavigation } = useNavigationProgress();
   const searchParams = useSearchParams();
+  const currentMatricule = useAuthStore((s) => s.matricule);
 
   const [mounted, setMounted] = useState(false);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [incidents] = useState(MOCK_INCIDENTS);
-  const [loading, setLoading] = useState(false);
-  const [evaluateTarget, setEvaluateTarget] = useState<MockIncident | null>(null);
+  const [evaluateTarget, setEvaluateTarget] = useState<IncidentDTO | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // ── Real data ─────────────────────────────────────
+  const incidentsFetch = useAsync(() => getIncidents({ size: 200 }), []);
+  const deptsFetch = useAsync(() => getDepartments(), []);
+  const catsFetch = useAsync(() => getCategories(), []);
 
   useEffect(() => setMounted(true), []);
 
@@ -469,16 +438,18 @@ export default function AdminIncidentsPage() {
     if (ref) setFilters((prev) => ({ ...prev, search: ref }));
   }, [mounted, searchParams]);
 
+  const allIncidents = incidentsFetch.data?.content ?? [];
+
   const filteredIncidents = useMemo(() => {
-    let result = [...incidents];
+    let result = [...allIncidents];
 
     if (filters.search) {
       const q = filters.search.toLowerCase();
       result = result.filter((i) =>
         i.reference.toLowerCase().includes(q) ||
         i.description.toLowerCase().includes(q) ||
-        `${i.declaredBy.firstName} ${i.declaredBy.lastName}`.toLowerCase().includes(q) ||
-        i.declaredBy.matricule.includes(q),
+        `${i.user?.firstName ?? ''} ${i.user?.lastName ?? ''}`.toLowerCase().includes(q) ||
+        String(i.user?.matricule ?? '').includes(q),
       );
     }
 
@@ -496,7 +467,7 @@ export default function AdminIncidentsPage() {
     }
 
     if (filters.scope === 'mine') {
-      result = result.filter((i) => i.declaredBy.matricule === 'ADM-0001');
+      result = result.filter((i) => i.user?.matricule === currentMatricule);
     }
 
     switch (filters.sort) {
@@ -507,10 +478,10 @@ export default function AdminIncidentsPage() {
     }
 
     return result;
-  }, [incidents, filters]);
+  }, [allIncidents, filters, currentMatricule]);
 
   const groupedByStatus = useMemo(() => {
-    const groups: Record<string, MockIncident[]> = {
+    const groups: Record<string, IncidentDTO[]> = {
       DECLARED: [],
       CLAIMED: [],
       IN_PROGRESS: [],
@@ -524,38 +495,49 @@ export default function AdminIncidentsPage() {
 
   // ── Action handlers ─────────────────────────────
 
-  const handleClaim = async (id: string) => {
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 300));
-    console.log('Claim incident:', id);
-    setLoading(false);
+  const handleClaim = async (id: number) => {
+    setActionError(null);
+    try {
+      await claimIncident(id);
+      await incidentsFetch.refetch();
+    } catch (err) {
+      setActionError(extractErrorMessage(err));
+    }
   };
 
   const handleEvaluate = async (status: 'RESOLVED' | 'NON_RESOLVED', note: string) => {
+    if (!evaluateTarget) return;
     setIsSubmitting(true);
-    await new Promise((r) => setTimeout(r, 500));
-    console.log('Evaluate:', evaluateTarget?.id, status, note);
-    setIsSubmitting(false);
-    setEvaluateTarget(null);
+    setActionError(null);
+    try {
+      await evaluateIncident(evaluateTarget.id, { status, note });
+      await incidentsFetch.refetch();
+      setEvaluateTarget(null);
+    } catch (err) {
+      setActionError(extractErrorMessage(err));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleDragStart = (e: React.DragEvent, id: string) => {
-    e.dataTransfer.setData('text/plain', id);
+  const handleDragStart = (e: React.DragEvent, id: number) => {
+    e.dataTransfer.setData('text/plain', String(id));
   };
 
-  const handleDrop = (targetStatus: string) => (e: React.DragEvent) => {
-    const id = e.dataTransfer.getData('text/plain');
-    const incident = incidents.find((i) => i.id === id);
-    if (!incident || !id) return;
+  const handleDrop = (targetStatus: string) => async (e: React.DragEvent) => {
+    const rawId = e.dataTransfer.getData('text/plain');
+    const id = Number(rawId);
+    const incident = allIncidents.find((i) => i.id === id);
+    if (!incident || !rawId) return;
 
     // State machine rules
     if (targetStatus === 'IN_PROGRESS') return; // BLOCKED
     if (incident.status === 'DECLARED' && targetStatus === 'CLAIMED') {
-      handleClaim(id);
+      await handleClaim(id);
       return;
     }
     if ((incident.status === 'IN_PROGRESS') && (targetStatus === 'RESOLVED' || targetStatus === 'NON_RESOLVED')) {
-      const target = incidents.find((i) => i.id === id);
+      const target = allIncidents.find((i) => i.id === id);
       if (target) setEvaluateTarget(target);
       return;
     }
@@ -580,11 +562,11 @@ export default function AdminIncidentsPage() {
   // ── Pagination ──────────────────────────────────
   const PAGE_SIZE = 10;
   const [page, setPage] = useState(1);
-  const totalPages = Math.ceil(filteredIncidents.length / PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(filteredIncidents.length / PAGE_SIZE));
   const paginated = filteredIncidents.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   // ── System zero state ───────────────────────────
-  const systemZero = incidents.length === 0;
+  const systemZero = !incidentsFetch.loading && allIncidents.length === 0;
 
   // ── Filter empty state ──────────────────────────
   const isFiltered = filters.search || filters.statuses.length > 0 || filters.priorities.length > 0 ||
@@ -599,489 +581,465 @@ export default function AdminIncidentsPage() {
     );
   }
 
+  const departmentOptions = (deptsFetch.data ?? []).map((d) => ({ value: d.name, label: d.name }));
+  const categoryOptions = (catsFetch.data ?? []).map((c) => ({ value: c.name, label: c.name }));
+
   return (
     <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
 
-
-
         {/* ── 2.1 — Page Header ─────────────────────── */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Incidents</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Vue globale, tous départements</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* View toggle */}
-          <div className="flex rounded-lg border bg-muted p-0.5">
-            <button
-              type="button"
-              onClick={() => setViewMode('list')}
-              className={cn(
-                'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all',
-                viewMode === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              <LayoutList className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Liste</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('board')}
-              className={cn(
-                'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all',
-                viewMode === 'board' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              <Columns3 className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Tableau</span>
-            </button>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Incidents</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Vue globale, tous départements</p>
           </div>
-          <Button size="sm" className="h-9 gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white">
-            <Plus className="h-3.5 w-3.5" />
-            Déclarer
-          </Button>
-        </div>
-      </div>
-
-      {/* ── 2.2 — Multi-Filter Bar ────────────────── */}
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Search */}
-          <div className="relative w-full sm:w-48 lg:w-56">
-            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              value={filters.search}
-              onChange={(e) => updateFilter('search', e.target.value)}
-              placeholder="Réf., description, nom..."
-              className="h-9 w-full rounded-lg border border-input bg-background pl-8 pr-3 text-xs outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
-            />
-          </div>
-
-          {/* Status */}
-          <MultiSelectDropdown
-            label="Statut"
-            options={[
-              { value: 'DECLARED', label: 'Déclaré' },
-              { value: 'CLAIMED', label: 'Pris en charge' },
-              { value: 'IN_PROGRESS', label: 'En cours' },
-              { value: 'RESOLVED', label: 'Résolu' },
-              { value: 'NON_RESOLVED', label: 'Non résolu' },
-              { value: 'CLOSED', label: 'Clôturé' },
-            ]}
-            selected={filters.statuses}
-            onChange={(vals) => updateFilter('statuses', vals)}
-          />
-
-          {/* Priority */}
-          <MultiSelectDropdown
-            label="Priorité"
-            options={[
-              { value: 'CRITICAL', label: 'Critique' },
-              { value: 'HIGH', label: 'Élevée' },
-              { value: 'MEDIUM', label: 'Moyenne' },
-              { value: 'LOW', label: 'Faible' },
-            ]}
-            selected={filters.priorities}
-            onChange={(vals) => updateFilter('priorities', vals)}
-          />
-
-          {/* Department */}
-          <MultiSelectDropdown
-            label="Département"
-            options={DEPARTMENTS.map((d) => ({ value: d, label: d }))}
-            selected={filters.departments}
-            onChange={(vals) => updateFilter('departments', vals)}
-          />
-
-          {/* Category */}
-          <MultiSelectDropdown
-            label="Catégorie"
-            options={CATEGORIES.map((c) => ({ value: c, label: c }))}
-            selected={filters.categories}
-            onChange={(vals) => updateFilter('categories', vals)}
-          />
-
-          {/* Scope toggle */}
-          <button
-            type="button"
-            onClick={() => updateFilter('scope', filters.scope === 'mine' ? 'all' : 'mine')}
-            className={cn(
-              'flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-colors whitespace-nowrap',
-              filters.scope === 'mine'
-                ? 'border-primary bg-primary/5 text-primary'
-                : 'border-input text-muted-foreground hover:border-muted-foreground/30',
-            )}
-          >
-            <UserCheck className="h-3.5 w-3.5" />
-            {filters.scope === 'mine' ? 'Mes incidents' : 'Tous'}
-          </button>
-
-          {/* Sort */}
-          <div className="relative">
-            <select
-              value={filters.sort}
-              onChange={(e) => updateFilter('sort', e.target.value)}
-              className="flex h-9 items-center gap-1.5 rounded-lg border border-input bg-background px-3 text-xs font-medium text-muted-foreground outline-none appearance-none cursor-pointer hover:border-muted-foreground/30"
-            >
-              <option value="newest">Plus récents</option>
-              <option value="oldest">Plus anciens</option>
-              <option value="priority">Priorité</option>
-              <option value="time-in-status">Temps en statut</option>
-            </select>
-            <ArrowUpDown className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
-          </div>
-        </div>
-
-        {/* Active filter chips */}
-        <ActiveFilterChips filters={filters} onRemove={removeFilter} onClearAll={clearAllFilters} />
-      </div>
-
-      {/* ── 2.4 — Board View (Kanban) ─────────────── */}
-      {viewMode === 'board' && (
-        <div className="hidden md:block">
-          <div className="flex gap-4 overflow-x-auto pb-4">
-            <KanbanColumn
-              title="Déclaré"
-              statuses={['DECLARED']}
-              incidents={groupedByStatus.DECLARED}
-              onDrop={handleDrop('DECLARED')}
-              onDragStart={handleDragStart}
-            />
-            <KanbanColumn
-              title="Pris en charge"
-              statuses={['CLAIMED']}
-              incidents={groupedByStatus.CLAIMED}
-              onDrop={handleDrop('CLAIMED')}
-              onDragStart={handleDragStart}
-            />
-            <KanbanColumn
-              title="En cours"
-              statuses={['IN_PROGRESS']}
-              incidents={groupedByStatus.IN_PROGRESS}
-              onDrop={handleDrop('IN_PROGRESS')}
-              onDragStart={handleDragStart}
-            />
-            <KanbanColumn
-              title="Résolu / Non résolu"
-              statuses={['RESOLVED', 'NON_RESOLVED']}
-              incidents={[...groupedByStatus.RESOLVED, ...groupedByStatus.NON_RESOLVED]}
-              onDrop={handleDrop('RESOLVED')}
-              onDragStart={handleDragStart}
-            />
-            <KanbanColumn
-              title="Clôturé"
-              statuses={['CLOSED']}
-              incidents={groupedByStatus.CLOSED}
-              onDrop={handleDrop('CLOSED')}
-              onDragStart={handleDragStart}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* ── 2.3 — List View ────────────────────────── */}
-      {viewMode === 'list' && (
-        <>
-          {/* Loading state */}
-          {loading && (
-            <div className="space-y-2">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="flex h-14 animate-pulse items-center gap-4 rounded-lg bg-muted/50 px-4">
-                  <div className="h-3 w-24 rounded bg-muted-foreground/20" />
-                  <div className="h-3 w-16 rounded bg-muted-foreground/20" />
-                  <div className="h-3 w-20 rounded bg-muted-foreground/20" />
-                  <div className="ml-auto h-3 w-12 rounded bg-muted-foreground/20" />
-                </div>
-              ))}
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-lg border bg-muted p-0.5">
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all',
+                  viewMode === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <LayoutList className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Liste</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('board')}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all',
+                  viewMode === 'board' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <Columns3 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Tableau</span>
+              </button>
             </div>
-          )}
+            <Button size="sm" className="h-9 gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white" onClick={() => router.push('/sous-chef/incidents/declare')}>
+              <Plus className="h-3.5 w-3.5" />
+              Déclarer
+            </Button>
+          </div>
+        </div>
 
-          {/* System zero state */}
-          {!loading && systemZero && (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                <AlertTriangle className="h-12 w-12 text-muted-foreground/20 mb-4" />
-                <h3 className="text-lg font-semibold text-muted-foreground">Aucun incident dans le système</h3>
-                <p className="mt-1 text-sm text-muted-foreground/60 max-w-sm">
-                  Le système d&apos;incidents est opérationnel. Les incidents apparaîtront ici une fois déclarés.
-                </p>
-              </CardContent>
-            </Card>
-          )}
+        {/* ── 2.2 — Multi-Filter Bar ────────────────── */}
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-full sm:w-48 lg:w-56">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                value={filters.search}
+                onChange={(e) => updateFilter('search', e.target.value)}
+                placeholder="Réf., description, nom..."
+                className="h-9 w-full rounded-lg border border-input bg-background pl-8 pr-3 text-xs outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
+              />
+            </div>
 
-          {/* Filtered empty state */}
-          {!loading && filteredEmpty && (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                <Filter className="h-12 w-12 text-muted-foreground/20 mb-4" />
-                <h3 className="text-lg font-semibold text-muted-foreground">Aucun résultat pour ces filtres</h3>
-                <p className="mt-1 text-sm text-muted-foreground/60 mb-4 max-w-sm">
-                  Essayez de modifier vos critères de recherche ou de réinitialiser les filtres.
-                </p>
-                <Button variant="outline" size="sm" onClick={clearAllFilters}>
-                  Effacer les filtres
-                </Button>
-              </CardContent>
-            </Card>
-          )}
+            <MultiSelectDropdown
+              label="Statut"
+              options={[
+                { value: 'DECLARED', label: 'Déclaré' },
+                { value: 'CLAIMED', label: 'Pris en charge' },
+                { value: 'IN_PROGRESS', label: 'En cours' },
+                { value: 'RESOLVED', label: 'Résolu' },
+                { value: 'NON_RESOLVED', label: 'Non résolu' },
+                { value: 'CLOSED', label: 'Clôturé' },
+              ]}
+              selected={filters.statuses}
+              onChange={(vals) => updateFilter('statuses', vals)}
+            />
 
-          {/* Desktop table */}
-          {!loading && !systemZero && !filteredEmpty && (
-            <div className="hidden md:block">
+            <MultiSelectDropdown
+              label="Priorité"
+              options={[
+                { value: 'CRITICAL', label: 'Critique' },
+                { value: 'HIGH', label: 'Élevée' },
+                { value: 'MEDIUM', label: 'Moyenne' },
+                { value: 'LOW', label: 'Faible' },
+              ]}
+              selected={filters.priorities}
+              onChange={(vals) => updateFilter('priorities', vals)}
+            />
+
+            <MultiSelectDropdown
+              label="Département"
+              options={departmentOptions}
+              selected={filters.departments}
+              onChange={(vals) => updateFilter('departments', vals)}
+            />
+
+            <MultiSelectDropdown
+              label="Catégorie"
+              options={categoryOptions}
+              selected={filters.categories}
+              onChange={(vals) => updateFilter('categories', vals)}
+            />
+
+            <button
+              type="button"
+              onClick={() => updateFilter('scope', filters.scope === 'mine' ? 'all' : 'mine')}
+              className={cn(
+                'flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-colors whitespace-nowrap',
+                filters.scope === 'mine'
+                  ? 'border-primary bg-primary/5 text-primary'
+                  : 'border-input text-muted-foreground hover:border-muted-foreground/30',
+              )}
+            >
+              <UserCheck className="h-3.5 w-3.5" />
+              {filters.scope === 'mine' ? 'Mes incidents' : 'Tous'}
+            </button>
+
+            <div className="relative">
+              <select
+                value={filters.sort}
+                onChange={(e) => updateFilter('sort', e.target.value)}
+                className="flex h-9 items-center gap-1.5 rounded-lg border border-input bg-background px-3 text-xs font-medium text-muted-foreground outline-none appearance-none cursor-pointer hover:border-muted-foreground/30"
+              >
+                <option value="newest">Plus récents</option>
+                <option value="oldest">Plus anciens</option>
+                <option value="priority">Priorité</option>
+                <option value="time-in-status">Temps en statut</option>
+              </select>
+              <ArrowUpDown className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+            </div>
+          </div>
+
+          <ActiveFilterChips filters={filters} onRemove={removeFilter} onClearAll={clearAllFilters} />
+        </div>
+
+        {/* ── Action error banner ───────────────────── */}
+        {actionError && (
+          <ErrorState message={actionError} compact onRetry={() => setActionError(null)} />
+        )}
+
+        {/* ── Board View (Kanban) ───────────────────── */}
+        {!incidentsFetch.loading && !incidentsFetch.error && !systemZero && viewMode === 'board' && (
+          <div className="hidden md:block">
+            <div className="flex gap-4 overflow-x-auto pb-4">
+              <KanbanColumn
+                title="Déclaré"
+                incidents={groupedByStatus.DECLARED}
+                onDrop={handleDrop('DECLARED')}
+                onDragStart={handleDragStart}
+              />
+              <KanbanColumn
+                title="Pris en charge"
+                incidents={groupedByStatus.CLAIMED}
+                onDrop={handleDrop('CLAIMED')}
+                onDragStart={handleDragStart}
+              />
+              <KanbanColumn
+                title="En cours"
+                incidents={groupedByStatus.IN_PROGRESS}
+                onDrop={handleDrop('IN_PROGRESS')}
+                onDragStart={handleDragStart}
+              />
+              <KanbanColumn
+                title="Résolu / Non résolu"
+                incidents={[...groupedByStatus.RESOLVED, ...groupedByStatus.NON_RESOLVED]}
+                onDrop={handleDrop('RESOLVED')}
+                onDragStart={handleDragStart}
+              />
+              <KanbanColumn
+                title="Clôturé"
+                incidents={groupedByStatus.CLOSED}
+                onDrop={handleDrop('CLOSED')}
+                onDragStart={handleDragStart}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ── List View ────────────────────────────── */}
+        {viewMode === 'list' && (
+          <>
+            {/* Loading state */}
+            {incidentsFetch.loading && (
               <Card>
                 <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
-                          <th className="px-5 py-4 w-8" />
-                          <th className="px-5 py-4">Référence</th>
-                          <th className="px-5 py-4">Catégorie</th>
-                          <th className="px-5 py-4">Département</th>
-                          <th className="px-5 py-4">Priorité</th>
-                          <th className="px-5 py-4">Statut</th>
-                          <th className="px-5 py-4">Déclaré par</th>
-                          <th className="px-5 py-4">Temps</th>
-                          <th className="px-5 py-4">Actions</th>
-                          <th className="px-5 py-4 w-14" />
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border whitespace-nowrap">
-                        {paginated.map((inc) => {
-                          const cfg = getStatusConfig(inc.status);
-                          const CatIcon = CATEGORY_ICONS[inc.category] ?? AlertTriangle;
-                          return (
-                            <tr key={inc.id} className="transition-colors hover:bg-muted/30 group">
-                              <td className="px-5 py-4" style={{ boxShadow: `inset 4px 0 0 0 ${cfg.barColor}` }} />
-                              <td className="px-5 py-4">
-                                <button
-                                  onClick={() => {
-                                    startNavigation();
-                                    router.push(`/admin/incidents/${inc.id}`);
-                                  }}
-                                  className="font-mono text-sm font-semibold text-blue-600 hover:underline dark:text-blue-400"
-                                >
-                                  {inc.reference}
-                                </button>
-                              </td>
-                              <td className="px-5 py-4">
-                                <span className="inline-flex items-center gap-1.5 text-sm text-foreground/80">
-                                  <CatIcon className="h-4 w-4" />
-                                  {inc.category}
-                                </span>
-                              </td>
-                              <td className="px-5 py-4 text-sm text-muted-foreground">{inc.department}</td>
-                              <td className="px-5 py-4">
-                                <span className={cn('rounded-md px-2 py-1 text-xs font-bold tracking-wide', PRIORITY_CLASSES[inc.priority])}>
-                                  {PRIORITY_LABELS[inc.priority]}
-                                </span>
-                              </td>
-                              <td className="px-5 py-4">
-                                <span className={cn('text-sm font-semibold', cfg.textClass)}>
-                                  {cfg.labelFr}
-                                </span>
-                              </td>
-                              <td className="px-5 py-4 text-sm text-muted-foreground">
-                                {inc.declaredBy.firstName} {inc.declaredBy.lastName}
-                                <span className="font-mono"> #{inc.declaredBy.matricule}</span>
-                              </td>
-                              <td className="px-5 py-4 text-sm text-muted-foreground">
-                                {formatElapsed(inc.claimedAt ?? inc.declaredAt)}
-                              </td>
-                              <td className="px-5 py-4">
-                                <div className="flex items-center gap-2">
-                                  {inc.status === 'DECLARED' && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleClaim(inc.id)}
-                                      className="flex h-8 items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400"
-                                    >
-                                      <UserCheck className="h-3.5 w-3.5" />
-                                      Prendre
-                                    </button>
-                                  )}
-                                  {inc.status === 'IN_PROGRESS' && (
-                                    <button
-                                      type="button"
-                                      onClick={() => setEvaluateTarget(inc)}
-                                      className="flex h-8 items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400"
-                                    >
-                                      Évaluer
-                                    </button>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="px-5 py-4 text-right">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    startNavigation();
-                                    router.push(`/admin/incidents/${inc.id}`);
-                                  }}
-                                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                                  title="Voir les détails"
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Pagination */}
-                  {filteredIncidents.length > PAGE_SIZE && (
-                    <div className="flex items-center justify-between border-t px-4 py-3">
-                      <p className="text-xs text-muted-foreground">
-                        Affichage de {paginated.length} sur {filteredIncidents.length} incidents
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={page === 1}
-                          onClick={() => setPage((p) => Math.max(1, p - 1))}
-                          className="h-8 text-xs"
-                        >
-                          Précédent
-                        </Button>
-                        <span className="text-xs text-muted-foreground">
-                          Page {page} / {totalPages}
-                        </span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={page >= totalPages}
-                          onClick={() => setPage((p) => p + 1)}
-                          className="h-8 text-xs"
-                        >
-                          Suivant
-                        </Button>
-                      </div>
-                    </div>
-                  )}
+                  <TableSkeleton rows={6} columns={8} />
                 </CardContent>
               </Card>
-            </div>
-          )}
+            )}
 
-          {/* Mobile cards */}
-          {!loading && !systemZero && !filteredEmpty && (
-            <div className="md:hidden space-y-3">
-              {paginated.map((inc) => {
-                const cfg = getStatusConfig(inc.status);
-                const CatIcon = CATEGORY_ICONS[inc.category] ?? AlertTriangle;
-                return (
-                  <div
-                    key={inc.id}
-                    className="rounded-xl border bg-card transition-colors hover:bg-muted/20"
-                    style={{ borderLeftWidth: '4px', borderLeftColor: cfg.barColor }}
-                  >
-                    <button
-                      onClick={() => router.push(`/admin/incidents/${inc.id}`)}
-                      className="flex w-full items-center justify-between px-5 py-4"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className="font-mono text-sm font-semibold text-blue-600 dark:text-blue-400">{inc.reference}</span>
-                          <span className={cn('rounded-md px-2 py-1 text-xs font-bold', PRIORITY_CLASSES[inc.priority])}>
-                            {PRIORITY_LABELS[inc.priority]}
-                          </span>
+            {/* Error state */}
+            {!incidentsFetch.loading && incidentsFetch.error && (
+              <ErrorState message={incidentsFetch.error} onRetry={incidentsFetch.refetch} />
+            )}
+
+            {/* System zero state */}
+            {!incidentsFetch.loading && !incidentsFetch.error && systemZero && (
+              <Card>
+                <CardContent className="p-0">
+                  <EmptyState
+                    icon={Inbox}
+                    title="Aucun incident en cours dans le système."
+                    description="Le système d'incidents est opérationnel. Les incidents apparaîtront ici une fois déclarés par les opérateurs."
+                    actionLabel="Déclarer un incident"
+                    onAction={() => router.push('/sous-chef/incidents/declare')}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Filtered empty state */}
+            {!incidentsFetch.loading && !incidentsFetch.error && filteredEmpty && (
+              <Card>
+                <CardContent className="p-0">
+                  <EmptyState
+                    icon={Filter}
+                    title="Aucun résultat ne correspond à vos filtres actuels."
+                    description="Essayez de modifier vos critères de recherche ou de réinitialiser les filtres."
+                    actionLabel="Effacer les filtres"
+                    onAction={clearAllFilters}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Desktop table */}
+            {!incidentsFetch.loading && !incidentsFetch.error && !systemZero && !filteredEmpty && (
+              <div className="hidden md:block">
+                <Card>
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
+                            <th className="px-5 py-4 w-8" />
+                            <th className="px-5 py-4">Référence</th>
+                            <th className="px-5 py-4">Catégorie</th>
+                            <th className="px-5 py-4">Département</th>
+                            <th className="px-5 py-4">Priorité</th>
+                            <th className="px-5 py-4">Statut</th>
+                            <th className="px-5 py-4">Déclaré par</th>
+                            <th className="px-5 py-4">Temps</th>
+                            <th className="px-5 py-4">Actions</th>
+                            <th className="px-5 py-4 w-14" />
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border whitespace-nowrap">
+                          {paginated.map((inc) => {
+                            const cfg = getStatusConfig(inc.status);
+                            const CatIcon = CATEGORY_ICONS[inc.category] ?? AlertTriangle;
+                            return (
+                              <tr key={inc.id} className="transition-colors hover:bg-muted/30 group">
+                                <td className="px-5 py-4" style={{ boxShadow: `inset 4px 0 0 0 ${cfg.barColor}` }} />
+                                <td className="px-5 py-4">
+                                  <button
+                                    onClick={() => {
+                                      startNavigation();
+                                      router.push(`/admin/incidents/${inc.id}`);
+                                    }}
+                                    className="font-mono text-sm font-semibold text-blue-600 hover:underline dark:text-blue-400"
+                                  >
+                                    {inc.reference}
+                                  </button>
+                                </td>
+                                <td className="px-5 py-4">
+                                  <span className="inline-flex items-center gap-1.5 text-sm text-foreground/80">
+                                    <CatIcon className="h-4 w-4" />
+                                    {inc.category}
+                                  </span>
+                                </td>
+                                <td className="px-5 py-4 text-sm text-muted-foreground">{inc.department}</td>
+                                <td className="px-5 py-4">
+                                  <span className={cn('rounded-md px-2 py-1 text-xs font-bold tracking-wide', PRIORITY_CLASSES[inc.priority])}>
+                                    {PRIORITY_LABELS[inc.priority]}
+                                  </span>
+                                </td>
+                                <td className="px-5 py-4">
+                                  <span className={cn('text-sm font-semibold', cfg.textClass)}>
+                                    {cfg.labelFr}
+                                  </span>
+                                </td>
+                                <td className="px-5 py-4 text-sm text-muted-foreground">
+                                  {inc.user?.firstName ?? '—'} {inc.user?.lastName ?? ''}
+                                  <span className="font-mono"> #{inc.user?.matricule ?? ''}</span>
+                                </td>
+                                <td className="px-5 py-4 text-sm text-muted-foreground">
+                                  {formatElapsed(inc.claimedAt ?? inc.declaredAt)}
+                                </td>
+                                <td className="px-5 py-4">
+                                  <div className="flex items-center gap-2">
+                                    {inc.status === 'DECLARED' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleClaim(inc.id)}
+                                        className="flex h-8 items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400"
+                                      >
+                                        <UserCheck className="h-3.5 w-3.5" />
+                                        Prendre
+                                      </button>
+                                    )}
+                                    {inc.status === 'IN_PROGRESS' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setEvaluateTarget(inc)}
+                                        className="flex h-8 items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400"
+                                      >
+                                        Évaluer
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-5 py-4 text-right">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      startNavigation();
+                                      router.push(`/admin/incidents/${inc.id}`);
+                                    }}
+                                    className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                                    title="Voir les détails"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Pagination */}
+                    {filteredIncidents.length > PAGE_SIZE && (
+                      <div className="flex items-center justify-between border-t px-4 py-3">
+                        <p className="text-xs text-muted-foreground">
+                          Affichage de {paginated.length} sur {filteredIncidents.length} incidents
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="h-8 text-xs">
+                            Précédent
+                          </Button>
+                          <span className="text-xs text-muted-foreground">Page {page} / {totalPages}</span>
+                          <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="h-8 text-xs">
+                            Suivant
+                          </Button>
                         </div>
-                        <div className="flex items-center gap-2.5 mb-1.5">
-                          <CatIcon className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm text-muted-foreground">{inc.category}</span>
-                          <span className="text-sm text-muted-foreground">·</span>
-                          <span className="text-sm text-muted-foreground">{inc.department}</span>
-                        </div>
-                        <div className="flex items-center gap-2.5">
-                          <span className={cn('text-sm font-semibold', cfg.textClass)}>{cfg.labelFr}</span>
-                          <span className="text-sm text-muted-foreground">·</span>
-                          <span className="text-sm text-muted-foreground font-mono">#{inc.declaredBy.matricule}</span>
-                        </div>
-                      </div>
-                      <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
-                    </button>
-                    {(inc.status === 'DECLARED' || inc.status === 'IN_PROGRESS') && (
-                      <div className="flex items-center gap-3 border-t px-5 py-3">
-                        {inc.status === 'DECLARED' && (
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); handleClaim(inc.id); }}
-                            className="flex h-9 items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400"
-                          >
-                            <UserCheck className="h-4 w-4" />
-                            Prendre en charge
-                          </button>
-                        )}
-                        {inc.status === 'IN_PROGRESS' && (
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); setEvaluateTarget(inc); }}
-                            className="flex h-9 items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 text-sm font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400"
-                          >
-                            Évaluer
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => router.push(`/admin/incidents/${inc.id}`)}
-                          className="h-9 px-3 text-sm font-medium text-muted-foreground hover:text-foreground"
-                        >
-                          Détails
-                        </button>
                       </div>
                     )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Mobile cards */}
+            {!incidentsFetch.loading && !incidentsFetch.error && !systemZero && !filteredEmpty && (
+              <div className="md:hidden space-y-3">
+                {paginated.map((inc) => {
+                  const cfg = getStatusConfig(inc.status);
+                  const CatIcon = CATEGORY_ICONS[inc.category] ?? AlertTriangle;
+                  return (
+                    <div
+                      key={inc.id}
+                      className="rounded-xl border bg-card transition-colors hover:bg-muted/20"
+                      style={{ borderLeftWidth: '4px', borderLeftColor: cfg.barColor }}
+                    >
+                      <button
+                        onClick={() => router.push(`/admin/incidents/${inc.id}`)}
+                        className="flex w-full items-center justify-between px-5 py-4"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-3 mb-2">
+                            <span className="font-mono text-sm font-semibold text-blue-600 dark:text-blue-400">{inc.reference}</span>
+                            <span className={cn('rounded-md px-2 py-1 text-xs font-bold', PRIORITY_CLASSES[inc.priority])}>
+                              {PRIORITY_LABELS[inc.priority]}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2.5 mb-1.5">
+                            <CatIcon className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm text-muted-foreground">{inc.category}</span>
+                            <span className="text-sm text-muted-foreground">·</span>
+                            <span className="text-sm text-muted-foreground">{inc.department}</span>
+                          </div>
+                          <div className="flex items-center gap-2.5">
+                            <span className={cn('text-sm font-semibold', cfg.textClass)}>{cfg.labelFr}</span>
+                            <span className="text-sm text-muted-foreground">·</span>
+                            <span className="text-sm text-muted-foreground font-mono">#{inc.user?.matricule ?? ''}</span>
+                          </div>
+                        </div>
+                        <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+                      </button>
+                      {(inc.status === 'DECLARED' || inc.status === 'IN_PROGRESS') && (
+                        <div className="flex items-center gap-3 border-t px-5 py-3">
+                          {inc.status === 'DECLARED' && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); handleClaim(inc.id); }}
+                              className="flex h-9 items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400"
+                            >
+                              <UserCheck className="h-4 w-4" />
+                              Prendre en charge
+                            </button>
+                          )}
+                          {inc.status === 'IN_PROGRESS' && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setEvaluateTarget(inc); }}
+                              className="flex h-9 items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 text-sm font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400"
+                            >
+                              Évaluer
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => router.push(`/admin/incidents/${inc.id}`)}
+                            className="h-9 px-3 text-sm font-medium text-muted-foreground hover:text-foreground"
+                          >
+                            Détails
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {filteredIncidents.length > PAGE_SIZE && (
+                  <div className="flex items-center justify-between pt-2">
+                    <p className="text-xs text-muted-foreground">{paginated.length} / {filteredIncidents.length}</p>
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="h-8 text-xs">
+                        Précédent
+                      </Button>
+                      <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="h-8 text-xs">
+                        Suivant
+                      </Button>
+                    </div>
                   </div>
-                );
-              })}
+                )}
+              </div>
+            )}
+          </>
+        )}
 
-              {/* Mobile pagination */}
-              {filteredIncidents.length > PAGE_SIZE && (
-                <div className="flex items-center justify-between pt-2">
-                  <p className="text-xs text-muted-foreground">
-                    {paginated.length} / {filteredIncidents.length}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="h-8 text-xs">
-                      Précédent
-                    </Button>
-                    <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="h-8 text-xs">
-                      Suivant
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </>
-      )}
+        {/* ── Board view mobile fallback ─────────────── */}
+        {!incidentsFetch.loading && !incidentsFetch.error && viewMode === 'board' && (
+          <div className="md:hidden rounded-lg border bg-muted/30 p-6 text-center">
+            <Columns3 className="mx-auto h-8 w-8 text-muted-foreground/30 mb-2" />
+            <p className="text-sm text-muted-foreground">Le mode tableau est disponible sur les écrans plus larges.</p>
+            <Button variant="outline" size="sm" onClick={() => setViewMode('list')} className="mt-3">
+              <LayoutList className="h-3.5 w-3.5 mr-1.5" />
+              Passer en mode liste
+            </Button>
+          </div>
+        )}
 
-      {/* ── Board view mobile fallback ─────────────── */}
-      {viewMode === 'board' && (
-        <div className="md:hidden rounded-lg border bg-muted/30 p-6 text-center">
-          <Columns3 className="mx-auto h-8 w-8 text-muted-foreground/30 mb-2" />
-          <p className="text-sm text-muted-foreground">Le mode tableau est disponible sur les écrans plus larges.</p>
-          <Button variant="outline" size="sm" onClick={() => setViewMode('list')} className="mt-3">
-            <LayoutList className="h-3.5 w-3.5 mr-1.5" />
-            Passer en mode liste
-          </Button>
-        </div>
-      )}
-
-      {/* ── Evaluate Modal ─────────────────────────── */}
-      {evaluateTarget && (
-        <EvaluateModal
-          incident={evaluateTarget}
-          onClose={() => setEvaluateTarget(null)}
-          onSubmit={handleEvaluate}
-          isSubmitting={isSubmitting}
-        />
-      )}
+        {/* ── Evaluate Modal ─────────────────────────── */}
+        {evaluateTarget && (
+          <EvaluateModal
+            incident={evaluateTarget}
+            onClose={() => setEvaluateTarget(null)}
+            onSubmit={handleEvaluate}
+            isSubmitting={isSubmitting}
+          />
+        )}
       </div>
     </div>
   );

@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useNavigationProgress } from '@/components/ui/navigation-progress';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useAsync } from '@/lib/use-async';
+import { getUsers } from '@/services/userService';
+import { getIncidents } from '@/services/incidentService';
 import type { UserRole } from '@/types/auth';
 import {
   LayoutDashboard,
@@ -27,18 +30,34 @@ import {
   Cpu,
 } from 'lucide-react';
 
-// ── Badge hook for attention counts ──────────────
-// These are mock counts; replace with real API data when backend is connected.
+// ── Badge hook for attention counts (real API data, ADMIN only) ──
 
-function useAttentionBadges() {
-  const [pendingUsers, setPendingUsers] = useState(0);
-  const [criticalIncidents, setCriticalIncidents] = useState(0);
+function useAttentionBadges(isAdmin: boolean) {
+  // Pending promotions: active SOUS_CHEF users awaiting promotion
+  const { data: users } = useAsync(
+    () => (isAdmin ? getUsers({ page: 0, size: 100 }) : Promise.resolve(null)),
+    [isAdmin],
+  );
+  const pendingUsers = useMemo(
+    () =>
+      (users?.content ?? []).filter(
+        (u) => u.role === 'SOUS_CHEF' && u.isActive,
+      ).length,
+    [users],
+  );
 
-  useEffect(() => {
-    // Mock data — replace with API calls
-    setPendingUsers(3);
-    setCriticalIncidents(2);
-  }, []);
+  // Critical open incidents
+  const { data: incidents } = useAsync(
+    () =>
+      isAdmin
+        ? getIncidents({ status: 'DECLARED', page: 0, size: 100 })
+        : Promise.resolve(null),
+    [isAdmin],
+  );
+  const criticalIncidents = useMemo(
+    () => (incidents?.content ?? []).filter((i) => i.priority === 'CRITICAL').length,
+    [incidents],
+  );
 
   return { pendingUsers, criticalIncidents };
 }
@@ -166,12 +185,12 @@ export function Sidebar({ open, onOpenChange, variant = 'chef-atelier' }: Sideba
   const roles = useAuthStore((s) => s.roles);
   const [collapsed, setCollapsed] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(getStoredExpandedGroups);
-  const { pendingUsers, criticalIncidents } = useAttentionBadges();
+  const userRoles = roles.map((r) => r.replace('ROLE_', '') as UserRole);
+  const isAdmin = userRoles.includes('ADMIN');
+  const { pendingUsers, criticalIncidents } = useAttentionBadges(isAdmin);
 
   const mobileOpen = open ?? false;
   const setMobileOpen = onOpenChange ?? (() => {});
-
-  const userRoles = roles.map((r) => r.replace('ROLE_', '') as UserRole);
 
   // Pick nav items based on variant
   const navEntries: NavEntry[] =

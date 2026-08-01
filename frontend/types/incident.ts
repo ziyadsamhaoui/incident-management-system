@@ -1,15 +1,6 @@
 // ── Incident Types ─────────────────────────────────
-// Mirrors backend DTOs with explicit legacy field mapping
+// Mirrors the real backend `IncidentResponse` DTO (no fabricated fields).
 
-/** User summary embedded in incident responses */
-export interface IncidentUserSummary {
-  id: string;
-  firstName: string;
-  lastName: string;
-  matricule: string;
-}
-
-/** Incident status enum */
 export type IncidentStatus =
   | 'DECLARED'
   | 'CLAIMED'
@@ -18,59 +9,101 @@ export type IncidentStatus =
   | 'NON_RESOLVED'
   | 'CLOSED';
 
-/** Incident priority enum */
 export type IncidentPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
-/** Single audit history entry */
-export interface IncidentHistoryEntry {
-  id: string;
-  action: string;
-  performedBy: IncidentUserSummary;
-  timestamp: string;
-  note?: string | null;
+export interface IncidentUserSummary {
+  id: number;
+  firstName: string;
+  lastName: string;
+  matricule: number;
+}
+
+export interface DepartmentRef {
+  id: number;
+  name: string;
+}
+
+export interface CategoryRef {
+  id: number;
+  name: string;
+}
+
+export interface StationRef {
+  id: number;
+  code: string;
+  rowIndex: number;
+  lineIndex: number;
+  isWorking: boolean;
+  productionLineId: number | null;
 }
 
 /**
- * Incident detail DTO.
- *
- * ⚠️ LEGACY FIELD TRAP: The backend `IncidentResponse` DTO exposes the
- * claiming admin under the field name `assignedTo` (from pre-refactor
- * naming). This maps to the Entity's `claimedBy`. Our frontend type
- * explicitly names it `assignedTo` to match the JSON payload, and we
- * alias it to `claimedBy` at consumption time.
+ * Flattened incident DTO consumed by the UI.
+ * `department`/`station`/`category` are display strings resolved from the
+ * backend's nested reference objects.
  */
-export interface IncidentDetailDTO {
-  id: string;
+export interface IncidentDTO {
+  id: number;
   reference: string;
-  status: IncidentStatus;
-  priority: IncidentPriority;
+  /** Declaring user */
+  user: IncidentUserSummary | null;
+  /** Claiming admin (claimedBy) */
+  assignedTo: IncidentUserSummary | null;
+  resolvedBy: IncidentUserSummary | null;
   department: string;
   station: string;
   category: string;
+  priority: IncidentPriority;
+  status: IncidentStatus;
   description: string;
-  createdAt: string;
-
-  // Timestamps
+  resolutionNote: string | null;
   declaredAt: string;
-  claimedAt?: string | null;
-  inProgressAt?: string | null;
-  resolvedAt?: string | null;
-  closedAt?: string | null;
+  claimedAt: string | null;
+  inProgressAt: string | null;
+  resolvedAt: string | null;
+  closedAt: string | null;
+}
 
-  // LEGACY FIELD: API returns 'assignedTo' for the claimedBy user object
-  assignedTo?: IncidentUserSummary | null;
-  resolvedBy?: IncidentUserSummary | null;
-  resolutionNote?: string | null;
+/** Single audit history entry (from GET /api/incidents/{id}/history) */
+export interface IncidentHistoryEntry {
+  id: number;
+  incidentId: number;
+  previousStatus: IncidentStatus;
+  currentStatus: IncidentStatus;
+  changedAt: string;
+  comment: string | null;
+  actor: IncidentUserSummary | null;
+}
 
-  // Audit trail
+/** Incident + its chronological audit trail */
+export interface IncidentDetailDTO extends IncidentDTO {
   history: IncidentHistoryEntry[];
 }
 
-/** Request payload for incident evaluation */
+/** Payload for POST /api/incidents */
+export interface CreateIncidentRequest {
+  userId: number;
+  departmentId: number;
+  stationId: number;
+  categoryId: number;
+  priority: IncidentPriority;
+  description: string;
+}
+
+/** Payload for PUT /api/incidents/{id}/evaluate */
 export interface EvaluateIncidentRequest {
   status: 'RESOLVED' | 'NON_RESOLVED';
   note: string;
 }
 
-/** Convenience alias for the legacy assignedTo → claimedBy mapping */
-export type ClaimedByInfo = IncidentUserSummary | null | undefined;
+/** Spring Data Page<T> envelope */
+export interface Page<T> {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+  first: boolean;
+  last: boolean;
+  empty: boolean;
+}

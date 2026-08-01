@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { useNavigationProgress } from '@/components/ui/navigation-progress';
@@ -16,32 +16,25 @@ import {
   AlertOctagon,
   UserCheck,
   Eye,
-  MessageSquare,
-  Wrench,
-  Shield,
+  Inbox,
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { getStatusConfig } from '@/lib/constants/incidentStatus';
 import { ActivityHeatmap } from '@/components/dashboard/activity-heatmap';
-
-// ── Mock Data ─────────────────────────────────────
-
-const MOCK_INCIDENTS = [
-  { id: 1, reference: 'INC-20260729-0001', department: 'Assemblage', status: 'DECLARED', priority: 'CRITICAL', declaredAt: new Date(Date.now() - 30 * 60000).toISOString(), claimedAt: null, inProgressAt: null },
-  { id: 2, reference: 'INC-20260729-0002', department: 'Usinage', status: 'CLAIMED', priority: 'CRITICAL', declaredAt: new Date(Date.now() - 150 * 60000).toISOString(), claimedAt: new Date(Date.now() - 120 * 60000).toISOString(), inProgressAt: null },
-  { id: 3, reference: 'INC-20260729-0003', department: 'Peinture', status: 'IN_PROGRESS', priority: 'HIGH', declaredAt: new Date(Date.now() - 240 * 60000).toISOString(), claimedAt: new Date(Date.now() - 210 * 60000).toISOString(), inProgressAt: new Date(Date.now() - 180 * 60000).toISOString() },
-  { id: 4, reference: 'INC-20260728-0001', department: 'Assemblage', status: 'RESOLVED', priority: 'MEDIUM', declaredAt: new Date(Date.now() - 1440 * 60000).toISOString() },
-  { id: 5, reference: 'INC-20260728-0002', department: 'Soudure', status: 'CLOSED', priority: 'LOW', declaredAt: new Date(Date.now() - 2880 * 60000).toISOString() },
-  { id: 6, reference: 'INC-20260729-0004', department: 'Usinage', status: 'DECLARED', priority: 'CRITICAL', declaredAt: new Date(Date.now() - 45 * 60000).toISOString() },
-  { id: 7, reference: 'INC-20260727-0001', department: 'Logistique', status: 'CLAIMED', priority: 'MEDIUM', declaredAt: new Date(Date.now() - 4320 * 60000).toISOString(), claimedAt: new Date(Date.now() - 4200 * 60000).toISOString() },
-  { id: 8, reference: 'INC-20260726-0001', department: 'Assemblage', status: 'IN_PROGRESS', priority: 'HIGH', declaredAt: new Date(Date.now() - 5760 * 60000).toISOString() },
-];
+import { ErrorState } from '@/components/ui/error-state';
+import { EmptyState } from '@/components/ui/empty-state';
+import { StatGridSkeleton, TableSkeleton, ChartBlockSkeleton } from '@/components/ui/skeleton';
+import { useAsync } from '@/lib/use-async';
+import { getDashboardStats, getActivityLog } from '@/services/dashboardService';
+import { getIncidents, getStaleIncidents } from '@/services/incidentService';
+import type { IncidentDTO } from '@/types/incident';
+import type { ActivityLogEntry } from '@/types/dashboard';
 
 // ── Helpers ───────────────────────────────────────
 
@@ -50,29 +43,28 @@ function relativeTime(iso: string): string {
   const d = new Date(iso);
   const diffMs = now.getTime() - d.getTime();
   const diffMin = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
   if (diffMin < 1) return "à l'instant";
   if (diffMin < 60) return `${diffMin} min`;
+  const diffHours = Math.floor(diffMs / 3600000);
   if (diffHours < 24) return `${diffHours}h ${diffMin % 60}m`;
-  if (diffDays === 1) return '1 jour';
-  return `${diffDays} jours`;
+  return `${Math.floor(diffHours / 24)}j`;
 }
 
-function formatElapsed(iso: string): string {
+function formatElapsed(iso: string | null | undefined): string {
+  if (!iso) return '—';
   const diffMs = Date.now() - new Date(iso).getTime();
   const hours = Math.floor(diffMs / 3600000);
   const mins = Math.floor((diffMs % 3600000) / 60000);
   return `${hours}h ${mins.toString().padStart(2, '0')}m`;
 }
 
-function statusCount(incidents: typeof MOCK_INCIDENTS, status: string) {
-  return incidents.filter((i) => i.status === status).length;
-}
-
-function priorityCount(incidents: typeof MOCK_INCIDENTS, priority: string) {
-  return incidents.filter((i) => i.priority === priority).length;
+function fmtDuration(ms: number | null): string {
+  if (ms == null || Number.isNaN(ms)) return '—';
+  const totalMin = Math.floor(ms / 60000);
+  if (totalMin < 60) return `${totalMin} min`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return `${h}h ${m.toString().padStart(2, '0')}m`;
 }
 
 // ── Stat Card ─────────────────────────────────────
@@ -140,6 +132,7 @@ const STATUS_COLORS: Record<string, string> = {
   CLAIMED: '#3b82f6',
   IN_PROGRESS: '#f59e0b',
   RESOLVED: '#10b981',
+  NON_RESOLVED: '#ef4444',
   CLOSED: '#0f172a',
 };
 
@@ -148,6 +141,7 @@ const STATUS_LABELS: Record<string, string> = {
   CLAIMED: 'Pris en charge',
   IN_PROGRESS: 'En cours',
   RESOLVED: 'Résolu',
+  NON_RESOLVED: 'Non résolu',
   CLOSED: 'Clôturé',
 };
 
@@ -200,7 +194,7 @@ function CriticalBannerItem({
   incident,
   index,
 }: {
-  incident: typeof MOCK_INCIDENTS[0];
+  incident: IncidentDTO;
   index: number;
 }) {
   const { startNavigation } = useNavigationProgress();
@@ -211,7 +205,7 @@ function CriticalBannerItem({
       transition={{ delay: 0.05 * index, duration: 0.3 }}
     >
       <Link
-        href={`/incidents/${incident.id}`}
+        href={`/admin/incidents/${incident.id}`}
         onClick={startNavigation}
         className="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 hover:bg-rose-100/50 dark:hover:bg-rose-950/30 transition-colors group"
       >
@@ -239,25 +233,25 @@ function CriticalBannerItem({
 
 // ── Activity Feed ─────────────────────────────────
 
-const RECENT_ACTIVITIES = [
-  { icon: 'declare', text: 'INC-20260730-0001 déclaré par Ahmed_Amraoui_1005', time: '2 min', iconClass: 'text-slate-500 bg-slate-100 dark:bg-slate-800' },
-  { icon: 'claim', text: 'INC-20260730-0002 pris en charge par Fatima_Zahra_1042', time: '14 min', iconClass: 'text-blue-600 bg-blue-100 dark:bg-blue-900/30' },
-  { icon: 'progress', text: 'INC-20260729-0003 passé à En cours par Youssef_1085', time: '45 min', iconClass: 'text-amber-600 bg-amber-100 dark:bg-amber-900/30' },
-  { icon: 'resolve', text: 'INC-20260729-0004 résolu par Admin_ADM-0001', time: '1h 20m', iconClass: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30' },
-  { icon: 'close', text: 'INC-20260728-0005 clôturé par Admin_ADM-0001', time: '3h', iconClass: 'text-slate-600 bg-slate-200 dark:bg-slate-700' },
-  { icon: 'declare', text: 'INC-20260728-0006 déclaré par Mohammed_Alaoui_1078', time: '5h', iconClass: 'text-slate-500 bg-slate-100 dark:bg-slate-800' },
-  { icon: 'claim', text: 'INC-20260727-0007 pris en charge par Fatima_Zahra_1042', time: '1 jour', iconClass: 'text-blue-600 bg-blue-100 dark:bg-blue-900/30' },
-];
+const STATUS_ICONS: Record<string, { icon: React.ElementType; iconClass: string }> = {
+  DECLARED: { icon: FileText, iconClass: 'text-slate-500 bg-slate-100 dark:bg-slate-800' },
+  CLAIMED: { icon: UserCheck, iconClass: 'text-blue-600 bg-blue-100 dark:bg-blue-900/30' },
+  IN_PROGRESS: { icon: Activity, iconClass: 'text-amber-600 bg-amber-100 dark:bg-amber-900/30' },
+  RESOLVED: { icon: CheckCircle2, iconClass: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30' },
+  NON_RESOLVED: { icon: XCircle, iconClass: 'text-red-600 bg-red-100 dark:bg-red-900/30' },
+  CLOSED: { icon: XCircle, iconClass: 'text-slate-600 bg-slate-200 dark:bg-slate-700' },
+};
 
-function ActivityIcon({ type }: { type: string }) {
-  const icons: Record<string, React.ElementType> = {
-    declare: FileText,
-    claim: UserCheck,
-    progress: Activity,
-    resolve: CheckCircle2,
-    close: XCircle,
-  };
-  const Icon = icons[type] ?? FileText;
+function activityText(entry: ActivityLogEntry): string {
+  const transition = entry.previousStatus && entry.currentStatus
+    ? `${STATUS_LABELS[entry.previousStatus] ?? entry.previousStatus} → ${STATUS_LABELS[entry.currentStatus] ?? entry.currentStatus}`
+    : STATUS_LABELS[entry.currentStatus ?? ''] ?? 'Mise à jour';
+  return `${entry.incidentReference ?? 'Incident'} — ${transition}`;
+}
+
+function ActivityIcon({ status }: { status: string | null }) {
+  const cfg = STATUS_ICONS[status ?? ''] ?? STATUS_ICONS.DECLARED;
+  const Icon = cfg.icon;
   return <Icon className="h-3.5 w-3.5" />;
 }
 
@@ -265,69 +259,92 @@ function ActivityIcon({ type }: { type: string }) {
 
 export default function AdminDashboardPage() {
   const { startNavigation } = useNavigationProgress();
-  const incidents = MOCK_INCIDENTS;
 
-  // 4.1 — 6-card stat grid
-  const stats = useMemo(() => ({
-    total: incidents.length,
-    nonTraites: statusCount(incidents, 'DECLARED'),
-    critiques: priorityCount(incidents, 'CRITICAL'),
-    enTraitement: statusCount(incidents, 'CLAIMED') + statusCount(incidents, 'IN_PROGRESS'),
-    resolus: statusCount(incidents, 'RESOLVED'),
-    clos: statusCount(incidents, 'CLOSED'),
-  }), [incidents]);
+  const statsFetch = useAsync(() => getDashboardStats(), []);
+  const incidentsFetch = useAsync(() => getIncidents({ size: 200 }), []);
+  const staleFetch = useAsync(() => getStaleIncidents(), []);
+  const activityFetch = useAsync(() => getActivityLog(), []);
 
-  // 4.2 — Critical incidents sorted by most recent
+  const stats = statsFetch.data;
+  const incidents = incidentsFetch.data?.content ?? [];
+
+  // 4.1 — 6-card stat grid from real dashboard stats
+  const statCards = useMemo(() => {
+    const byStatus = stats?.byStatus ?? {};
+    const byPriority = stats?.byPriority ?? {};
+    const total = Object.values(byStatus).reduce((a, b) => a + b, 0);
+    return {
+      total,
+      nonTraites: byStatus.DECLARED ?? 0,
+      critiques: byPriority.CRITICAL ?? 0,
+      enTraitement: (byStatus.CLAIMED ?? 0) + (byStatus.IN_PROGRESS ?? 0),
+      resolus: byStatus.RESOLVED ?? 0,
+      clos: byStatus.CLOSED ?? 0,
+    };
+  }, [stats]);
+
+  // 4.2 — Critical incidents (real data, filtered client-side)
   const criticalIncidents = useMemo(
     () => incidents.filter((i) => i.priority === 'CRITICAL'),
     [incidents],
   );
 
-  // 4.3 — Chart data
-  const statusChartData = useMemo(() =>
-    ['DECLARED', 'CLAIMED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']
-      .filter((s) => statusCount(incidents, s) > 0)
-      .map((s) => ({ name: STATUS_LABELS[s] ?? s, value: statusCount(incidents, s), color: STATUS_COLORS[s] })),
-    [incidents],
-  );
+  // 4.3 — Chart data from real dashboard stats
+  const statusChartData = useMemo(() => {
+    const byStatus = stats?.byStatus ?? {};
+    return (Object.keys(STATUS_LABELS) as string[])
+      .filter((s) => (byStatus[s] ?? 0) > 0)
+      .map((s) => ({
+        name: STATUS_LABELS[s] ?? s,
+        value: byStatus[s],
+        color: STATUS_COLORS[s],
+      }));
+  }, [stats]);
 
   const deptChartData = useMemo(() => {
-    const deptMap: Record<string, number> = {};
-    incidents.forEach((i) => {
-      deptMap[i.department] = (deptMap[i.department] ?? 0) + 1;
-    });
-    return Object.entries(deptMap).map(([name, value], idx) => ({
+    const byDept = stats?.byDepartment ?? {};
+    return Object.entries(byDept).map(([name, value], idx) => ({
       name,
       value,
       fill: DEPARTMENT_COLORS[idx % DEPARTMENT_COLORS.length],
     }));
+  }, [stats]);
+
+  const priorityChartData = useMemo(() => {
+    const byPriority = stats?.byPriority ?? {};
+    return (Object.keys(PRIORITY_LABELS) as string[])
+      .map((p) => ({
+        name: PRIORITY_LABELS[p] ?? p,
+        value: byPriority[p] ?? 0,
+        fill: PRIORITY_COLORS[p],
+      }))
+      .filter((d) => d.value > 0);
+  }, [stats]);
+
+  // 4.3 — Aging incidents from the real stale endpoint
+  const agingIncidents = staleFetch.data ?? [];
+
+  // 4.3 — MTTR / time-to-claim computed from real incidents
+  const metrics = useMemo(() => {
+    const claimed = incidents.filter((i) => i.claimedAt);
+    const resolved = incidents.filter((i) => i.resolvedAt);
+    const avg = (arr: IncidentDTO[], key: 'claimedAt' | 'resolvedAt') => {
+      if (arr.length === 0) return null;
+      const totalMs = arr.reduce((sum, i) => {
+        const start = new Date(i.declaredAt).getTime();
+        const end = i[key] ? new Date(i[key]!).getTime() : start;
+        return sum + (end - start);
+      }, 0);
+      return totalMs / arr.length;
+    };
+    return {
+      timeToClaim: avg(claimed, 'claimedAt'),
+      mttr: avg(resolved, 'resolvedAt'),
+    };
   }, [incidents]);
 
-  const priorityChartData = useMemo(() =>
-    ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map((p) => ({
-      name: PRIORITY_LABELS[p] ?? p,
-      value: priorityCount(incidents, p),
-      fill: PRIORITY_COLORS[p],
-    })),
-    [incidents],
-  );
-
-  // 4.3 — Aging incidents (> 2 hours in CLAIMED or IN_PROGRESS)
-  const agingThreshold = 2 * 60 * 60 * 1000;
-  const agingIncidents = useMemo(
-    () =>
-      incidents
-        .filter((i) => {
-          if (i.status !== 'CLAIMED' && i.status !== 'IN_PROGRESS') return false;
-          const startTime = i.claimedAt ?? i.declaredAt;
-          return Date.now() - new Date(startTime).getTime() > agingThreshold;
-        })
-        .map((i) => ({
-          ...i,
-          elapsedMs: Date.now() - new Date(i.claimedAt ?? i.declaredAt).getTime(),
-        })),
-    [incidents],
-  );
+  const hasAnyStats = statsFetch.data != null;
+  const hasStatsData = Object.keys(stats?.byStatus ?? {}).some((k) => (stats?.byStatus[k] ?? 0) > 0);
 
   return (
     <div className="space-y-6 pb-24 md:pb-6">
@@ -340,65 +357,74 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* ── 4.1 — Top Stat Row (6 cards, 2x3 grid) ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StatCard label="Total" value={stats.total} icon={FileText} accent="slate" />
-        <StatCard label="Non traités" value={stats.nonTraites} icon={AlertTriangle} accent="amber" />
-        <StatCard label="Critiques" value={stats.critiques} icon={AlertOctagon} accent="red" />
-        <StatCard label="En traitement" value={stats.enTraitement} icon={Activity} accent="blue" />
-        <StatCard label="Résolus" value={stats.resolus} icon={CheckCircle2} accent="green" />
-        <StatCard label="Clôturés" value={stats.clos} icon={XCircle} accent="slate" />
-      </div>
+      {statsFetch.loading ? (
+        <StatGridSkeleton count={6} />
+      ) : statsFetch.error ? (
+        <ErrorState message={statsFetch.error} onRetry={statsFetch.refetch} />
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <StatCard label="Total" value={statCards.total} icon={FileText} accent="slate" />
+          <StatCard label="Non traités" value={statCards.nonTraites} icon={AlertTriangle} accent="amber" />
+          <StatCard label="Critiques" value={statCards.critiques} icon={AlertOctagon} accent="red" />
+          <StatCard label="En traitement" value={statCards.enTraitement} icon={Activity} accent="blue" />
+          <StatCard label="Résolus" value={statCards.resolus} icon={CheckCircle2} accent="green" />
+          <StatCard label="Clôturés" value={statCards.clos} icon={XCircle} accent="slate" />
+        </div>
+      )}
 
       {/* ── 4.2 — Critical-Now Hero Widget ─────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.1 }}
-        className={cn(
-          'rounded-xl border p-4 mb-2',
-          criticalIncidents.length > 0
-            ? 'bg-rose-50 dark:bg-rose-950/40 border-l-4 border-l-rose-600 border border-rose-200 dark:border-rose-900'
-            : 'bg-emerald-50 dark:bg-emerald-950/40 border-l-4 border-l-emerald-500 border border-emerald-200 dark:border-emerald-900',
-        )}
-      >
-        <div className="flex items-center gap-3 mb-2">
-          {criticalIncidents.length > 0 ? (
-            <>
-              <span className="relative flex h-3 w-3">
-                <span className="absolute inline-flex h-3 w-3 animate-ping rounded-full bg-rose-400 opacity-75" />
-                <span className="relative inline-flex h-3 w-3 rounded-full bg-rose-500" />
-              </span>
-              <span className="text-sm font-bold text-rose-700 dark:text-rose-300">
-                {criticalIncidents.length} incident{criticalIncidents.length > 1 ? 's' : ''} critique{criticalIncidents.length > 1 ? 's' : ''} en cours
-              </span>
-            </>
-          ) : (
-            <>
-              <ShieldCheck className="h-5 w-5 text-emerald-500" />
-              <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
-                Aucun incident critique en cours
-              </span>
-            </>
+      {incidentsFetch.loading ? (
+        <div className="h-24 animate-pulse rounded-xl border bg-muted/30" />
+      ) : (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+          className={cn(
+            'rounded-xl border p-4 mb-2',
+            criticalIncidents.length > 0
+              ? 'bg-rose-50 dark:bg-rose-950/40 border-l-4 border-l-rose-600 border border-rose-200 dark:border-rose-900'
+              : 'bg-emerald-50 dark:bg-emerald-950/40 border-l-4 border-l-emerald-500 border border-emerald-200 dark:border-emerald-900',
           )}
-        </div>
-
-        {criticalIncidents.length > 0 && (
-          <div className="divide-y divide-rose-100 dark:divide-rose-900/50">
-            {criticalIncidents.map((inc, idx) => (
-              <CriticalBannerItem key={inc.id} incident={inc} index={idx} />
-            ))}
+        >
+          <div className="flex items-center gap-3 mb-2">
+            {criticalIncidents.length > 0 ? (
+              <>
+                <span className="relative flex h-3 w-3">
+                  <span className="absolute inline-flex h-3 w-3 animate-ping rounded-full bg-rose-400 opacity-75" />
+                  <span className="relative inline-flex h-3 w-3 rounded-full bg-rose-500" />
+                </span>
+                <span className="text-sm font-bold text-rose-700 dark:text-rose-300">
+                  {criticalIncidents.length} incident{criticalIncidents.length > 1 ? 's' : ''} critique{criticalIncidents.length > 1 ? 's' : ''} en cours
+                </span>
+              </>
+            ) : (
+              <>
+                <ShieldCheck className="h-5 w-5 text-emerald-500" />
+                <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                  Aucun incident critique en cours
+                </span>
+              </>
+            )}
           </div>
-        )}
 
-        {criticalIncidents.length === 0 && (
-          <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
-            Tous les incidents sont sous contrôle.
-          </p>
-        )}
-      </motion.div>
+          {criticalIncidents.length > 0 && (
+            <div className="divide-y divide-rose-100 dark:divide-rose-900/50">
+              {criticalIncidents.map((inc, idx) => (
+                <CriticalBannerItem key={inc.id} incident={inc} index={idx} />
+              ))}
+            </div>
+          )}
+
+          {criticalIncidents.length === 0 && (
+            <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+              Tous les incidents sont sous contrôle.
+            </p>
+          )}
+        </motion.div>
+      )}
 
       {/* ── 4.3 — Charts & Aging Table ─────────────── */}
-      {/* Desktop: 2-column grid | Mobile: horizontal scroll */}
       <div className="lg:grid lg:grid-cols-2 lg:gap-6">
         {/* Left column — Charts */}
         <div className="flex overflow-x-auto snap-x snap-mandatory gap-4 pb-4 lg:overflow-visible lg:grid lg:grid-cols-2 lg:gap-4 lg:pb-0 scrollbar-thin">
@@ -408,32 +434,45 @@ export default function AdminDashboardPage() {
               <CardTitle className="text-sm font-semibold">Par statut</CardTitle>
             </CardHeader>
             <CardContent className="px-2 pb-4">
-              <ResponsiveContainer width="100%" height={180}>
-                <PieChart>
-                  <Pie
-                    data={statusChartData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={70}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
-                    {statusChartData.map((entry, idx) => (
-                      <Cell key={idx} fill={entry.color} />
+              {statsFetch.loading ? (
+                <ChartBlockSkeleton />
+              ) : !hasStatsData ? (
+                <EmptyState
+                  compact
+                  icon={Inbox}
+                  title="Aucun incident à afficher"
+                  description="Les statistiques apparaîtront dès le premier incident déclaré."
+                />
+              ) : (
+                <>
+                  <ResponsiveContainer width="100%" height={180}>
+                    <PieChart>
+                      <Pie
+                        data={statusChartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={70}
+                        paddingAngle={2}
+                        dataKey="value"
+                      >
+                        {statusChartData.map((entry, idx) => (
+                          <Cell key={idx} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<PieTooltip />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="flex flex-wrap justify-center gap-2 mt-1">
+                    {statusChartData.map((entry) => (
+                      <span key={entry.name} className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
+                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
+                        {entry.name}: {entry.value}
+                      </span>
                     ))}
-                  </Pie>
-                  <Tooltip content={<PieTooltip />} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex flex-wrap justify-center gap-2 mt-1">
-                {statusChartData.map((entry) => (
-                  <span key={entry.name} className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
-                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
-                    {entry.name}: {entry.value}
-                  </span>
-                ))}
-              </div>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -443,19 +482,29 @@ export default function AdminDashboardPage() {
               <CardTitle className="text-sm font-semibold">Par département</CardTitle>
             </CardHeader>
             <CardContent className="px-2 pb-4">
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={deptChartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip content={<ChartTooltip />} />
-                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                    {deptChartData.map((entry, idx) => (
-                      <Cell key={idx} fill={entry.fill} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              {statsFetch.loading ? (
+                <ChartBlockSkeleton />
+              ) : deptChartData.length === 0 ? (
+                <EmptyState
+                  compact
+                  icon={Inbox}
+                  title="Aucune donnée disponible"
+                />
+              ) : (
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={deptChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                      {deptChartData.map((entry, idx) => (
+                        <Cell key={idx} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </CardContent>
           </Card>
 
@@ -465,19 +514,29 @@ export default function AdminDashboardPage() {
               <CardTitle className="text-sm font-semibold">Par priorité</CardTitle>
             </CardHeader>
             <CardContent className="px-2 pb-4">
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={priorityChartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip content={<ChartTooltip />} />
-                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                    {priorityChartData.map((entry, idx) => (
-                      <Cell key={idx} fill={entry.fill} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              {statsFetch.loading ? (
+                <ChartBlockSkeleton />
+              ) : priorityChartData.length === 0 ? (
+                <EmptyState
+                  compact
+                  icon={Inbox}
+                  title="Aucune donnée disponible"
+                />
+              ) : (
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={priorityChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                      {priorityChartData.map((entry, idx) => (
+                        <Cell key={idx} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </CardContent>
           </Card>
 
@@ -491,13 +550,17 @@ export default function AdminDashboardPage() {
                 <p className="text-[10px] font-medium uppercase tracking-wider text-blue-600 dark:text-blue-400">
                   Temps moyen de prise en charge
                 </p>
-                <p className="text-xl font-bold text-blue-700 dark:text-blue-300 mt-0.5">14 min</p>
+                <p className="text-xl font-bold text-blue-700 dark:text-blue-300 mt-0.5">
+                  {incidentsFetch.loading ? '…' : fmtDuration(metrics.timeToClaim)}
+                </p>
               </div>
               <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 p-3 border border-emerald-100 dark:border-emerald-900">
                 <p className="text-[10px] font-medium uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
                   MTTR (Temps moyen de résolution)
                 </p>
-                <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300 mt-0.5">1h 45m</p>
+                <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300 mt-0.5">
+                  {incidentsFetch.loading ? '…' : fmtDuration(metrics.mttr)}
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -513,11 +576,17 @@ export default function AdminDashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              {agingIncidents.length === 0 ? (
+              {staleFetch.loading ? (
+                <TableSkeleton rows={4} columns={4} />
+              ) : staleFetch.error ? (
+                <div className="p-4">
+                  <ErrorState message={staleFetch.error} compact onRetry={staleFetch.refetch} />
+                </div>
+              ) : agingIncidents.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center px-4">
                   <ShieldCheck className="h-10 w-10 text-emerald-400 mb-3" />
                   <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                    Aucun incident en souffrance
+                    Aucun incident en retard
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
                     Tous les incidents sont traités dans les délais.
@@ -537,7 +606,9 @@ export default function AdminDashboardPage() {
                     </thead>
                     <tbody className="divide-y divide-border">
                       {agingIncidents.map((inc) => {
-                        const isUrgent = inc.elapsedMs > 4 * 60 * 60 * 1000;
+                        const isUrgent = (inc.claimedAt ?? inc.inProgressAt ?? inc.declaredAt)
+                          ? Date.now() - new Date(inc.claimedAt ?? inc.inProgressAt ?? inc.declaredAt).getTime() > 4 * 60 * 60 * 1000
+                          : false;
                         const cfg = getStatusConfig(inc.status);
                         return (
                           <tr
@@ -549,7 +620,7 @@ export default function AdminDashboardPage() {
                           >
                             <td className="px-4 py-3" style={{ boxShadow: `inset 3px 0 0 0 ${cfg.barColor}` }}>
                               <Link
-                                href={`/incidents/${inc.id}`}
+                                href={`/admin/incidents/${inc.id}`}
                                 onClick={startNavigation}
                                 className="font-mono text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
                               >
@@ -571,12 +642,12 @@ export default function AdminDashboardPage() {
                                     : 'text-amber-600 dark:text-amber-400',
                                 )}
                               >
-                                {formatElapsed(inc.claimedAt ?? inc.declaredAt)}
+                                {formatElapsed(inc.claimedAt ?? inc.inProgressAt ?? inc.declaredAt)}
                               </span>
                             </td>
                             <td className="px-4 py-3 text-right">
                               <Link
-                                href={`/incidents/${inc.id}`}
+                                href={`/admin/incidents/${inc.id}`}
                                 onClick={startNavigation}
                                 className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
                               >
@@ -606,7 +677,13 @@ export default function AdminDashboardPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          {RECENT_ACTIVITIES.length === 0 ? (
+          {activityFetch.loading ? (
+            <TableSkeleton rows={4} columns={3} />
+          ) : activityFetch.error ? (
+            <div className="p-4">
+              <ErrorState message={activityFetch.error} compact onRetry={activityFetch.refetch} />
+            </div>
+          ) : !activityFetch.data || activityFetch.data.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center px-4">
               <Activity className="h-10 w-10 text-muted-foreground/30 mb-3" />
               <p className="text-sm font-medium text-muted-foreground">
@@ -615,25 +692,30 @@ export default function AdminDashboardPage() {
             </div>
           ) : (
             <div className="divide-y divide-border">
-              {RECENT_ACTIVITIES.map((activity, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors"
-                >
-                  <div className={cn(
-                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-full',
-                    activity.iconClass,
-                  )}>
-                    <ActivityIcon type={activity.icon} />
+              {activityFetch.data.map((entry) => {
+                const cfg = STATUS_ICONS[entry.currentStatus ?? ''] ?? STATUS_ICONS.DECLARED;
+                return (
+                  <div
+                    key={entry.id}
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors"
+                  >
+                    <div className={cn(
+                      'flex h-7 w-7 shrink-0 items-center justify-center rounded-full',
+                      cfg.iconClass,
+                    )}>
+                      <ActivityIcon status={entry.currentStatus} />
+                    </div>
+                    <p className="flex-1 text-sm text-foreground/80 truncate">
+                      {activityText(entry)}
+                    </p>
+                    {entry.changedAt && (
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {relativeTime(entry.changedAt)}
+                      </span>
+                    )}
                   </div>
-                  <p className="flex-1 text-sm text-foreground/80 truncate">
-                    {activity.text}
-                  </p>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {activity.time}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>

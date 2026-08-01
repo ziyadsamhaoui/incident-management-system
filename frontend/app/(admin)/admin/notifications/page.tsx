@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   Bell,
@@ -12,52 +12,47 @@ import {
   Activity,
   CheckCircle2,
   XCircle,
-  Clock,
-  Filter,
+  Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
+import { useAsync } from '@/lib/use-async';
+import { getMe } from '@/services/userService';
+import { getAllNotifications, markNotificationAsRead } from '@/services/notificationService';
+import type { NotificationDTO } from '@/types/notification';
 
-// ── Mock Notifications ────────────────────────────
-
-interface NotificationItem {
-  id: string;
-  type: 'critical' | 'claim' | 'progress' | 'resolve' | 'close' | 'info';
-  title: string;
-  message: string;
-  timestamp: string;
-  read: boolean;
-}
+// ── Notification icon/color maps ──────────────────
 
 const NOTIFICATION_ICONS: Record<string, React.ElementType> = {
-  critical: AlertTriangle,
-  claim: UserCheck,
-  progress: Activity,
-  resolve: CheckCircle2,
-  close: XCircle,
-  info: Bell,
+  CRITICAL: AlertTriangle,
+  CLAIM: UserCheck,
+  PROGRESS: Activity,
+  RESOLVE: CheckCircle2,
+  CLOSE: XCircle,
+  INFO: Bell,
 };
 
 const NOTIFICATION_COLORS: Record<string, string> = {
-  critical: 'bg-red-100 text-red-600 dark:bg-red-950/30 dark:text-red-400',
-  claim: 'bg-blue-100 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400',
-  progress: 'bg-amber-100 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400',
-  resolve: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400',
-  close: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
-  info: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+  CRITICAL: 'bg-red-100 text-red-600 dark:bg-red-950/30 dark:text-red-400',
+  CLAIM: 'bg-blue-100 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400',
+  PROGRESS: 'bg-amber-100 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400',
+  RESOLVE: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400',
+  CLOSE: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+  INFO: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
 };
 
-const MOCK_NOTIFICATIONS: NotificationItem[] = [
-  { id: 'n1', type: 'critical', title: 'Incident critique déclaré', message: 'INC-20260730-0001 - Détecteur de fumée déclenché sans cause identifiée (Assemblage)', timestamp: new Date(Date.now() - 5 * 60000).toISOString(), read: false },
-  { id: 'n2', type: 'claim', title: 'Incident pris en charge', message: 'INC-20260730-0002 pris en charge par Ahmed Bennani (Usinage)', timestamp: new Date(Date.now() - 30 * 60000).toISOString(), read: false },
-  { id: 'n3', type: 'progress', title: 'Incident en cours de traitement', message: 'INC-20260730-0003 est maintenant en cours (Peinture)', timestamp: new Date(Date.now() - 120 * 60000).toISOString(), read: true },
-  { id: 'n4', type: 'resolve', title: 'Incident résolu', message: 'INC-20260729-0004 a été résolu par Admin', timestamp: new Date(Date.now() - 240 * 60000).toISOString(), read: true },
-  { id: 'n5', type: 'info', title: 'Nouvel utilisateur inscrit', message: 'Ahmed Amraoui (#1005) a rejoint le département Assemblage', timestamp: new Date(Date.now() - 360 * 60000).toISOString(), read: true },
-  { id: 'n6', type: 'critical', title: 'Incident critique non résolu', message: 'INC-20260728-0002 toujours non résolu après 24h (Usinage)', timestamp: new Date(Date.now() - 1440 * 60000).toISOString(), read: false },
-  { id: 'n7', type: 'close', title: 'Incident clôturé automatiquement', message: 'INC-20260726-0001 clôturé après résolution (Soudure)', timestamp: new Date(Date.now() - 2880 * 60000).toISOString(), read: true },
-];
+function notifStyle(type: string) {
+  const key = type?.toUpperCase() ?? 'INFO';
+  return {
+    icon: NOTIFICATION_ICONS[key] ?? Bell,
+    color: NOTIFICATION_COLORS[key] ?? NOTIFICATION_COLORS.INFO,
+  };
+}
 
 // ── Helpers ───────────────────────────────────────
 
@@ -73,28 +68,92 @@ function formatRelativeTime(iso: string): string {
   return `il y a ${diffDays} jours`;
 }
 
+function notifTitle(n: NotificationDTO): string {
+  const key = n.type?.toUpperCase() ?? 'INFO';
+  if (key === 'CRITICAL') return 'Incident critique';
+  if (key === 'CLAIM') return 'Incident pris en charge';
+  if (key === 'PROGRESS') return 'Incident en cours de traitement';
+  if (key === 'RESOLVE') return 'Incident résolu';
+  if (key === 'CLOSE') return 'Incident clôturé';
+  return 'Notification';
+}
+
+// ── List skeleton ─────────────────────────────────
+
+function ListSkeleton() {
+  return (
+    <div className="divide-y divide-border">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div key={i} className="flex items-start gap-4 px-4 py-4">
+          <Skeleton className="h-9 w-9 rounded-lg" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-4 w-2/3" />
+            <Skeleton className="h-3 w-5/6" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────
 
 export default function AdminNotificationsPage() {
-  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [localReadIds, setLocalReadIds] = useState<Set<number>>(new Set());
+  const [busy, setBusy] = useState(false);
 
-  const filtered = useMemo(() => {
-    if (filter === 'unread') return notifications.filter((n) => !n.read);
-    return notifications;
-  }, [notifications, filter]);
+  // Current user id → notification history
+  const { data: me } = useAsync(getMe, []);
+  const meId = me?.id;
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const {
+    data: page,
+    loading,
+    error,
+    refetch,
+    setData,
+  } = useAsync(
+    () => (meId != null ? getAllNotifications(meId, { page: 0, size: 50 }) : Promise.resolve(null)),
+    [meId],
+  );
 
-  const markAllRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  };
+  const notifications = useMemo(
+    () => (page?.content ?? []).filter((n) => !localReadIds.has(n.id)),
+    [page, localReadIds],
+  );
 
-  const markOneRead = (id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
-    );
-  };
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+  const markOneRead = useCallback(
+    async (id: number) => {
+      try {
+        await markNotificationAsRead(id);
+      } catch {
+        // Silently ignore — the item stays unread on next refetch
+      }
+      setLocalReadIds((prev) => new Set(prev).add(id));
+    },
+    [],
+  );
+
+  const markAllRead = useCallback(async () => {
+    const unread = notifications.filter((n) => !n.isRead);
+    if (unread.length === 0) return;
+    setBusy(true);
+    try {
+      await Promise.all(unread.map((n) => markNotificationAsRead(n.id)));
+      setLocalReadIds((prev) => {
+        const next = new Set(Array.from(prev));
+        unread.forEach((n) => next.add(n.id));
+        return next;
+      });
+    } finally {
+      setBusy(false);
+    }
+  }, [notifications]);
+
+  const filtered = filter === 'unread' ? notifications.filter((n) => !n.isRead) : notifications;
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8">
@@ -119,14 +178,22 @@ export default function AdminNotificationsPage() {
               variant="outline"
               size="sm"
               onClick={markAllRead}
+              disabled={busy}
               className="gap-1.5 h-9"
             >
-              <CheckCheck className="h-3.5 w-3.5" />
+              {busy ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <CheckCheck className="h-3.5 w-3.5" />
+              )}
               <span className="hidden sm:inline">Tout marquer comme lu</span>
               <span className="sm:hidden">Tout lu</span>
             </Button>
           )}
         </div>
+
+        {/* Error banner */}
+        {error && <ErrorState message={error} onRetry={refetch} />}
 
         {/* Filter tabs */}
         <div className="flex items-center gap-2">
@@ -170,22 +237,26 @@ export default function AdminNotificationsPage() {
         {/* Notification list */}
         <Card>
           <CardContent className="p-0">
-            {filtered.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <BellOff className="h-12 w-12 text-muted-foreground/20 mb-4" />
-                <h3 className="text-base font-semibold text-muted-foreground">
-                  {filter === 'unread' ? 'Aucune notification non lue' : 'Aucune notification'}
-                </h3>
-                <p className="mt-1 text-sm text-muted-foreground/60">
-                  {filter === 'unread'
+            {loading ? (
+              <ListSkeleton />
+            ) : filtered.length === 0 ? (
+              <EmptyState
+                icon={BellOff}
+                title={
+                  filter === 'unread'
+                    ? 'Aucune notification non lue'
+                    : 'Aucune notification'
+                }
+                description={
+                  filter === 'unread'
                     ? 'Vous avez lu toutes vos notifications.'
-                    : 'Les notifications apparaîtront ici.'}
-                </p>
-              </div>
+                    : 'Les notifications apparaîtront ici.'
+                }
+              />
             ) : (
               <div className="divide-y divide-border">
                 {filtered.map((notif, idx) => {
-                  const Icon = NOTIFICATION_ICONS[notif.type] ?? Bell;
+                  const { icon: Icon, color } = notifStyle(notif.type);
                   return (
                     <motion.div
                       key={notif.id}
@@ -194,15 +265,17 @@ export default function AdminNotificationsPage() {
                       transition={{ delay: idx * 0.03 }}
                       className={cn(
                         'flex items-start gap-4 px-4 py-4 transition-colors hover:bg-muted/30 cursor-pointer',
-                        !notif.read && 'bg-primary/[0.02]',
+                        !notif.isRead && 'bg-primary/[0.02]',
                       )}
-                      onClick={() => markOneRead(notif.id)}
+                      onClick={() => {
+                        if (!notif.isRead) markOneRead(notif.id);
+                      }}
                     >
                       {/* Icon */}
                       <div
                         className={cn(
                           'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
-                          NOTIFICATION_COLORS[notif.type],
+                          color,
                         )}
                       >
                         <Icon className="h-4 w-4" />
@@ -213,15 +286,15 @@ export default function AdminNotificationsPage() {
                         <div className="flex items-center justify-between gap-2">
                           <p className={cn(
                             'text-sm truncate',
-                            !notif.read ? 'font-semibold text-foreground' : 'font-medium text-muted-foreground',
+                            !notif.isRead ? 'font-semibold text-foreground' : 'font-medium text-muted-foreground',
                           )}>
-                            {notif.title}
+                            {notifTitle(notif)}
                           </p>
                           <div className="flex items-center gap-2 shrink-0">
                             <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                              {formatRelativeTime(notif.timestamp)}
+                              {formatRelativeTime(notif.createdAt)}
                             </span>
-                            {!notif.read && (
+                            {!notif.isRead && (
                               <span className="h-2 w-2 rounded-full bg-blue-500" />
                             )}
                           </div>
@@ -229,6 +302,11 @@ export default function AdminNotificationsPage() {
                         <p className="mt-0.5 text-xs text-muted-foreground/70 line-clamp-2">
                           {notif.message}
                         </p>
+                        {notif.incidentReference && (
+                          <p className="mt-1 font-mono text-[10px] text-muted-foreground/50">
+                            {notif.incidentReference}
+                          </p>
+                        )}
                       </div>
                     </motion.div>
                   );

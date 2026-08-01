@@ -11,6 +11,8 @@ import incident.management.system.service.ProductionLineService;
 import incident.management.system.service.SectionService;
 import incident.management.system.service.StationService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -18,6 +20,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,6 +35,7 @@ import java.util.Map;
 @RequestMapping("/api/admin")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
+@Slf4j
 public class AdminController {
 
     private final CategoryService categoryService;
@@ -39,6 +43,18 @@ public class AdminController {
     private final SectionService sectionService;
     private final ProductionLineService productionLineService;
     private final StationService stationService;
+
+    //  Deletion safety guard — reference data linked to incidents (or other
+    //  entities) cannot be deleted. Exposed as a friendly 409 so the frontend
+    //  can render an actionable warning instead of a generic 500.
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String, Object>> handleReferenceDataDeletionGuard(DataIntegrityViolationException ex) {
+        log.warn("Reference data deletion blocked by FK constraint: {}", ex.getMessage());
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("status", HttpStatus.CONFLICT.value());
+        body.put("message", "Impossible de supprimer : cet élément est référencé par des données existantes (incidents ou sous-entités).");
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
 
     //  Categories
 

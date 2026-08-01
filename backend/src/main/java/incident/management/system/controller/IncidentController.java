@@ -2,6 +2,7 @@ package incident.management.system.controller;
 
 import incident.management.system.dto.CreateIncidentRequest;
 import incident.management.system.dto.EvaluateIncidentRequest;
+import incident.management.system.dto.IncidentHistoryResponse;
 import incident.management.system.dto.IncidentResponse;
 import incident.management.system.service.IncidentService;
 import jakarta.validation.Valid;
@@ -20,6 +21,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/incidents")
@@ -65,6 +68,18 @@ public class IncidentController {
     public ResponseEntity<IncidentResponse> getIncidentById(@PathVariable Long id) {
         IncidentResponse response = incidentService.getIncidentById(id);
         return ResponseEntity.ok(response);
+    }
+
+    //  Aging incidents — CLAIMED / IN_PROGRESS for more than 2 hours
+    @GetMapping("/stale")
+    public ResponseEntity<List<IncidentResponse>> getStaleIncidents() {
+        return ResponseEntity.ok(incidentService.getStaleIncidents());
+    }
+
+    //  Full audit trail for a single incident
+    @GetMapping("/{id}/history")
+    public ResponseEntity<List<IncidentHistoryResponse>> getIncidentHistory(@PathVariable Long id) {
+        return ResponseEntity.ok(incidentService.getIncidentHistory(id));
     }
 
     //  DECLARED → CLAIMED

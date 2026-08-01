@@ -1,3 +1,56 @@
+# Implementation Workflow — API Integration & Data-Driven UI
+
+## Section 0: Global API Integration & Mock Data Purge
+
+### 0.1 Architectural Directive
+- **No mock arrays, no hardcoded fallback objects, no fake delayed promises.**
+- Every data-driven component fetches from a real backend REST endpoint via the central Axios client (`lib/api-client.ts`) + service modules (`services/*.ts`).
+- If an API returns `[]` or `null`, the UI renders a dedicated, actionable **empty state**.
+
+### 0.2 Data Fetching Pattern (`lib/use-async.ts`)
+- Standardized hook: `useAsync(fetcher, deps)` → `{ data, loading, error, refetch, setData }`.
+- Re-runs the fetcher when `deps` change or on `refetch()`; never returns mock fallbacks.
+- `extractErrorMessage(err)` surfaces `response.data.message` (backend `ErrorResponse`) with a French fallback.
+
+### 0.3 Standardized Component States
+- **Loading:** skeleton loaders matching target dimensions — `components/ui/skeleton.tsx` + per-view skeletons (table rows, feed cards, chart blocks). No layout shift.
+- **Error:** inline red banner `components/ui/error-state.tsx` with explicit `[Réessayer]` retry button (rendered on 500 / network drop / 404).
+- **Empty:** `components/ui/empty-state.tsx` — muted Lucide icon circle + friendly copy + actionable CTA whenever the current role can create/configure the resource.
+
+### 0.4 Standardized Empty-State Copy (per endpoint)
+- **Departments:** `"Aucun département disponible."` + `[+ Créer un département]`
+- **Categories:** `"Aucune catégorie configurée."` + `[+ Ajouter une catégorie]`
+- **Stations / Sections / Lines:** `"Aucune station / section / ligne de production enregistrée."` + `[+ Ajouter]`
+- **Incidents (operator/admin):** system zero `"Aucun incident en cours dans le système."` + `[Déclarer un incident]`; filtered zero `"Aucun résultat ne correspond à vos filtres actuels."` + `[Effacer les filtres]`
+- **Users:** `"Aucun utilisateur enregistré."` + `[+ Nouvel utilisateur]`; **Approvals:** `"Aucune demande de promotion en attente."`
+- **Critical-Now widget:** `"Aucun incident critique en cours."`
+- **Aging Incidents table:** `"Aucun incident en retard."`
+- **Activity Log feed:** `"Aucune activité récente à afficher."`
+- **Admin Heatmap:** `"Aucune évaluation enregistrée sur cette période."`
+
+### 0.5 Service Layer (`frontend/services/`)
+- `incidentService.ts` — `getIncidents`, `getIncidentById`, `getIncidentHistory`, `getIncidentDetail`, `getStaleIncidents`, `createIncident`, `claimIncident`, `progressIncident`, `evaluateIncident` (+ raw→DTO mapper).
+- `dashboardService.ts` — `getDashboardStats`, `getActivityLog`, `getRecentActivities`, `getAdminActivity`.
+- `userService.ts` — `getMe`, `getUsers`, `createUser`, `promoteUser`, `deactivateUser`, `setMyDepartment`.
+- `referenceService.ts` — read `getCategories/Departments/Sections/ProductionLines/Stations` + admin writes.
+- `notificationService.ts` — `getNotifications`, `getAllNotifications`, `markNotificationAsRead`.
+- `subscriptionService.ts` — `getSubscribedDepartments`, `subscribeToDepartment`, `unsubscribeFromDepartment`.
+
+### 0.6 New Backend Endpoints (added for this integration)
+- `GET /api/incidents/{id}/history` — chronological audit trail (`IncidentHistoryResponse`).
+- `GET /api/incidents/stale` — aging incidents (CLAIMED/IN_PROGRESS > 2h).
+- `GET /api/dashboard/activity` — audit activity log.
+- `GET /api/dashboard/admin-activity` — evaluation heatmap counts.
+- `GET /api/me` + `PATCH /api/users/me/department` — current user session context + one-shot onboarding.
+- `GET /api/reference-data/{categories|departments|sections|production-lines|stations}` — any authenticated role.
+- `GET /api/notifications/all` — full notification history (read + unread).
+
+### 0.7 Mutation Conventions
+- Mutations call the real API then `refetch()` the affected query (no optimistic-in-place hacks).
+- Reference-data deletion guards: backend returns 409 `DataIntegrityViolationException` handler → friendly French banner.
+
+---
+
 # ADMIN Interface — Implementation Workflow
 
 ## Section 1: Bug Fixes & Structural Unification

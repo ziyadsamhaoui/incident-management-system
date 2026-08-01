@@ -11,4 +11,6 @@ import org.springframework.stereotype.Repository;
 public interface NotificationRepository extends JpaRepository<NotificationEntity, Long> {
 
     Page<NotificationEntity> findByRecipientAndIsReadFalse(UserEntity recipient, Pageable pageable);
+
+    Page<NotificationEntity> findByRecipient(UserEntity recipient, Pageable pageable);
 }

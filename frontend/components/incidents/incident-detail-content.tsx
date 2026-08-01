@@ -30,6 +30,7 @@ import {
   evaluateIncident,
 } from '@/services/incidentService';
 import type {
+  IncidentDTO,
   IncidentDetailDTO,
   IncidentStatus,
   IncidentPriority,
@@ -109,20 +110,20 @@ function AuditEntry({ entry }: { entry: IncidentHistoryEntry }) {
       <div className="min-w-0 flex-1">
         <div className="flex flex-col gap-1 rounded-lg border bg-card/50 px-4 py-3">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-medium">{entry.action}</p>
+            <p className="text-sm font-medium">{entry.currentStatus}</p>
             <span className="shrink-0 text-xs text-muted-foreground">
-              {formatDateTime(entry.timestamp)}
+              {formatDateTime(entry.changedAt)}
             </span>
           </div>
           <p className="text-xs text-muted-foreground">
             par{' '}
             <span className="font-mono font-medium text-foreground/80">
-              {formatAuditLabel(entry.performedBy)}
+              {formatAuditLabel(entry.actor)}
             </span>
           </p>
-          {entry.note && (
+          {entry.comment && (
             <p className="mt-1 rounded-md bg-muted/50 px-2.5 py-1.5 text-xs text-muted-foreground">
-              {entry.note}
+              {entry.comment}
             </p>
           )}
         </div>
@@ -134,8 +135,8 @@ function AuditEntry({ entry }: { entry: IncidentHistoryEntry }) {
 // ── Props ─────────────────────────────────────────
 
 export interface IncidentDetailContentProps {
-  incident: IncidentDetailDTO;
-  onIncidentUpdated?: (updated: IncidentDetailDTO) => void;
+  incident: IncidentDetailDTO | IncidentDTO;
+  onIncidentUpdated?: (updated: IncidentDTO) => void;
   actionLoading?: string | null;
   onActionLoadingChange?: (key: string | null) => void;
   compact?: boolean;
@@ -154,7 +155,7 @@ export function IncidentDetailContent({
   const primaryRole = (roles[0]?.replace('ROLE_', '') ?? 'CHEF_ATELIER') as UserRole;
 
   const [internalActionLoading, setInternalActionLoading] = useState<string | null>(null);
-  const [incident, setIncident] = useState(initialIncident);
+  const [incident, setIncident] = useState<IncidentDTO | IncidentDetailDTO>(initialIncident);
   const [evaluationModalOpen, setEvaluationModalOpen] = useState(false);
 
   useEffect(() => {
@@ -447,7 +448,7 @@ export function IncidentDetailContent({
       )}
 
       {/* ── Full Audit History ───────────────────── */}
-      {!isSousChef && incident.history && incident.history.length > 0 && (
+      {!isSousChef && 'history' in incident && incident.history && incident.history.length > 0 && (
         <Card>
           <CardHeader className={compact ? 'px-4 py-3' : undefined}>
             <CardTitle className="flex items-center gap-2 text-base">

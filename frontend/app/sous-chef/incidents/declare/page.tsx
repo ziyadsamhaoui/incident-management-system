@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -17,57 +17,50 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useAsync } from '@/lib/use-async';
+import { getCategories, getStations } from '@/services/referenceService';
+import { createIncident } from '@/services/incidentService';
+import { getMe } from '@/services/userService';
+import { ErrorState } from '@/components/ui/error-state';
+import { Skeleton } from '@/components/ui/skeleton';
 
 
 // ── Constants ─────────────────────────────────────
 
 const DRAFT_KEY = 'sous_chef_incident_draft';
 
-const STATIONS = [
-  'Poste 1 — Assemblage',
-  'Poste 2 — Soudure',
-  'Poste 3 — Contrôle',
-  'Poste 4 — Emballage',
-];
+// Default priority suggestions keyed by category name (used only as a UX
+// helper — the real category list is fetched from /api/reference-data/categories).
+const CATEGORY_PRIORITY_SUGGESTIONS: Record<string, 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'> = {
+  Sécurité: 'CRITICAL',
+  Accident: 'HIGH',
+  Panne: 'MEDIUM',
+  Mécanique: 'MEDIUM',
+  Électrique: 'HIGH',
+  Réclamation: 'LOW',
+};
 
-interface CategoryDef {
-  id: string;
-  label: string;
-  icon: React.ReactNode;
-  defaultPriority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-  presets: string[];
+// Optional description presets per category label (UI convenience only).
+const CATEGORY_PRESETS: Record<string, string[]> = {
+  Sécurité: ['Sol glissant', 'Équipement défectueux', 'Zone non sécurisée', 'Fuite de produit'],
+  Accident: ['Coupure légère', 'Choc/impact', 'Brûlure', 'Malaise'],
+  Panne: ['Ligne arrêtée', 'Surchauffe moteur', 'Fuite d\'huile', 'Défaut électrique'],
+  Mécanique: ['Pièce usée', 'Bruit anormal', 'Vibration excessive'],
+  Électrique: ['Coupure de courant', 'Défaut de câblage', 'Fusible grillé'],
+  Réclamation: ['Pièce non conforme', 'Retard livraison', 'Document manquant', 'Défaut qualité'],
+};
+
+// Category label → icon mapping (visual only, derived from real data).
+function categoryIcon(label: string): React.ReactNode {
+  const key = label.toLowerCase();
+  if (key.includes('sécur') || key.includes('secur')) return <Shield className="h-8 w-8" />;
+  if (key.includes('accident')) return <Wrench className="h-8 w-8" />;
+  if (key.includes('réclam') || key.includes('reclam')) return <MessageSquare className="h-8 w-8" />;
+  if (key.includes('électr') || key.includes('electr')) return <Zap className="h-8 w-8" />;
+  if (key.includes('mécan') || key.includes('mecan')) return <Wrench className="h-8 w-8" />;
+  if (key.includes('panne')) return <Zap className="h-8 w-8" />;
+  return <Factory className="h-8 w-8" />;
 }
-
-const CATEGORIES: CategoryDef[] = [
-  {
-    id: 'Sécurité',
-    label: 'Sécurité',
-    icon: <Shield className="h-8 w-8" />,
-    defaultPriority: 'CRITICAL',
-    presets: ['Sol glissant', 'Équipement défectueux', 'Zone non sécurisée', 'Fuite de produit'],
-  },
-  {
-    id: 'Accident',
-    label: 'Accident',
-    icon: <Wrench className="h-8 w-8" />,
-    defaultPriority: 'HIGH',
-    presets: ['Coupure légère', 'Choc/impact', 'Brûlure', 'Malaise'],
-  },
-  {
-    id: 'Panne',
-    label: 'Panne technique',
-    icon: <Zap className="h-8 w-8" />,
-    defaultPriority: 'MEDIUM',
-    presets: ['Ligne arrêtée', 'Surchauffe moteur', 'Fuite d\'huile', 'Défaut électrique'],
-  },
-  {
-    id: 'Réclamation',
-    label: 'Réclamation',
-    icon: <MessageSquare className="h-8 w-8" />,
-    defaultPriority: 'LOW',
-    presets: ['Pièce non conforme', 'Retard livraison', 'Document manquant', 'Défaut qualité'],
-  },
-];
 
 const PRIORITIES = [
   { value: 'LOW', label: 'Faible' },
@@ -79,10 +72,23 @@ const PRIORITIES = [
 // ── Types ─────────────────────────────────────────
 
 interface DraftState {
-  station: string;
-  category: string;
+  stationId: number | null;
+  categoryId: number | null;
   priority: string;
   description: string;
+}
+
+interface CategoryTileDef {
+  id: number;
+  label: string;
+  icon: React.ReactNode;
+  defaultPriority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  presets: string[];
+}
+
+interface StationOption {
+  id: number;
+  label: string;
 }
 
 // ── Voice Dictation Hook ──────────────────────────
@@ -175,7 +181,7 @@ function CategoryTile({
   selected,
   onSelect,
 }: {
-  def: CategoryDef;
+  def: CategoryTileDef;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -247,12 +253,36 @@ function PriorityControl({
 
 export default function DeclareIncidentPage() {
   const router = useRouter();
-  const { departmentName } = useAuthStore();
+  const { departmentId, departmentName } = useAuthStore();
   const { isListening, transcript, startListening, stopListening } = useSpeechRecognition();
 
-  // ── Form state ──────────────────────────────────
-  const [station, setStation] = useState('');
-  const [category, setCategory] = useState('');
+  // ── Current user + reference data (real API) ───
+  const { data: me } = useAsync(getMe, []);
+  const { data: categoriesData, loading: loadingCategories, error: categoriesError, refetch: refetchCategories } =
+    useAsync(getCategories, []);
+  const { data: stationsData, loading: loadingStations, error: stationsError, refetch: refetchStations } =
+    useAsync(getStations, []);
+
+  const stations: StationOption[] = useMemo(
+    () => (stationsData ?? []).map((s) => ({ id: s.id, label: s.code })),
+    [stationsData],
+  );
+
+  const categories: CategoryTileDef[] = useMemo(
+    () =>
+      (categoriesData ?? []).map((c) => ({
+        id: c.id,
+        label: c.name,
+        icon: categoryIcon(c.name),
+        defaultPriority: CATEGORY_PRIORITY_SUGGESTIONS[c.name] ?? 'MEDIUM',
+        presets: CATEGORY_PRESETS[c.name] ?? [],
+      })),
+    [categoriesData],
+  );
+
+  // ── Form state (real ids) ───────────────────────
+  const [stationId, setStationId] = useState<number | null>(null);
+  const [categoryId, setCategoryId] = useState<number | null>(null);
   const [priority, setPriority] = useState('MEDIUM');
   const [description, setDescription] = useState('');
 
@@ -260,14 +290,14 @@ export default function DeclareIncidentPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const isValid = station !== '' && category !== '';
+  const isValid = stationId != null && categoryId != null;
 
   // ── Auto-priority from category ─────────────────
   useEffect(() => {
-    if (!category) return;
-    const def = CATEGORIES.find((c) => c.id === category);
+    if (categoryId == null) return;
+    const def = categories.find((c) => c.id === categoryId);
     if (def) setPriority(def.defaultPriority);
-  }, [category]);
+  }, [categoryId, categories]);
 
   // ── Draft persistence ───────────────────────────
   useEffect(() => {
@@ -275,8 +305,8 @@ export default function DeclareIncidentPage() {
       const raw = localStorage.getItem(DRAFT_KEY);
       if (raw) {
         const draft: DraftState = JSON.parse(raw);
-        if (draft.station) setStation(draft.station);
-        if (draft.category) setCategory(draft.category);
+        if (draft.stationId != null) setStationId(draft.stationId);
+        if (draft.categoryId != null) setCategoryId(draft.categoryId);
         if (draft.priority) setPriority(draft.priority);
         if (draft.description) setDescription(draft.description);
       }
@@ -287,9 +317,9 @@ export default function DeclareIncidentPage() {
 
   // Auto-save on every change
   useEffect(() => {
-    const draft: DraftState = { station, category, priority, description };
+    const draft: DraftState = { stationId, categoryId, priority, description };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-  }, [station, category, priority, description]);
+  }, [stationId, categoryId, priority, description]);
 
   // ── Voice transcript integration ────────────────
   useEffect(() => {
@@ -298,27 +328,33 @@ export default function DeclareIncidentPage() {
     }
   }, [transcript]);
 
-  // ── Submit handler ──────────────────────────────
+  // ── Submit handler (real API) ───────────────────
   const handleSubmit = async () => {
-    if (!isValid) return;
+    if (!isValid || !stationId || !categoryId) return;
     setIsSubmitting(true);
+    try {
+      const created = await createIncident({
+        userId: me?.id ?? 0, // real user id from GET /api/me
+        departmentId: departmentId ? Number(departmentId) : 0,
+        stationId,
+        categoryId,
+        priority: priority as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
+        description: description.trim(),
+      });
 
-    // Simulate API call
-    await new Promise((r) => setTimeout(r, 800));
+      // Clear draft
+      localStorage.removeItem(DRAFT_KEY);
 
-    // Clear draft
-    localStorage.removeItem(DRAFT_KEY);
-
-    // Generate reference number
-    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const refNumber = Math.floor(Math.random() * 9) + 1;
-    const reference = `INC-${today}-000${refNumber}`;
-
-    // Show success toast and redirect
-    setToastMessage(`Incident ${reference} créé avec succès`);
-    setTimeout(() => {
-      router.push('/sous-chef');
-    }, 200);
+      // Show success toast and redirect
+      setToastMessage(`Incident ${created.reference} créé avec succès`);
+      setTimeout(() => {
+        router.push('/sous-chef');
+      }, 200);
+    } catch {
+      setToastMessage("Échec de la déclaration. Réessayez.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -355,16 +391,30 @@ export default function DeclareIncidentPage() {
             <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Poste de travail
             </label>
-            <div className="grid grid-cols-2 gap-2.5">
-              {STATIONS.map((s) => (
-                <StationChip
-                  key={s}
-                  label={s}
-                  selected={station === s}
-                  onSelect={() => setStation(s)}
-                />
-              ))}
-            </div>
+            {loadingStations ? (
+              <div className="grid grid-cols-2 gap-2.5">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-12 w-full rounded-xl" />
+                ))}
+              </div>
+            ) : stationsError ? (
+              <ErrorState compact message={stationsError} onRetry={refetchStations} />
+            ) : stations.length === 0 ? (
+              <p className="rounded-xl border border-dashed px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
+                Aucune station enregistrée. Contactez un administrateur.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2.5">
+                {stations.map((s) => (
+                  <StationChip
+                    key={s.id}
+                    label={s.label}
+                    selected={stationId === s.id}
+                    onSelect={() => setStationId(s.id)}
+                  />
+                ))}
+              </div>
+            )}
           </section>
 
           {/* ── C. Category Selector ──────────────── */}
@@ -372,16 +422,30 @@ export default function DeclareIncidentPage() {
             <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Type d&apos;incident
             </label>
-            <div className="grid grid-cols-2 gap-3">
-              {CATEGORIES.map((cat) => (
-                <CategoryTile
-                  key={cat.id}
-                  def={cat}
-                  selected={category === cat.id}
-                  onSelect={() => setCategory(cat.id)}
-                />
-              ))}
-            </div>
+            {loadingCategories ? (
+              <div className="grid grid-cols-2 gap-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-24 w-full rounded-xl" />
+                ))}
+              </div>
+            ) : categoriesError ? (
+              <ErrorState compact message={categoriesError} onRetry={refetchCategories} />
+            ) : categories.length === 0 ? (
+              <p className="rounded-xl border border-dashed px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
+                Aucune catégorie configurée. Contactez un administrateur.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {categories.map((cat) => (
+                  <CategoryTile
+                    key={cat.id}
+                    def={cat}
+                    selected={categoryId === cat.id}
+                    onSelect={() => setCategoryId(cat.id)}
+                  />
+                ))}
+              </div>
+            )}
           </section>
 
           {/* ── D. Priority Segmented Control ─────── */}
@@ -390,7 +454,7 @@ export default function DeclareIncidentPage() {
               Priorité
             </label>
             <PriorityControl value={priority} onChange={setPriority} />
-            {category && (
+            {categoryId != null && (
               <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
                 Suggestion automatique basée sur la catégorie sélectionnée
               </p>
@@ -404,9 +468,9 @@ export default function DeclareIncidentPage() {
             </label>
 
             {/* Category-scoped preset chips */}
-            {category && (
+            {categoryId != null && (
               <div className="mb-2 flex flex-wrap gap-1.5">
-                {CATEGORIES.find((c) => c.id === category)?.presets.map((phrase) => (
+                {categories.find((c) => c.id === categoryId)?.presets.map((phrase) => (
                   <button
                     key={phrase}
                     type="button"

@@ -4,6 +4,7 @@ import incident.management.system.dto.CategoryResponse;
 import incident.management.system.dto.CreateIncidentRequest;
 import incident.management.system.dto.DepartmentResponse;
 import incident.management.system.dto.EvaluateIncidentRequest;
+import incident.management.system.dto.IncidentHistoryResponse;
 import incident.management.system.dto.IncidentResponse;
 import incident.management.system.dto.StationResponse;
 import incident.management.system.dto.UserSummaryResponse;
@@ -33,6 +34,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -123,6 +126,84 @@ public class IncidentServiceImpl implements IncidentService {
         return incidentRepository.findByReference(reference)
                 .map(this::toResponse)
                 .orElseThrow(() -> new ResourceNotFoundException("Incident", "reference", reference));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<IncidentHistoryResponse> getIncidentHistory(Long id) {
+        IncidentEntity incident = incidentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Incident", "id", id));
+
+        return incidentHistoryRepository.findByIncidentOrderByChangedAtAsc(incident).stream()
+                .map(history -> new IncidentHistoryResponse(
+                        history.getId(),
+                        incident.getId(),
+                        history.getPreviousStatus(),
+                        history.getCurrentStatus(),
+                        history.getChangedAt(),
+                        history.getComment(),
+                        resolveHistoryActor(incident, history.getCurrentStatus())))
+                .toList();
+    }
+
+    /**
+     * Resolves the actor of a history entry from the incident's own references.
+     * DECLARED → declaring user, CLAIMED/IN_PROGRESS → claimedBy,
+     * RESOLVED/NON_RESOLVED → resolvedBy, CLOSED → null (system-driven).
+     */
+    private UserSummaryResponse resolveHistoryActor(IncidentEntity incident, IncidentStatus status) {
+        if (status == IncidentStatus.DECLARED) {
+            return incident.getUser() != null
+                    ? new UserSummaryResponse(incident.getUser().getId(),
+                            incident.getUser().getFirstName(),
+                            incident.getUser().getLastName(),
+                            incident.getUser().getMatricule())
+                    : null;
+        }
+        if (status == IncidentStatus.CLAIMED || status == IncidentStatus.IN_PROGRESS) {
+            return incident.getClaimedBy() != null
+                    ? new UserSummaryResponse(incident.getClaimedBy().getId(),
+                            incident.getClaimedBy().getFirstName(),
+                            incident.getClaimedBy().getLastName(),
+                            incident.getClaimedBy().getMatricule())
+                    : null;
+        }
+        if (status == IncidentStatus.RESOLVED || status == IncidentStatus.NON_RESOLVED) {
+            return incident.getResolvedBy() != null
+                    ? new UserSummaryResponse(incident.getResolvedBy().getId(),
+                            incident.getResolvedBy().getFirstName(),
+                            incident.getResolvedBy().getLastName(),
+                            incident.getResolvedBy().getMatricule())
+                    : null;
+        }
+        return null;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<IncidentResponse> getStaleIncidents() {
+        LocalDateTime threshold = LocalDateTime.now().minusHours(2);
+
+        List<IncidentEntity> candidates = new ArrayList<>();
+        candidates.addAll(incidentRepository.findByStatus(IncidentStatus.CLAIMED, Pageable.unpaged()).getContent());
+        candidates.addAll(incidentRepository.findByStatus(IncidentStatus.IN_PROGRESS, Pageable.unpaged()).getContent());
+
+        return candidates.stream()
+                .filter(incident -> {
+                    LocalDateTime start = incident.getClaimedAt() != null
+                            ? incident.getClaimedAt()
+                            : incident.getInProgressAt() != null ? incident.getInProgressAt() : incident.getDeclaredAt();
+                    return start != null && start.isBefore(threshold);
+                })
+                .sorted((a, b) -> {
+                    LocalDateTime sa = a.getClaimedAt() != null
+                            ? a.getClaimedAt() : a.getInProgressAt() != null ? a.getInProgressAt() : a.getDeclaredAt();
+                    LocalDateTime sb = b.getClaimedAt() != null
+                            ? b.getClaimedAt() : b.getInProgressAt() != null ? b.getInProgressAt() : b.getDeclaredAt();
+                    return sb.compareTo(sa);
+                })
+                .map(this::toResponse)
+                .toList();
     }
 
     @Override

@@ -1,4 +1,32 @@
-/** Mirrors backend user profile DTO */
+/** Mirrors backend `DepartmentResponse` */
+export interface DepartmentRef {
+  id: number;
+  name: string;
+}
+
+/** Mirrors backend `UserResponse` record */
+export interface UserResponseDTO {
+  id: number;
+  firstName: string;
+  lastName: string;
+  matricule: number;
+  isActive: boolean;
+  role: 'SOUS_CHEF' | 'CHEF_ATELIER' | 'ADMIN';
+  department: DepartmentRef | null;
+  createdAt: string;
+}
+
+/** Payload for POST /api/users */
+export interface CreateUserRequestDTO {
+  firstName: string;
+  lastName: string;
+  password: string;
+  matricule: number;
+  role: 'SOUS_CHEF' | 'CHEF_ATELIER' | 'ADMIN';
+  departmentId: number | null;
+}
+
+/** Legacy alias used by settings/profile screens */
 export interface UserProfileDTO {
   id: string;
   firstName: string;
@@ -10,16 +38,7 @@ export interface UserProfileDTO {
   isFirstLogin: boolean;
 }
 
-/** Payload for setting a user's department (one-shot onboarding) */
+/** Payload for setting the current user's department (one-shot onboarding) */
 export interface SetDepartmentPayload {
-  departmentId: string;
-}
-
-/** Reference data groups for admin forms */
-export interface ReferenceDataGroup {
-  categories: Array<{ id: string; name: string }>;
-  departments: Array<{ id: string; name: string }>;
-  sections: Array<{ id: string; name: string }>;
-  productionLines: Array<{ id: string; name: string }>;
-  stations: Array<{ id: string; name: string }>;
+  departmentId: number;
 }

@@ -9,4 +9,6 @@ public interface NotificationService {
     void markAsRead(Long notificationId);
 
     Page<NotificationResponse> getUnreadNotificationsForUser(Long userId, Pageable pageable);
+
+    Page<NotificationResponse> getAllNotificationsForUser(Long userId, Pageable pageable);
 }

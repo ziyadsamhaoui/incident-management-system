@@ -4,23 +4,12 @@ import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Calendar } from 'lucide-react';
-
-// ── Mock contribution data ────────────────────────
-// In production, replace with GET /api/dashboard/admin-activity?adminId=X
-
-function generateMockData(): number[][] {
-  const weeks: number[][] = [];
-  for (let w = 0; w < 52; w++) {
-    const days: number[] = [];
-    for (let d = 0; d < 5; d++) {
-      // Random activity count: 0-5 with ~40% chance of 0
-      days.push(Math.random() < 0.4 ? 0 : Math.floor(Math.random() * 5) + 1);
-    }
-    weeks.push(days);
-  }
-  return weeks;
-}
+import { Calendar, Inbox } from 'lucide-react';
+import { ErrorState } from '@/components/ui/error-state';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useAsync } from '@/lib/use-async';
+import { getAdminActivity } from '@/services/dashboardService';
+import type { AdminActivityEntry } from '@/types/dashboard';
 
 // ── Color intensity levels ────────────────────────
 // 0 = dark gray (light) / light gray (dark), then soft green → deep green
@@ -45,20 +34,6 @@ function getIntensityClass(count: number): string {
 // ── Month label helper ────────────────────────────
 
 const MONTH_LABELS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
-
-function getMonthLabels(): { index: number; label: string }[] {
-  const now = new Date();
-  const currentMonth = now.getMonth();
-  const labels: { index: number; label: string }[] = [];
-  for (let i = 0; i < 12; i++) {
-    const monthIndex = (currentMonth - 11 + i + 12) % 12;
-    const weekIndex = Math.floor(i * 52 / 12);
-    if (i === 0 || labels[labels.length - 1].label !== MONTH_LABELS[monthIndex]) {
-      labels.push({ index: weekIndex, label: MONTH_LABELS[monthIndex] });
-    }
-  }
-  return labels;
-}
 
 // ── Day labels ────────────────────────────────────
 
@@ -91,11 +66,66 @@ function HeatmapTooltip({
   );
 }
 
-// ── Component ─────────────────────────────────────
-
+/**
+ * GitHub-style activity grid built from real evaluation data
+ * (`GET /api/dashboard/admin-activity`). Renders a dedicated empty state
+ * when no evaluations exist on the period.
+ */
 export function ActivityHeatmap() {
-  const data = useMemo(() => generateMockData(), []);
-  const monthLabels = useMemo(() => getMonthLabels(), []);
+  const { data, loading, error, refetch } = useAsync<AdminActivityEntry[]>(
+    () => getAdminActivity(),
+    [],
+  );
+
+  // ── Build the 52-week × 5-day grid from real counts ──
+  const grid = useMemo(() => {
+    if (!data) return { weeks: [], total: 0 };
+    const byDate = new Map(data.map((e) => [e.date, e.count]));
+    const weeks: number[][] = [];
+    const now = new Date();
+    // Walk back ~51 weeks of business days from today
+    const cursor = new Date(now);
+    cursor.setHours(0, 0, 0, 0);
+    const daySeries: Date[] = [];
+    let day = new Date(cursor);
+    day.setDate(day.getDate() - 6); // current partial week
+    while (day <= cursor) {
+      daySeries.push(new Date(day));
+      day.setDate(day.getDate() + 1);
+    }
+    const weekCount = 52;
+    const padded: Date[] = [];
+    for (let w = weekCount - 1; w >= 0; w--) {
+      const weekStart = new Date(cursor);
+      weekStart.setDate(cursor.getDate() - (7 * w + (cursor.getDay() || 7) - 1));
+      for (let d = 0; d < 5; d++) {
+        const date = new Date(weekStart);
+        date.setDate(weekStart.getDate() + d);
+        padded.push(date);
+      }
+    }
+    padded.forEach((date) => {
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      daySeries.push(date);
+      if (weeks.length === 0 || weeks[weeks.length - 1].length === 5) weeks.push([]);
+      weeks[weeks.length - 1].push(byDate.get(key) ?? 0);
+    });
+    // Trim leading partial weeks to a max of 52
+    while (weeks.length > 52) weeks.shift();
+    const total = data.reduce((sum, e) => sum + e.count, 0);
+    return { weeks, total };
+  }, [data]);
+
+  // Month labels
+  const monthLabels = useMemo(() => {
+    const labels: { index: number; label: string }[] = [];
+    const now = new Date();
+    for (let i = 0; i < 12; i++) {
+      const monthIndex = (now.getMonth() - 11 + i + 12) % 12;
+      labels.push({ index: Math.floor(i * 52 / 12), label: MONTH_LABELS[monthIndex] });
+    }
+    return labels;
+  }, []);
 
   // Tooltip state
   const [tooltip, setTooltip] = useState<{ count: number; x: number; y: number } | null>(null);
@@ -112,12 +142,6 @@ export function ActivityHeatmap() {
     setTooltip(null);
   }, []);
 
-  // Calculate total actions
-  const totalActions = useMemo(
-    () => data.reduce((sum, week) => sum + week.reduce((s, d) => s + d, 0), 0),
-    [data],
-  );
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -131,76 +155,93 @@ export function ActivityHeatmap() {
             Contribution
           </CardTitle>
         </CardHeader>
-        <CardContent className="px-4 pb-4 flex flex-col h-full">
-          <div className="flex items-start gap-1.5 flex-1">
-            {/* Day labels column */}
-            <div className="flex flex-col gap-[3px] pt-5 mr-1">
-              {DAY_LABELS.map((label) => (
-                <span key={label} className="h-4 text-[9px] font-medium text-muted-foreground leading-4">
-                  {label}
-                </span>
-              ))}
+        <CardContent className="px-4 pb-4">
+          {loading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-40 w-full" />
             </div>
+          ) : error ? (
+            <ErrorState message={error} compact onRetry={refetch} />
+          ) : !data || data.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <Inbox className="mb-3 h-10 w-10 text-muted-foreground/30" />
+              <p className="text-sm font-medium text-muted-foreground">
+                Aucune évaluation enregistrée sur cette période.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-start gap-1.5">
+                {/* Day labels column */}
+                <div className="flex flex-col gap-[3px] pt-5 mr-1">
+                  {DAY_LABELS.map((label) => (
+                    <span key={label} className="h-4 text-[9px] font-medium text-muted-foreground leading-4">
+                      {label}
+                    </span>
+                  ))}
+                </div>
 
-            {/* Grid */}
-            <div className="flex-1 overflow-x-auto">
-              {/* Month labels */}
-              <div className="flex gap-[4px] mb-1.5">
-                {monthLabels.map(({ index, label }) => (
-                  <span
-                    key={index}
-                    className="text-[8px] font-medium text-muted-foreground"
-                    style={{ marginLeft: index > 0 ? `${(index - (monthLabels[monthLabels.findIndex(m => m.index === index) - 1]?.index ?? 0)) * 100}px` : undefined }}
-                  >
-                    {label}
-                  </span>
-                ))}
-              </div>
-
-              {/* Week grid */}
-              <div className="flex gap-[4px]">
-                {data.map((week, wIdx) => (
-                  <div key={wIdx} className="flex flex-col gap-[4px]">
-                    {week.map((count, dIdx) => (
-                      <div
-                        key={dIdx}
-                        onMouseEnter={(e) => handleMouseEnter(count, e)}
-                        onMouseLeave={handleMouseLeave}
-                        className={cn(
-                          'h-4 w-4 rounded-sm transition-colors cursor-pointer',
-                          getIntensityClass(count),
-                          count > 0 && 'hover:ring-1 hover:ring-green-500/50',
-                        )}
-                        title={`${count} évaluation${count > 1 ? 's' : ''}`}
-                      />
+                {/* Grid */}
+                <div className="flex-1 overflow-x-auto">
+                  {/* Month labels */}
+                  <div className="flex gap-[4px] mb-1.5">
+                    {monthLabels.map(({ index, label }) => (
+                      <span
+                        key={`${index}-${label}`}
+                        className="text-[8px] font-medium text-muted-foreground"
+                        style={{ marginLeft: index * 4 }}
+                      >
+                        {label}
+                      </span>
                     ))}
                   </div>
-                ))}
+
+                  {/* Week grid */}
+                  <div className="flex gap-[4px]">
+                    {grid.weeks.map((week, wIdx) => (
+                      <div key={wIdx} className="flex flex-col gap-[4px]">
+                        {week.map((count, dIdx) => (
+                          <div
+                            key={dIdx}
+                            onMouseEnter={(e) => handleMouseEnter(count, e)}
+                            onMouseLeave={handleMouseLeave}
+                            className={cn(
+                              'h-4 w-4 rounded-sm transition-colors cursor-pointer',
+                              getIntensityClass(count),
+                              count > 0 && 'hover:ring-1 hover:ring-green-500/50',
+                            )}
+                            title={`${count} évaluation${count > 1 ? 's' : ''}`}
+                          />
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
 
-          {/* Tooltip */}
-          {tooltip && (
-            <HeatmapTooltip count={tooltip.count} x={tooltip.x} y={tooltip.y} />
+              {/* Tooltip */}
+              {tooltip && (
+                <HeatmapTooltip count={tooltip.count} x={tooltip.x} y={tooltip.y} />
+              )}
+
+              {/* Legend & Stats */}
+              <div className="flex items-center justify-between mt-auto pt-4">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-muted-foreground">Moins</span>
+                  {INTENSITY_LEVELS.map((level, idx) => (
+                    <div
+                      key={idx}
+                      className={cn('h-4 w-4 rounded-sm', level.className)}
+                    />
+                  ))}
+                  <span className="text-[10px] text-muted-foreground">Plus</span>
+                </div>
+                <p className="text-[11px] font-medium text-muted-foreground">
+                  <span className="font-semibold text-foreground">{grid.total}</span> évaluations
+                </p>
+              </div>
+            </>
           )}
-
-          {/* Legend & Stats */}
-          <div className="flex items-center justify-between mt-auto pt-4">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-muted-foreground">Moins</span>
-              {INTENSITY_LEVELS.map((level, idx) => (
-                <div
-                  key={idx}
-                  className={cn('h-4 w-4 rounded-sm', level.className)}
-                />
-              ))}
-              <span className="text-[10px] text-muted-foreground">Plus</span>
-            </div>
-            <p className="text-[11px] font-medium text-muted-foreground">
-              <span className="font-semibold text-foreground">{totalActions}</span> évaluations
-            </p>
-          </div>
         </CardContent>
       </Card>
     </motion.div>

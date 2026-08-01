@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useMemo, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Eye,
   Plus,
@@ -11,6 +12,7 @@ import {
   Activity,
   CheckCircle2,
   Clock,
+  Loader2,
 } from 'lucide-react';
 import { cn, formatDateTime } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -26,93 +28,14 @@ import {
 import { StatusDotLabel, getStatusConfig } from '@/lib/constants/incidentStatus';
 import { IncidentDetailDrawer } from '@/components/incidents/incident-detail-drawer';
 import { WelcomeOverlay } from '@/components/auth/WelcomeOverlay';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
+import { useAsync } from '@/lib/use-async';
+import { getIncidents } from '@/services/incidentService';
+import type { IncidentDTO } from '@/types/incident';
 
-//  Types 
-
-interface IncidentRow {
-  id: number;
-  reference: string;
-  declaredAt: string;
-  category: string;
-  status: string;
-  claimedByFirstName: string | null;
-  selected?: boolean;
-}
-
-//  Mock data for demonstration 
-
-const MOCK_INCIDENTS: IncidentRow[] = [
-  {
-    id: 1,
-    reference: 'INC-20260714-0001',
-    declaredAt: '2026-07-14T08:23:15',
-    category: 'Sécurité',
-    status: 'DECLARED',
-    claimedByFirstName: null,
-  },
-  {
-    id: 2,
-    reference: 'INC-20260714-0002',
-    declaredAt: '2026-07-14T09:15:42',
-    category: 'Accident',
-    status: 'CLAIMED',
-    claimedByFirstName: 'Ahmed',
-  },
-  {
-    id: 3,
-    reference: 'INC-20260714-0003',
-    declaredAt: '2026-07-14T10:02:33',
-    category: 'Réclamation',
-    status: 'IN_PROGRESS',
-    claimedByFirstName: 'Fatima',
-  },
-  {
-    id: 4,
-    reference: 'INC-20260714-0004',
-    declaredAt: '2026-07-14T11:45:00',
-    category: 'Sécurité',
-    status: 'RESOLVED',
-    claimedByFirstName: 'Mohamed',
-  },
-  {
-    id: 5,
-    reference: 'INC-20260714-0005',
-    declaredAt: '2026-07-14T13:10:22',
-    category: 'Accident',
-    status: 'CLOSED',
-    claimedByFirstName: 'Khadija',
-  },
-  {
-    id: 6,
-    reference: 'INC-20260714-0006',
-    declaredAt: '2026-07-14T14:30:00',
-    category: 'Réclamation',
-    status: 'NON_RESOLVED',
-    claimedByFirstName: null,
-  },
-  {
-    id: 7,
-    reference: 'INC-20260714-0007',
-    declaredAt: '2026-07-14T15:00:10',
-    category: 'Sécurité',
-    status: 'DECLARED',
-    claimedByFirstName: null,
-  },
-  {
-    id: 8,
-    reference: 'INC-20260714-0008',
-    declaredAt: '2026-07-14T16:20:45',
-    category: 'Accident',
-    status: 'IN_PROGRESS',
-    claimedByFirstName: 'Youssef',
-  },
-];
-
-//  Helpers 
-
-const CATEGORIES = ['Sécurité', 'Accident', 'Réclamation', 'Mécanique', 'Électrique'];
-
-//  Stat Card 
+//  Stat Card
 
 interface StatCardProps {
   label: string;
@@ -137,9 +60,11 @@ function StatCard({ label, value, icon: Icon, color }: StatCardProps) {
   );
 }
 
-//  Main Page 
+//  Main Page
 
 export default function MyIncidentsPage() {
+  const router = useRouter();
+
   // Welcome overlay
   const [showWelcome, setShowWelcome] = useState(true);
 
@@ -152,15 +77,28 @@ export default function MyIncidentsPage() {
   // Drawer state
   const [drawerIncidentId, setDrawerIncidentId] = useState<string | null>(null);
 
+  // Real data — incidents visible to this chef
+  const { data: page, loading, error, refetch } = useAsync(
+    () => getIncidents({ page: 0, size: 100 }),
+    [],
+  );
+
+  const incidents = useMemo(() => page?.content ?? [], [page]);
+
+  const categories = useMemo(
+    () => Array.from(new Set(incidents.map((i) => i.category).filter(Boolean))),
+    [incidents],
+  );
+
   // Stats
   const stats = {
-    total: MOCK_INCIDENTS.length,
-    open: MOCK_INCIDENTS.filter((i) => i.status === 'DECLARED').length,
-    inProgress: MOCK_INCIDENTS.filter((i) => i.status === 'IN_PROGRESS').length,
-    closed: MOCK_INCIDENTS.filter((i) => i.status === 'CLOSED').length,
+    total: incidents.length,
+    open: incidents.filter((i) => i.status === 'DECLARED').length,
+    inProgress: incidents.filter((i) => i.status === 'IN_PROGRESS').length,
+    closed: incidents.filter((i) => i.status === 'CLOSED').length,
   };
 
-  const filteredIncidents = MOCK_INCIDENTS.filter((inc) => {
+  const filteredIncidents = incidents.filter((inc) => {
     if (searchQuery && !inc.reference.toLowerCase().includes(searchQuery.toLowerCase())) {
       return false;
     }
@@ -190,7 +128,7 @@ export default function MyIncidentsPage() {
     });
   }, []);
 
-
+  const hasActiveFilters = searchQuery !== '' || statusFilter !== 'all' || categoryFilter !== 'all';
 
   return (
     <>
@@ -218,6 +156,9 @@ export default function MyIncidentsPage() {
           <StatCard label="In Progress" value={stats.inProgress} icon={Activity} color="text-violet-600 dark:text-violet-400" />
           <StatCard label="Closed Incidents" value={stats.closed} icon={CheckCircle2} color="text-emerald-600 dark:text-emerald-400" />
         </div>
+
+        {/*  Error banner  */}
+        {error && <ErrorState message={error} onRetry={refetch} />}
 
         {/*  Toolbar  */}
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -253,15 +194,24 @@ export default function MyIncidentsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
-                {CATEGORIES.map((cat) => (
+                {categories.map((cat) => (
                   <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
 
-            <Button variant="outline" size="sm" className="h-10 gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-10 gap-2"
+              onClick={() => {
+                setSearchQuery('');
+                setStatusFilter('all');
+                setCategoryFilter('all');
+              }}
+            >
               <SlidersHorizontal className="h-4 w-4" />
-              <span className="hidden sm:inline">More Filters</span>
+              <span className="hidden sm:inline">Effacer les filtres</span>
             </Button>
           </div>
         </div>
@@ -269,38 +219,60 @@ export default function MyIncidentsPage() {
         {/*  Incidents Table  */}
         <Card>
           <CardContent className="p-0">
-            <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent">
-              <table className="w-full min-w-[780px] lg:min-w-0 border-collapse">
-                <thead>
-                  <tr className="border-b text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    <th className="w-10 px-3 py-3">
-                      <input
-                        type="checkbox"
-                        checked={allFilteredSelected}
-                        onChange={handleSelectAll}
-                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/30"
-                      />
-                    </th>
-                    <th className="px-3 py-3">Incident ID</th>
-                    <th className="px-3 py-3">Date/Time</th>
-                    <th className="px-3 py-3">Type</th>
-                    <th className="px-3 py-3">Statut</th>
-                    <th className="px-3 py-3">Réclamé par</th>
-                    <th className="w-16 px-3 py-3 text-center">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {filteredIncidents.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                        <div className="flex flex-col items-center gap-2">
-                          <Clock className="h-8 w-8 text-muted-foreground/50" />
-                          <p>No incidents found.</p>
-                        </div>
-                      </td>
+            {loading ? (
+              <div className="divide-y divide-border">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-4 px-4 py-3.5">
+                    <Skeleton className="h-4 w-4" />
+                    <Skeleton className="h-4 w-40" />
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-4 w-24" />
+                  </div>
+                ))}
+              </div>
+            ) : !error && incidents.length === 0 ? (
+              <EmptyState
+                icon={Clock}
+                title="Aucun incident en cours dans le système."
+                description="Les incidents déclarés apparaîtront ici."
+                actionLabel="Déclarer un incident"
+                onAction={() => router.push('/sous-chef/incidents/declare')}
+              />
+            ) : !error && filteredIncidents.length === 0 ? (
+              <EmptyState
+                icon={Search}
+                title="Aucun résultat ne correspond à vos filtres actuels."
+                actionLabel="Effacer les filtres"
+                onAction={() => {
+                  setSearchQuery('');
+                  setStatusFilter('all');
+                  setCategoryFilter('all');
+                }}
+              />
+            ) : (
+              <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent">
+                <table className="w-full min-w-[780px] lg:min-w-0 border-collapse">
+                  <thead>
+                    <tr className="border-b text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      <th className="w-10 px-3 py-3">
+                        <input
+                          type="checkbox"
+                          checked={allFilteredSelected}
+                          onChange={handleSelectAll}
+                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/30"
+                        />
+                      </th>
+                      <th className="px-3 py-3">Incident ID</th>
+                      <th className="px-3 py-3">Date/Time</th>
+                      <th className="px-3 py-3">Type</th>
+                      <th className="px-3 py-3">Statut</th>
+                      <th className="px-3 py-3">Réclamé par</th>
+                      <th className="w-16 px-3 py-3 text-center">Action</th>
                     </tr>
-                  ) : (
-                    filteredIncidents.map((inc) => {
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {filteredIncidents.map((inc) => {
                       const cfg = getStatusConfig(inc.status);
                       const accentStyle = {
                         boxShadow: 'inset 4px 0 0 0 ' + cfg.barColor,
@@ -339,8 +311,8 @@ export default function MyIncidentsPage() {
                             <StatusDotLabel status={inc.status} />
                           </td>
                           <td className="px-3 py-2.5">
-                            {inc.claimedByFirstName ? (
-                              <span className="text-sm font-medium">{inc.claimedByFirstName}</span>
+                            {inc.assignedTo ? (
+                              <span className="text-sm font-medium">{inc.assignedTo.firstName}</span>
                             ) : (
                               <span className="text-sm text-muted-foreground/60">—</span>
                             )}
@@ -359,11 +331,11 @@ export default function MyIncidentsPage() {
                           </td>
                         </tr>
                       );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -381,12 +353,16 @@ export default function MyIncidentsPage() {
       />
 
       <div className="fixed bottom-6 right-6 z-30">
-        <Button className="hidden h-12 gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-medium text-white shadow-lg transition-all duration-200 hover:bg-blue-700 hover:shadow-xl active:scale-95 lg:inline-flex">
+        <Button
+          onClick={() => router.push('/sous-chef/incidents/declare')}
+          className="hidden h-12 gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-medium text-white shadow-lg transition-all duration-200 hover:bg-blue-700 hover:shadow-xl active:scale-95 lg:inline-flex"
+        >
           <Plus className="h-5 w-5" />
           Create Incident
         </Button>
         <Button
           size="icon"
+          onClick={() => router.push('/sous-chef/incidents/declare')}
           className="flex h-14 w-14 rounded-xl bg-blue-600 text-white shadow-lg transition-all duration-200 hover:bg-blue-700 hover:shadow-xl active:scale-95 lg:hidden"
         >
           <Plus className="h-6 w-6" />
