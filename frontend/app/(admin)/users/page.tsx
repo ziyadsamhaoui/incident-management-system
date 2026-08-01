@@ -240,6 +240,7 @@ export default function UsersPage() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [deactivateTarget, setDeactivateTarget] = useState<UserResponseDTO | null>(null);
 
   const { data, loading, error, refetch } = useAsync(
     () => getUsers({ page: 0, size: 100 }),
@@ -276,17 +277,28 @@ export default function UsersPage() {
     }
   };
 
-  const handleDeactivate = async (id: number) => {
+  // Returns true when the deactivation succeeded (used to keep the
+  // confirmation dialog open on failure so the admin can retry).
+  const handleDeactivate = async (id: number): Promise<boolean> => {
     setBusyId(id);
     setActionError(null);
     try {
       await deactivateUser(id);
       refetch();
+      return true;
     } catch (err) {
       setActionError(extractErrorMessage(err));
+      return false;
     } finally {
       setBusyId(null);
     }
+  };
+
+  // Confirmed from the dialog — run the API call, close it only on success.
+  const confirmDeactivate = async () => {
+    if (!deactivateTarget) return;
+    const ok = await handleDeactivate(deactivateTarget.id);
+    if (ok) setDeactivateTarget(null);
   };
 
   const canPromote = (u: UserResponseDTO) => u.role === 'SOUS_CHEF' && u.isActive;
@@ -437,7 +449,7 @@ export default function UsersPage() {
                                 <button
                                   type="button"
                                   disabled={busyId === user.id}
-                                  onClick={() => handleDeactivate(user.id)}
+                                  onClick={() => setDeactivateTarget(user)}
                                   className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50"
                                   title="Désactiver le compte"
                                 >
@@ -499,7 +511,7 @@ export default function UsersPage() {
                           <button
                             type="button"
                             disabled={busyId === user.id}
-                            onClick={() => handleDeactivate(user.id)}
+                            onClick={() => setDeactivateTarget(user)}
                             className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50"
                           >
                             {busyId === user.id ? (
@@ -518,6 +530,43 @@ export default function UsersPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Deactivate confirmation dialog */}
+        <Dialog open={deactivateTarget !== null} onOpenChange={(open) => { if (!open) setDeactivateTarget(null); }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Désactiver le compte ?</DialogTitle>
+              <DialogDescription>
+                Le compte de{' '}
+                <span className="font-semibold text-foreground">
+                  {deactivateTarget?.firstName} {deactivateTarget?.lastName}
+                </span>{' '}
+                (<span className="font-mono">#{deactivateTarget?.matricule}</span>) sera désactivé
+                et ne pourra plus se connecter. Cette action peut être annulée par un
+                administrateur.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setDeactivateTarget(null)}
+                disabled={deactivateTarget !== null && busyId === deactivateTarget.id}
+              >
+                Annuler
+              </Button>
+              <Button
+                onClick={confirmDeactivate}
+                disabled={deactivateTarget !== null && busyId === deactivateTarget.id}
+                className="gap-2 bg-red-600 hover:bg-red-700 text-white"
+              >
+                {deactivateTarget !== null && busyId === deactivateTarget.id && (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                )}
+                Désactiver
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
