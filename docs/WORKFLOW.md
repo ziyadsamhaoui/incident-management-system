@@ -22,7 +22,7 @@
 - **Categories:** `"Aucune catégorie configurée."` + `[+ Ajouter une catégorie]`
 - **Stations / Sections / Lines:** `"Aucune station / section / ligne de production enregistrée."` + `[+ Ajouter]`
 - **Incidents (operator/admin):** system zero `"Aucun incident en cours dans le système."` + `[Déclarer un incident]`; filtered zero `"Aucun résultat ne correspond à vos filtres actuels."` + `[Effacer les filtres]`
-- **Users:** `"Aucun utilisateur enregistré."` + `[+ Nouvel utilisateur]`; **Approvals:** `"Aucune demande de promotion en attente."`
+- **Users:** `"Aucun utilisateur enregistré."` + `[+ Nouvel utilisateur]`
 - **Critical-Now widget:** `"Aucun incident critique en cours."`
 - **Aging Incidents table:** `"Aucun incident en retard."`
 - **Activity Log feed:** `"Aucune activité récente à afficher."`
@@ -61,7 +61,7 @@
 
 ### 1.2 Terminology Standardization
 - All UI references standardized to **"Promotion Chef d'atelier"** (unified from mixed `"Activation"` / `"Promotion"` usage).
-- Users page pending queue reflects this unified terminology.
+- Promotion is a **direct admin action** on the `/users` table (no request/approval workflow — SOUS_CHEF has no promotion-request mechanism).
 
 ### 1.3 User Creation Entry Point
 - `/users` page: primary button `"+ Nouvel Utilisateur"` with `UserPlus` icon in the header.

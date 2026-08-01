@@ -1,20 +1,16 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useNavigationProgress } from '@/components/ui/navigation-progress';
-import { motion } from 'framer-motion';
 import {
   Search,
   Users,
-  Shield,
   Clock,
-  ChevronRight,
   CheckCircle2,
-  XCircle,
   UserPlus,
   Loader2,
   AlertTriangle,
+  UserCheck,
+  Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
@@ -57,70 +53,6 @@ const ROLE_COLORS: Record<string, string> = {
   CHEF_ATELIER: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
   ADMIN: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
 };
-
-// ── Pending Request Card (real SOUS_CHEF users awaiting promotion) ──
-
-function PendingRequestCard({
-  user,
-  onApprove,
-  onReject,
-  busy,
-}: {
-  user: UserResponseDTO;
-  onApprove: () => void;
-  onReject: () => void;
-  busy: boolean;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex items-center justify-between gap-4 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/30 p-4"
-    >
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/50">
-          <Shield className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-            {user.firstName} {user.lastName}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            #{user.matricule} · {user.department?.name ?? 'Non assigné'}
-            <span className="mx-1">·</span>
-            <span className="text-blue-600 dark:text-blue-400 font-medium">
-              Promotion Chef d&apos;atelier
-            </span>
-          </p>
-        </div>
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={onReject}
-          disabled={busy}
-          className="h-8 w-8 p-0 text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
-        >
-          <XCircle className="h-4 w-4" />
-        </Button>
-        <Button
-          size="sm"
-          onClick={onApprove}
-          disabled={busy}
-          className="h-8 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs"
-        >
-          {busy ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <CheckCircle2 className="h-3.5 w-3.5" />
-          )}
-          Approuver
-        </Button>
-      </div>
-    </motion.div>
-  );
-}
 
 // ── Create User Modal ─────────────────────────────
 
@@ -303,11 +235,10 @@ function TableSkeleton() {
 // ── Page ──────────────────────────────────────────
 
 export default function UsersPage() {
-  const router = useRouter();
-  const { startNavigation } = useNavigationProgress();
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
   const { data, loading, error, refetch } = useAsync(
@@ -316,12 +247,6 @@ export default function UsersPage() {
   );
 
   const users = useMemo(() => data?.content ?? [], [data]);
-
-  // Real pending-promotion queue: SOUS_CHEF accounts eligible for promotion
-  const pendingUsers = useMemo(
-    () => users.filter((u) => u.role === 'SOUS_CHEF' && u.isActive),
-    [users],
-  );
 
   const filteredUsers = users.filter((u) => {
     if (search) {
@@ -337,25 +262,35 @@ export default function UsersPage() {
     return true;
   });
 
-  const handleApprove = async (id: number) => {
+  // Admin promotes a SOUS_CHEF directly — no request/approval workflow.
+  const handlePromote = async (id: number) => {
     setBusyId(id);
+    setActionError(null);
     try {
       await promoteUser(id);
       refetch();
+    } catch (err) {
+      setActionError(extractErrorMessage(err));
     } finally {
       setBusyId(null);
     }
   };
 
-  const handleReject = async (id: number) => {
+  const handleDeactivate = async (id: number) => {
     setBusyId(id);
+    setActionError(null);
     try {
       await deactivateUser(id);
       refetch();
+    } catch (err) {
+      setActionError(extractErrorMessage(err));
     } finally {
       setBusyId(null);
     }
   };
+
+  const canPromote = (u: UserResponseDTO) => u.role === 'SOUS_CHEF' && u.isActive;
+  const canDeactivate = (u: UserResponseDTO) => u.role !== 'ADMIN' && u.isActive;
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8">
@@ -381,41 +316,8 @@ export default function UsersPage() {
 
         {/* Error banner */}
         {error && <ErrorState message={error} onRetry={refetch} />}
-
-        {/* Pending Queue */}
-        {!loading && !error && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-amber-500" />
-              <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                Demandes en attente ({pendingUsers.length})
-              </span>
-            </div>
-            {pendingUsers.length === 0 ? (
-              <Card>
-                <CardContent className="p-0">
-                  <EmptyState
-                    compact
-                    icon={CheckCircle2}
-                    title="Aucune demande de promotion en attente"
-                    description="Les opérateurs éligibles à la promotion Chef d'atelier apparaîtront ici."
-                  />
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-2">
-                {pendingUsers.map((user) => (
-                  <PendingRequestCard
-                    key={user.id}
-                    user={user}
-                    busy={busyId === user.id}
-                    onApprove={() => handleApprove(user.id)}
-                    onReject={() => handleReject(user.id)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+        {actionError && (
+          <ErrorState message={actionError} compact onRetry={() => setActionError(null)} />
         )}
 
         {/* Filters */}
@@ -478,7 +380,7 @@ export default function UsersPage() {
                         <th className="px-4 py-3">Rôle</th>
                         <th className="px-4 py-3">Département</th>
                         <th className="px-4 py-3">Statut</th>
-                        <th className="px-4 py-3 w-16" />
+                        <th className="px-4 py-3 w-44">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -513,8 +415,40 @@ export default function UsersPage() {
                               </span>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-right">
-                            <ChevronRight className="inline h-4 w-4 text-muted-foreground" />
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1.5">
+                              {canPromote(user) && (
+                                <button
+                                  type="button"
+                                  disabled={busyId === user.id}
+                                  onClick={() => handlePromote(user.id)}
+                                  className="inline-flex h-7 items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 text-[11px] font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-50 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400"
+                                  title="Promouvoir au rôle Chef d'atelier"
+                                >
+                                  {busyId === user.id ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <UserCheck className="h-3 w-3" />
+                                  )}
+                                  Promouvoir
+                                </button>
+                              )}
+                              {canDeactivate(user) && (
+                                <button
+                                  type="button"
+                                  disabled={busyId === user.id}
+                                  onClick={() => handleDeactivate(user.id)}
+                                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50"
+                                  title="Désactiver le compte"
+                                >
+                                  {busyId === user.id ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  )}
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -525,24 +459,58 @@ export default function UsersPage() {
                 {/* Mobile card list */}
                 <div className="md:hidden divide-y divide-border">
                   {filteredUsers.map((user) => (
-                    <div key={user.id} className="flex items-center gap-3 px-4 py-3.5">
-                      <div className={cn(
-                        'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold',
-                        ROLE_COLORS[user.role],
-                      )}>
-                        {user.firstName[0]}{user.lastName[0]}
+                    <div key={user.id} className="px-4 py-3.5">
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold',
+                          ROLE_COLORS[user.role],
+                        )}>
+                          {user.firstName[0]}{user.lastName[0]}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {user.firstName} {user.lastName}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            #{user.matricule} · {user.department?.name ?? 'Non assigné'}
+                          </p>
+                        </div>
+                        <span className={cn('inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium', ROLE_COLORS[user.role])}>
+                          {ROLE_LABELS[user.role]}
+                        </span>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">
-                          {user.firstName} {user.lastName}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          #{user.matricule} · {user.department?.name ?? 'Non assigné'}
-                        </p>
+                      <div className="mt-2 flex items-center gap-1.5">
+                        {canPromote(user) && (
+                          <button
+                            type="button"
+                            disabled={busyId === user.id}
+                            onClick={() => handlePromote(user.id)}
+                            className="inline-flex h-7 items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 text-[11px] font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-50 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400"
+                          >
+                            {busyId === user.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <UserCheck className="h-3 w-3" />
+                            )}
+                            Promouvoir
+                          </button>
+                        )}
+                        {canDeactivate(user) && (
+                          <button
+                            type="button"
+                            disabled={busyId === user.id}
+                            onClick={() => handleDeactivate(user.id)}
+                            className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50"
+                          >
+                            {busyId === user.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3 w-3" />
+                            )}
+                            Désactiver
+                          </button>
+                        )}
                       </div>
-                      <span className={cn('inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium', ROLE_COLORS[user.role])}>
-                        {ROLE_LABELS[user.role]}
-                      </span>
                     </div>
                   ))}
                 </div>

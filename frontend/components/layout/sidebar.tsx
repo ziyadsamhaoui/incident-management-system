@@ -7,7 +7,6 @@ import { useNavigationProgress } from '@/components/ui/navigation-progress';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useAsync } from '@/lib/use-async';
-import { getUsers } from '@/services/userService';
 import { getIncidents } from '@/services/incidentService';
 import type { UserRole } from '@/types/auth';
 import {
@@ -33,19 +32,6 @@ import {
 // ── Badge hook for attention counts (real API data, ADMIN only) ──
 
 function useAttentionBadges(isAdmin: boolean) {
-  // Pending promotions: active SOUS_CHEF users awaiting promotion
-  const { data: users } = useAsync(
-    () => (isAdmin ? getUsers({ page: 0, size: 100 }) : Promise.resolve(null)),
-    [isAdmin],
-  );
-  const pendingUsers = useMemo(
-    () =>
-      (users?.content ?? []).filter(
-        (u) => u.role === 'SOUS_CHEF' && u.isActive,
-      ).length,
-    [users],
-  );
-
   // Critical open incidents
   const { data: incidents } = useAsync(
     () =>
@@ -59,7 +45,7 @@ function useAttentionBadges(isAdmin: boolean) {
     [incidents],
   );
 
-  return { pendingUsers, criticalIncidents };
+  return { criticalIncidents };
 }
 
 // ── Navigation item types ─────────────────────────
@@ -97,7 +83,7 @@ const CHEF_ATELIER_ITEMS: NavEntry[] = [
   { label: 'Profile', href: '/profile', icon: User, roles: ['CHEF_ATELIER'] },
 ];
 
-function buildAdminItems(pendingUsers: number, criticalIncidents: number): NavEntry[] {
+function buildAdminItems(criticalIncidents: number): NavEntry[] {
   return [
     { label: 'Tableau de bord', href: '/dashboard', icon: LayoutDashboard, roles: ['ADMIN'] },
     {
@@ -113,8 +99,6 @@ function buildAdminItems(pendingUsers: number, criticalIncidents: number): NavEn
       href: '/users',
       icon: Users,
       roles: ['ADMIN'],
-      badge: pendingUsers > 0 ? pendingUsers : null,
-      badgeClass: 'bg-amber-500 text-white',
     },
     {
       label: 'Données de référence',
@@ -187,7 +171,7 @@ export function Sidebar({ open, onOpenChange, variant = 'chef-atelier' }: Sideba
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(getStoredExpandedGroups);
   const userRoles = roles.map((r) => r.replace('ROLE_', '') as UserRole);
   const isAdmin = userRoles.includes('ADMIN');
-  const { pendingUsers, criticalIncidents } = useAttentionBadges(isAdmin);
+  const { criticalIncidents } = useAttentionBadges(isAdmin);
 
   const mobileOpen = open ?? false;
   const setMobileOpen = onOpenChange ?? (() => {});
@@ -195,7 +179,7 @@ export function Sidebar({ open, onOpenChange, variant = 'chef-atelier' }: Sideba
   // Pick nav items based on variant
   const navEntries: NavEntry[] =
     variant === 'admin'
-      ? buildAdminItems(pendingUsers, criticalIncidents)
+      ? buildAdminItems(criticalIncidents)
       : CHEF_ATELIER_ITEMS;
 
   const toggleGroup = useCallback((label: string) => {

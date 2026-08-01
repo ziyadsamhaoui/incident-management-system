@@ -8,7 +8,7 @@
 - ✅ **Standardized data-fetching hook** `lib/use-async.ts` (loading / error / refetch, no mock fallbacks) + shared `EmptyState`, `ErrorState` (with `[Réessayer]`), and `Skeleton` components.
 - ✅ **Incidents:** list/detail/history, declare (`POST /api/incidents`), claim, evaluate — all wired to real endpoints.
 - ✅ **Admin Dashboard:** real stats (`/api/dashboard/statistics/*`), charts, critical widget, aging table (`/api/incidents/stale`), activity feed (`/api/dashboard/activity`), heatmap (`/api/dashboard/admin-activity`).
-- ✅ **Users Management:** real table (`GET /api/users`), create modal (`POST /api/users`), pending promotion queue with approve (`PUT /api/users/{id}/promote`) / reject (`deactivateUser`), department picker from `/api/reference-data/departments`.
+- ✅ **Users Management:** real table (`GET /api/users`), create modal (`POST /api/users`), direct admin row actions — promote SOUS_CHEF (`PUT /api/users/{id}/promote`) and deactivate (`PUT /api/users/{id}/deactivate`) — department picker from `/api/reference-data/departments`.
 - ✅ **Reference Data:** all 5 tabs (categories/departments/sections/production-lines/stations) read `/api/reference-data/*`; Add + Delete wired to `/api/admin/*` (409 FK guard surfaced as friendly banner).
 - ✅ **Subscriptions:** real `/api/me`, subscribed list, POST/DELETE subscription toggles.
 - ✅ **Notifications:** real history (`/api/notifications/all`) + mark-as-read (`PUT /api/notifications/{id}/read`).
