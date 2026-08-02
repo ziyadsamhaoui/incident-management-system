@@ -354,7 +354,8 @@ export function LoginFormShell({
                   ) : isLocked ? (
                     <span className="flex items-center gap-2">
                       <Lock className="h-4 w-4" />
-                      {t.locked} ({lockoutCountdown})
+                      {t.locked}
+                      {lockoutCountdown && ` (${lockoutCountdown})`}
                     </span>
                   ) : isRateLimited ? (
                     <span className="flex items-center gap-2">

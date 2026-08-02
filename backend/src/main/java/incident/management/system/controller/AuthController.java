@@ -101,8 +101,17 @@ public class AuthController {
 
         } catch (LockedException e) {
             log.warn("Locked account login attempt: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.LOCKED)
-                    .body(Map.of("error", "Account is locked. Try again later."));
+
+            // Include the lockout expiry so the frontend can render an accurate countdown
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("error", e.getMessage() != null ? e.getMessage() : "Account is locked. Try again later.");
+            findUserForLockout(request).ifPresent(user -> {
+                if (user.getLockoutEnd() != null) {
+                    body.put("lockoutEnd", user.getLockoutEnd().toString());
+                }
+            });
+
+            return ResponseEntity.status(HttpStatus.LOCKED).body(body);
 
         } catch (BadCredentialsException e) {
             log.warn("Failed login attempt: {}", e.getMessage());
@@ -325,6 +334,21 @@ public class AuthController {
                     request.matricule(), null, lane,
                     request.firstName(), request.lastName());
         };
+    }
+
+    // Resolve the account referenced by the login request so lockout metadata can be returned.
+    private java.util.Optional<UserEntity> findUserForLockout(LoginRequest request) {
+        if (request.email() != null && !request.email().isBlank()) {
+            return userRepository.findByEmail(request.email());
+        }
+        if (request.matricule() != null && !request.matricule().isBlank()) {
+            try {
+                return userRepository.findByMatricule(Integer.parseInt(request.matricule()));
+            } catch (NumberFormatException ignored) {
+                return java.util.Optional.empty();
+            }
+        }
+        return java.util.Optional.empty();
     }
 
     private void tryUpdateFailedAttemptsByMatricule(int matricule) {

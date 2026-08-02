@@ -39,9 +39,12 @@ export async function login(
 
     // 423 Locked — account temporarily locked
     if (axiosErr.response?.status === 423) {
-      const lockoutEnd =
-        (axiosErr.response.data as any)?.lockoutEnd ?? null;
-      throw { code: 'LOCKED', lockoutEnd, message: 'Account is locked.' };
+      const data = axiosErr.response.data as any;
+      throw {
+        code: 'LOCKED',
+        lockoutEnd: data?.lockoutEnd ?? null,
+        message: data?.error ?? 'Account is locked.',
+      };
     }
 
     // 429 Rate limited
@@ -83,9 +86,12 @@ export async function adminLogin(
     const axiosErr = err as AxiosError<ApiError>;
 
     if (axiosErr.response?.status === 423) {
-      const lockoutEnd =
-        (axiosErr.response.data as any)?.lockoutEnd ?? null;
-      throw { code: 'LOCKED', lockoutEnd, message: 'Account is locked.' };
+      const data = axiosErr.response.data as any;
+      throw {
+        code: 'LOCKED',
+        lockoutEnd: data?.lockoutEnd ?? null,
+        message: data?.error ?? 'Account is locked.',
+      };
     }
 
     if (axiosErr.response?.status === 429) {
@@ -122,10 +128,12 @@ export async function claimAccount(
     return data;
   } catch (err) {
     const axiosErr = err as AxiosError<ApiError>;
+    const data = axiosErr.response?.data as any;
     throw {
-      code: axiosErr.response?.data as any,
-      message:
-        axiosErr.response?.data?.message ?? 'Failed to claim account.',
+      // Extract the backend code (e.g. ALREADY_CLAIMED, IDENTITY_MISMATCH) so
+      // the claim page can map it to a translated message.
+      code: data?.code ?? 'CLAIM_FAILED',
+      message: data?.message ?? 'Failed to claim account.',
     };
   }
 }

@@ -163,7 +163,7 @@ class AuthControllerAuthTest extends StandaloneWebMvcTestBase {
         }
 
         @Test
-        @DisplayName("locked account → 423 Locked")
+        @DisplayName("locked account → 423 Locked with lockoutEnd")
         void lockedAccount_returns423() throws Exception {
             var payload = """
                     {
@@ -174,6 +174,13 @@ class AuthControllerAuthTest extends StandaloneWebMvcTestBase {
                     }
                     """;
 
+            // Locked user found in DB → controller returns lockoutEnd so the frontend can show a countdown
+            UserEntity lockedUser = createUser(2002, "Eve", "Locked", UserRole.CHEF_ATELIER);
+            for (int i = 0; i < 5; i++) {
+                lockedUser.incrementFailedAttempts();
+            }
+            when(userRepository.findByMatricule(2002)).thenReturn(java.util.Optional.of(lockedUser));
+
             when(authenticationManager.authenticate(any()))
                     .thenThrow(new LockedException("Account is locked. Try again later."));
 
@@ -181,7 +188,34 @@ class AuthControllerAuthTest extends StandaloneWebMvcTestBase {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(payload))
                     .andExpect(status().isLocked())
-                    .andExpect(jsonPath("$.error").value("Account is locked. Try again later."));
+                    .andExpect(jsonPath("$.error").value("Account is locked. Try again later."))
+                    .andExpect(jsonPath("$.lockoutEnd").exists());
+        }
+
+        @Test
+        @DisplayName("locked account without DB lookup → 423 without lockoutEnd")
+        void lockedAccount_unknownUser_returns423WithoutLockoutEnd() throws Exception {
+            var payload = """
+                    {
+                        "matricule": "9999",
+                        "firstName": "Ghost",
+                        "lastName": "User",
+                        "password": "anyPass"
+                    }
+                    """;
+
+            // User not found in DB → controller still returns 423 but without lockoutEnd
+            when(userRepository.findByMatricule(9999)).thenReturn(java.util.Optional.empty());
+
+            when(authenticationManager.authenticate(any()))
+                    .thenThrow(new LockedException("Account is locked. Try again later."));
+
+            mockMvc.perform(post("/api/auth/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(payload))
+                    .andExpect(status().isLocked())
+                    .andExpect(jsonPath("$.error").value("Account is locked. Try again later."))
+                    .andExpect(jsonPath("$.lockoutEnd").doesNotExist());
         }
     }
 

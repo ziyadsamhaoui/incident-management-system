@@ -44,6 +44,11 @@ const T: Record<Lang, Record<string, string>> = {
     errorLocked: 'Compte verrouillé',
     errorRateLimited: 'Trop de requêtes',
     unlockIn: 'Débloqué dans',
+    errorLockedDetail:
+      'Compte verrouillé en raison de trop de tentatives de connexion échouées. Réessayez plus tard.',
+    errorRateLimitedDetail:
+      'Trop de tentatives de connexion. Veuillez patienter avant de réessayer.',
+    errorInvalidCredentials: 'Identifiants invalides. Veuillez réessayer.',
     // SOUS_CHEF helper copy (replaces register link)
     sousChefHelp:
       "Problème de connexion ? Demandez à votre chef d'équipe de vérifier vos informations.",
@@ -113,6 +118,11 @@ const T: Record<Lang, Record<string, string>> = {
     errorLocked: 'الحساب مقفل',
     errorRateLimited: 'طلبات كثيرة جداً',
     unlockIn: 'يفتح بعد',
+    errorLockedDetail:
+      'تم قفل الحساب بسبب كثرة محاولات تسجيل الدخول الفاشلة. حاول مرة أخرى لاحقاً.',
+    errorRateLimitedDetail:
+      'محاولات تسجيل دخول كثيرة جداً. يرجى الانتظار قبل إعادة المحاولة.',
+    errorInvalidCredentials: 'بيانات الدخول غير صحيحة. حاول مجدداً.',
     // SOUS_CHEF helper copy
     sousChefHelp: 'تعذر تسجيل الدخول؟ اطلب من مشرفك التحقق من بياناتك.',
     // Account unclaimed

@@ -299,14 +299,18 @@ export default function LoginPage() {
                     : fl.errorAuth}
               </p>
               <p className="mt-0.5 text-xs opacity-80">
-                {errorMessage}
+                {isLocked
+                  ? fl.errorLockedDetail
+                  : isRateLimited
+                    ? fl.errorRateLimitedDetail
+                    : fl.errorInvalidCredentials}
                 {isLocked && lockoutCountdown && (
-                  <span className="ml-1 font-mono font-bold">
+                  <span className="ms-1 font-mono font-bold">
                     {fl.unlockIn} {lockoutCountdown}
                   </span>
                 )}
                 {isRateLimited && (
-                  <span className="ml-1 font-mono font-bold">
+                  <span className="ms-1 font-mono font-bold">
                     {fl.retryIn} {retryAfter}s
                   </span>
                 )}

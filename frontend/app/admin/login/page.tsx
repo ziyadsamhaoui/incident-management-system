@@ -344,14 +344,18 @@ export default function AdminLoginPage() {
                     {isLocked ? fl.errorLocked : isRateLimited ? fl.errorRateLimited : fl.errorAuth}
                   </p>
                   <p className="mt-0.5 text-xs opacity-80">
-                    {errorMessage}
+                    {isLocked
+                      ? fl.errorLockedDetail
+                      : isRateLimited
+                        ? fl.errorRateLimitedDetail
+                        : fl.errorInvalidCredentials}
                     {isLocked && lockoutCountdown && (
-                      <span className="ml-1 font-mono font-bold">
+                      <span className="ms-1 font-mono font-bold">
                         {fl.unlockIn} {lockoutCountdown}
                       </span>
                     )}
                     {isRateLimited && (
-                      <span className="ml-1 font-mono font-bold">
+                      <span className="ms-1 font-mono font-bold">
                         {fl.retryIn} {retryAfter}s
                       </span>
                     )}
@@ -381,7 +385,8 @@ export default function AdminLoginPage() {
               ) : isLocked ? (
                 <span className="flex items-center gap-2">
                   <Lock className="h-4 w-4" />
-                  {fl.locked} ({lockoutCountdown})
+                  {fl.locked}
+                  {lockoutCountdown && ` (${lockoutCountdown})`}
                 </span>
               ) : isRateLimited ? (
                 <span className="flex items-center gap-2">
