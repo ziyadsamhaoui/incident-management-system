@@ -46,11 +46,11 @@ class FlywayMigrationTest {
                 .as("Flyway migrate() should report success = true")
                 .isTrue();
         assertThat(result.migrationsExecuted)
-                .as("Expected exactly 3 migrations (V1 baseline + V2 refactor + V3 widen date_key)")
-                .isEqualTo(3);
+                .as("Expected exactly 4 migrations (V1 baseline + V2 refactor + V3 widen date_key + V4 analytics indexes)")
+                .isEqualTo(4);
         assertThat(result.migrations)
                 .extracting(m -> m.version)
-                .containsExactly("1", "2", "3");
+                .containsExactly("1", "2", "3", "4");
     }
 
     @Test
@@ -59,8 +59,8 @@ class FlywayMigrationTest {
 
         MigrationInfo[] applied = flyway.info().applied();
         assertThat(applied)
-                .as("Flyway schema_history should have 3 applied migrations")
-                .hasSize(3);
+                .as("Flyway schema_history should have 4 applied migrations")
+                .hasSize(4);
 
         assertThat(applied[0].getVersion().toString())
                 .as("First migration should be version 1")
@@ -82,6 +82,13 @@ class FlywayMigrationTest {
         assertThat(applied[2].getDescription())
                 .as("Third migration description")
                 .containsIgnoringCase("widen");
+
+        assertThat(applied[3].getVersion().toString())
+                .as("Fourth migration should be version 4")
+                .isEqualTo("4");
+        assertThat(applied[3].getDescription())
+                .as("Fourth migration description")
+                .containsIgnoringCase("activity");
     }
 
     @Test
@@ -143,6 +150,10 @@ class FlywayMigrationTest {
         // Junction table columns
         assertColumnExists("admin_department_subscriptions", "admin_id");
         assertColumnExists("admin_department_subscriptions", "department_id");
+
+        // V4 composite indexes for per-user activity analytics
+        assertIndexExists("idx_incidents_resolved_by_resolved_at");
+        assertIndexExists("idx_incidents_user_declared_at");
 
         // Core columns on primary tables
         assertColumnExists("users", "matricule");
@@ -254,6 +265,21 @@ class FlywayMigrationTest {
                     .isTrue();
         } catch (Exception e) {
             throw new RuntimeException("Failed to verify UNIQUE constraint: " + columnName, e);
+        }
+    }
+
+    private void assertIndexExists(String indexName) {
+        try (Connection conn = getConnection();
+             var stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(
+                     "SELECT EXISTS (SELECT FROM pg_indexes " +
+                     "WHERE schemaname = 'public' AND indexname = '" + indexName + "')")) {
+            rs.next();
+            assertThat(rs.getBoolean(1))
+                    .as("Index '%s' should exist after Flyway migration", indexName)
+                    .isTrue();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to verify index existence: " + indexName, e);
         }
     }
 

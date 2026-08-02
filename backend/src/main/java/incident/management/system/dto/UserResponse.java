@@ -12,5 +12,12 @@ public record UserResponse(
         boolean isActive,
         UserRole role,
         DepartmentResponse department,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        /**
+         * True when the account has a password set (i.e. the account was
+         * claimed). False for promoted CHEF_ATELIER accounts awaiting the
+         * claim flow — rendered as "En attente" in the admin surface.
+         * Derived from the (never-exposed) {@code passwordHash} sentinel.
+         */
+        boolean claimed
 ) {}

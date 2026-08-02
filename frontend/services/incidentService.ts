@@ -14,6 +14,8 @@ export interface IncidentListParams {
   userId?: number;
   page?: number;
   size?: number;
+  /** Spring Data sort, e.g. 'declaredAt,desc'. */
+  sort?: string;
 }
 
 // ── Mapping: raw backend IncidentResponse → frontend IncidentDTO ──
@@ -73,6 +75,7 @@ export async function getIncidents(
       ...(params.status ? { status: params.status } : {}),
       ...(params.departmentId ? { departmentId: params.departmentId } : {}),
       ...(params.userId ? { userId: params.userId } : {}),
+      ...(params.sort ? { sort: params.sort } : {}),
     },
   });
   return { ...data, content: data.content.map(mapIncident) };

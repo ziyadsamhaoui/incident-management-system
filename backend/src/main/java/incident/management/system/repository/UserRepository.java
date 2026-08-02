@@ -19,4 +19,10 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
     boolean existsByMatricule(int matricule);
 
     List<UserEntity> findByDepartmentAndRole(DepartmentEntity department, UserRole role);
+
+    /**
+     * Count of users with the given role and activation flag — used by the
+     * last-active-admin guard ({@code role = ADMIN, is_active = true}).
+     */
+    long countByRoleAndIsActive(UserRole role, boolean isActive);
 }

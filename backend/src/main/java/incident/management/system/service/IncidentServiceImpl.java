@@ -24,12 +24,11 @@ import incident.management.system.repository.IncidentHistoryRepository;
 import incident.management.system.repository.IncidentRepository;
 import incident.management.system.repository.StationRepository;
 import incident.management.system.repository.UserRepository;
+import incident.management.system.security.CurrentUserResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -251,7 +250,7 @@ public class IncidentServiceImpl implements IncidentService {
 
         validateTransition(incident.getStatus(), IncidentStatus.CLAIMED);
 
-        UserEntity currentUser = getCurrentUser();
+        UserEntity currentUser = CurrentUserResolver.resolve(userRepository);
 
         IncidentStatus previousStatus = incident.getStatus();
         incident.setStatus(IncidentStatus.CLAIMED);
@@ -327,7 +326,7 @@ public class IncidentServiceImpl implements IncidentService {
             }
         }
 
-        UserEntity currentUser = getCurrentUser();
+        UserEntity currentUser = CurrentUserResolver.resolve(userRepository);
 
         //  Capture the note (may be null for RESOLVED without a comment)
         String resolutionNote = request.note();
@@ -416,25 +415,6 @@ public class IncidentServiceImpl implements IncidentService {
                 .comment(comment)
                 .build();
         incidentHistoryRepository.save(history);
-    }
-
-    /**
-     * Extracts the currently authenticated {@link UserEntity} from the
-     * {@link SecurityContextHolder}, or returns {@code null} if no
-     * authentication is available (e.g. for scheduler-triggered transitions).
-     */
-    private UserEntity getCurrentUser() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated()) {
-            return null;
-        }
-        String principal = authentication.getName(); // matricule as string
-        try {
-            int matricule = Integer.parseInt(principal);
-            return userRepository.findByMatricule(matricule).orElse(null);
-        } catch (NumberFormatException e) {
-            return null;
-        }
     }
 
     //  ========================================================================

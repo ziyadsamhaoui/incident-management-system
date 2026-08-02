@@ -12,4 +12,10 @@ public interface PasswordResetTokenRepository extends JpaRepository<PasswordRese
     Optional<PasswordResetToken> findByToken(String token);
 
     Optional<PasswordResetToken> findByUserIdAndUsedFalse(Long userId);
+
+    /**
+     * Removes all unused password-reset tokens for a user — invoked when a
+     * pending promotion is cancelled so no stale token can claim/reset later.
+     */
+    void deleteByUserIdAndUsedFalse(Long userId);
 }

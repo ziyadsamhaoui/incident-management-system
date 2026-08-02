@@ -17,6 +17,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -271,6 +272,79 @@ class IncidentRepositoryTest extends BaseRepositoryIntegrationTest {
                     .findByStatusAndResolvedAtBefore(IncidentStatus.RESOLVED, threshold);
 
             assertThat(result).hasSize(2);
+        }
+    }
+
+    //  Per-user activity analytics (GET /api/users/{id}/activity)
+    @Nested
+    @DisplayName("Per-user activity analytics")
+    class UserActivityAnalyticsTest {
+
+        @Test
+        @DisplayName("aggregate counts match declared / claimed / resolved actions")
+        void aggregateCountsMatchReportedActions() {
+            // userA declares one incident
+            persistIncident(userA, departmentA, IncidentStatus.DECLARED);
+
+            // userB declares two incidents, both claimed by userA
+            IncidentEntity claimed1 = persistIncident(userB, departmentA, IncidentStatus.CLAIMED);
+            claimed1.setClaimedBy(userA);
+            incidentRepository.save(claimed1);
+
+            IncidentEntity claimed2 = persistIncident(userB, departmentA, IncidentStatus.IN_PROGRESS);
+            claimed2.setClaimedBy(userA);
+            incidentRepository.save(claimed2);
+
+            // userB declares one more, resolved by userA
+            IncidentEntity resolved = persistIncident(userB, departmentB, IncidentStatus.RESOLVED);
+            resolved.setResolvedBy(userA);
+            resolved.setResolvedAt(LocalDateTime.now().minusHours(1));
+            incidentRepository.save(resolved);
+
+            assertThat(incidentRepository.countByUser(userA)).isEqualTo(1);
+            assertThat(incidentRepository.countByUser(userB)).isEqualTo(3);
+            assertThat(incidentRepository.countByClaimedBy(userA)).isEqualTo(2);
+            assertThat(incidentRepository.countByResolvedBy(userA)).isEqualTo(1);
+            assertThat(incidentRepository.countByResolvedBy(userB)).isZero();
+
+            // Open (non-terminal) buckets for the reporter view
+            assertThat(incidentRepository.countByUserAndStatusIn(
+                    userA, List.of(IncidentStatus.DECLARED, IncidentStatus.CLAIMED, IncidentStatus.IN_PROGRESS)))
+                    .isEqualTo(1);
+            assertThat(incidentRepository.countByUserAndStatusIn(
+                    userB, List.of(IncidentStatus.DECLARED, IncidentStatus.CLAIMED, IncidentStatus.IN_PROGRESS)))
+                    .isEqualTo(3);
+            // CLOSED terminal bucket
+            assertThat(incidentRepository.countByUserAndStatus(userA, IncidentStatus.CLOSED)).isZero();
+        }
+
+        @Test
+        @DisplayName("daily buckets group declarations and resolutions by calendar date")
+        void dailyBucketsGroupByCalendarDate() {
+            // Two incidents declared by userA (today)
+            persistIncident(userA, departmentA, IncidentStatus.DECLARED);
+            persistIncident(userA, departmentA, IncidentStatus.DECLARED);
+            // One declared by userB — must be excluded from userA's buckets
+            persistIncident(userB, departmentA, IncidentStatus.DECLARED);
+
+            // userA resolved one incident yesterday
+            IncidentEntity resolved = persistIncident(userA, departmentB, IncidentStatus.RESOLVED);
+            resolved.setResolvedBy(userA);
+            resolved.setResolvedAt(LocalDateTime.now().minusDays(1));
+            incidentRepository.save(resolved);
+
+            List<Object[]> declaredDays = incidentRepository.countDeclaredByDay(userA.getId());
+            assertThat(declaredDays).hasSize(1);
+            assertThat(declaredDays.get(0)[0]).isEqualTo(LocalDate.now().toString());
+            assertThat(declaredDays.get(0)[1]).isEqualTo(2L);
+
+            List<Object[]> resolvedDays = incidentRepository.countResolvedByDay(userA.getId());
+            assertThat(resolvedDays).hasSize(1);
+            assertThat(resolvedDays.get(0)[0]).isEqualTo(LocalDate.now().minusDays(1).toString());
+            assertThat(resolvedDays.get(0)[1]).isEqualTo(1L);
+
+            // userB has no resolutions
+            assertThat(incidentRepository.countResolvedByDay(userB.getId())).isEmpty();
         }
     }
 

@@ -1,8 +1,10 @@
 package incident.management.system.controller;
 
+import incident.management.system.dto.ActiveAdminCountResponse;
 import incident.management.system.dto.CreateUserRequest;
 import incident.management.system.dto.DepartmentResponse;
 import incident.management.system.dto.UpdateUserRequest;
+import incident.management.system.dto.UserActivityResponse;
 import incident.management.system.dto.UserResponse;
 import incident.management.system.service.UserService;
 import jakarta.validation.Valid;
@@ -72,9 +74,51 @@ public class UserController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * On-demand activity analytics for the user (declared / claimed / resolved
+     * counts + per-day buckets). Metrics are computed via SQL at request time.
+     */
+    @GetMapping("/{id}/activity")
+    public ResponseEntity<UserActivityResponse> getUserActivity(@PathVariable Long id) {
+        return ResponseEntity.ok(userService.getUserActivity(id));
+    }
+
     @PutMapping("/{id}/deactivate")
     public ResponseEntity<UserResponse> deactivateUser(@PathVariable Long id) {
         return ResponseEntity.ok(userService.deactivateUser(id));
+    }
+
+    @PutMapping("/{id}/activate")
+    public ResponseEntity<UserResponse> activateUser(@PathVariable Long id) {
+        return ResponseEntity.ok(userService.activateUser(id));
+    }
+
+    /**
+     * Danger zone — reverts a CHEF_ATELIER to SOUS_CHEF, resets the password
+     * (unclaimed sentinel) and clears the department assignment.
+     */
+    @PutMapping("/{id}/demote")
+    public ResponseEntity<UserResponse> demoteToSousChef(@PathVariable Long id) {
+        return ResponseEntity.ok(userService.demoteToSousChef(id));
+    }
+
+    /**
+     * Danger zone — cancels a pending promotion for an unclaimed CHEF_ATELIER:
+     * reverts the role, clears pending password-reset tokens, reactivates.
+     */
+    @PutMapping("/{id}/cancel-promotion")
+    public ResponseEntity<UserResponse> cancelPromotion(@PathVariable Long id) {
+        return ResponseEntity.ok(userService.cancelPromotion(id));
+    }
+
+    /**
+     * Active ADMIN count — feeds the last-active-admin guard on the UI.
+     * Static path segment so it never collides with {@code /{id}}.
+     */
+    @GetMapping("/active-admin-count")
+    public ResponseEntity<ActiveAdminCountResponse> getActiveAdminCount() {
+        return ResponseEntity.ok(
+                new ActiveAdminCountResponse(userService.countActiveAdmins()));
     }
 
     //  Admin Department Subscriptions

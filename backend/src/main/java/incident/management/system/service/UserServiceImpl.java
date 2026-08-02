@@ -3,15 +3,20 @@ package incident.management.system.service;
 import incident.management.system.dto.CreateUserRequest;
 import incident.management.system.dto.DepartmentResponse;
 import incident.management.system.dto.UpdateUserRequest;
+import incident.management.system.dto.UserActivityResponse;
 import incident.management.system.dto.UserResponse;
 import incident.management.system.enums.UserRole;
 import incident.management.system.exception.ResourceNotFoundException;
+import incident.management.system.enums.IncidentStatus;
 import incident.management.system.model.AdminDepartmentSubscription;
 import incident.management.system.model.DepartmentEntity;
 import incident.management.system.model.UserEntity;
 import incident.management.system.repository.AdminDepartmentSubscriptionRepository;
 import incident.management.system.repository.DepartmentRepository;
+import incident.management.system.repository.IncidentRepository;
+import incident.management.system.repository.PasswordResetTokenRepository;
 import incident.management.system.repository.UserRepository;
+import incident.management.system.security.CurrentUserResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -23,6 +28,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static incident.management.system.enums.IncidentStatus.CLAIMED;
+import static incident.management.system.enums.IncidentStatus.DECLARED;
+import static incident.management.system.enums.IncidentStatus.IN_PROGRESS;
+
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -31,6 +40,8 @@ public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
+    private final IncidentRepository incidentRepository;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final AdminDepartmentSubscriptionRepository subscriptionRepository;
 
@@ -138,6 +149,21 @@ public class UserServiceImpl implements UserService {
     public UserResponse deactivateUser(Long id) {
         UserEntity user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+
+        //  Hard safety guard #1: an admin cannot deactivate their own account.
+        UserEntity current = CurrentUserResolver.resolve(userRepository);
+        if (current != null && current.getId().equals(user.getId())) {
+            throw new IllegalArgumentException(
+                    "Impossible de désactiver votre propre compte.");
+        }
+
+        //  Hard safety guard #2: never deactivate the last active admin.
+        if (user.getRole() == UserRole.ADMIN && user.isActive()
+                && userRepository.countByRoleAndIsActive(UserRole.ADMIN, true) <= 1) {
+            throw new IllegalArgumentException(
+                    "Action impossible : il s'agit du dernier administrateur actif du système.");
+        }
+
         user.deactivate();
         return toResponse(userRepository.save(user));
     }
@@ -166,6 +192,103 @@ public class UserServiceImpl implements UserService {
                 saved.getId(), saved.getMatricule());
 
         return toResponse(saved);
+    }
+
+    //  ========================================================================
+    //  Per-user activity analytics
+    //  ========================================================================
+
+    @Override
+    @Transactional(readOnly = true)
+    public UserActivityResponse getUserActivity(Long id) {
+        UserEntity user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+
+        List<UserActivityResponse.DayCount> declaredByDay = incidentRepository
+                .countDeclaredByDay(id).stream()
+                .map(row -> new UserActivityResponse.DayCount(
+                        (String) row[0],
+                        ((Number) row[1]).longValue()))
+                .toList();
+
+        List<UserActivityResponse.DayCount> resolvedByDay = incidentRepository
+                .countResolvedByDay(id).stream()
+                .map(row -> new UserActivityResponse.DayCount(
+                        (String) row[0],
+                        ((Number) row[1]).longValue()))
+                .toList();
+
+        Double avgTimeToClaim = incidentRepository.avgTimeToClaimMinutes(id);
+        Double avgMttr = incidentRepository.avgMttrMinutes(id);
+
+        return new UserActivityResponse(
+                incidentRepository.countByUser(user),
+                incidentRepository.countByUserAndStatusIn(
+                        user, List.of(DECLARED, CLAIMED, IN_PROGRESS)),
+                incidentRepository.countByResolvedBy(user),
+                incidentRepository.countByUserAndStatus(user, IncidentStatus.CLOSED),
+                incidentRepository.countByClaimedBy(user),
+                avgTimeToClaim != null ? avgTimeToClaim : 0.0,
+                avgMttr != null ? avgMttr : 0.0,
+                declaredByDay,
+                resolvedByDay
+        );
+    }
+
+    //  ========================================================================
+    //  Role state transitions (danger zone)
+    //  ========================================================================
+
+    @Override
+    public UserResponse demoteToSousChef(Long id) {
+        UserEntity user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+
+        if (user.getRole() != UserRole.CHEF_ATELIER) {
+            throw new IllegalArgumentException(
+                    "Seuls les comptes Chef d'atelier peuvent être rétrogradés.");
+        }
+
+        // Revert role + reset credentials to the unclaimed sentinel (""), so a
+        // future re-promotion forces the user back through the claim flow.
+        user.setRole(UserRole.SOUS_CHEF);
+        user.setPasswordHash("");
+        user.setDepartment(null);
+
+        UserEntity saved = userRepository.save(user);
+        log.info("User {} (matricule: {}) demoted from CHEF_ATELIER to SOUS_CHEF.",
+                saved.getId(), saved.getMatricule());
+        return toResponse(saved);
+    }
+
+    @Override
+    public UserResponse cancelPromotion(Long id) {
+        UserEntity user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+
+        if (user.getRole() != UserRole.CHEF_ATELIER || !isUnclaimed(user)) {
+            throw new IllegalArgumentException(
+                    "Seules les promotions en attente de réclamation peuvent être annulées.");
+        }
+
+        // Clear any pending password-reset tokens so no stale token can be used later.
+        passwordResetTokenRepository.deleteByUserIdAndUsedFalse(user.getId());
+
+        user.setRole(UserRole.SOUS_CHEF);
+        user.setPasswordHash("");   // keep the unclaimed sentinel
+        user.setActive(true);       // reset status back to Actif
+        user.setDeletedAt(null);
+
+        UserEntity saved = userRepository.save(user);
+        log.info("Promotion cancelled for user {} (matricule: {}) — reverted to SOUS_CHEF.",
+                saved.getId(), saved.getMatricule());
+        return toResponse(saved);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countActiveAdmins() {
+        return userRepository.countByRoleAndIsActive(UserRole.ADMIN, true);
     }
 
     //  ========================================================================
@@ -214,6 +337,14 @@ public class UserServiceImpl implements UserService {
     }
 
     //  ========================================================================
+    //  Helpers
+    //  ========================================================================
+
+    private boolean isUnclaimed(UserEntity user) {
+        return user.getPasswordHash() == null || user.getPasswordHash().isBlank();
+    }
+
+    //  ========================================================================
     //  DTO Mapping
     //  ========================================================================
 
@@ -230,7 +361,8 @@ public class UserServiceImpl implements UserService {
                 entity.isActive(),
                 entity.getRole(),
                 deptResponse,
-                entity.getCreatedAt()
+                entity.getCreatedAt(),
+                !isUnclaimed(entity)
         );
     }
 }

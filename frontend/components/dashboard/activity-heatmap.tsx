@@ -45,10 +45,12 @@ function HeatmapTooltip({
   count,
   x,
   y,
+  unit,
 }: {
   count: number;
   x: number;
   y: number;
+  unit: string;
 }) {
   return (
     <div
@@ -60,22 +62,42 @@ function HeatmapTooltip({
       }}
     >
       {count > 0
-        ? `${count} évaluation${count > 1 ? 's' : ''}`
-        : 'Aucune évaluation'}
+        ? `${count} ${unit}${count > 1 ? 's' : ''}`
+        : `Aucune ${unit}`}
     </div>
   );
 }
 
+interface ActivityHeatmapProps {
+  /** Optional pre-fetched daily buckets ({date, count}). When provided, no fetch happens. */
+  data?: Array<{ date: string; count: number }>;
+  title?: string;
+  /** Empty-state copy when the period has no activity. */
+  emptyLabel?: string;
+  /** Unit used in the tooltip and total (e.g. 'évaluation', 'déclaration'). */
+  unit?: string;
+}
+
 /**
- * GitHub-style activity grid built from real evaluation data
- * (`GET /api/dashboard/admin-activity`). Renders a dedicated empty state
- * when no evaluations exist on the period.
+ * GitHub-style activity grid built from real daily counts. By default it
+ * fetches evaluations (`GET /api/dashboard/admin-activity`); pass {@code data}
+ * to render pre-fetched buckets (e.g. per-user declarations/resolutions).
+ * Renders a dedicated empty state when the period has no activity.
  */
-export function ActivityHeatmap() {
-  const { data, loading, error, refetch } = useAsync<AdminActivityEntry[]>(
-    () => getAdminActivity(),
-    [],
+export function ActivityHeatmap({
+  data: externalData,
+  title = 'Contribution',
+  emptyLabel = 'Aucune évaluation enregistrée sur cette période.',
+  unit = 'évaluation',
+}: ActivityHeatmapProps) {
+  const { data: fetched, loading, error, refetch } = useAsync<AdminActivityEntry[]>(
+    () => (externalData === undefined ? getAdminActivity() : Promise.resolve([])),
+    [externalData === undefined],
   );
+
+  // Pre-fetched buckets win; otherwise fall back to the fetched endpoint data.
+  const data = externalData ?? fetched ?? [];
+  const isLoading = externalData === undefined && loading;
 
   // ── Build the 52-week × 5-day grid from real counts ──
   const grid = useMemo(() => {
@@ -152,11 +174,11 @@ export function ActivityHeatmap() {
         <CardHeader className="px-4 py-3">
           <CardTitle className="flex items-center gap-2 text-sm font-semibold">
             <Calendar className="h-4 w-4 text-muted-foreground" />
-            Contribution
+            {title}
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4">
-          {loading ? (
+          {isLoading ? (
             <div className="space-y-2">
               <Skeleton className="h-40 w-full" />
             </div>
@@ -166,7 +188,7 @@ export function ActivityHeatmap() {
             <div className="flex flex-col items-center justify-center py-10 text-center">
               <Inbox className="mb-3 h-10 w-10 text-muted-foreground/30" />
               <p className="text-sm font-medium text-muted-foreground">
-                Aucune évaluation enregistrée sur cette période.
+                {emptyLabel}
               </p>
             </div>
           ) : (
@@ -210,7 +232,7 @@ export function ActivityHeatmap() {
                               getIntensityClass(count),
                               count > 0 && 'hover:ring-1 hover:ring-green-500/50',
                             )}
-                            title={`${count} évaluation${count > 1 ? 's' : ''}`}
+                            title={`${count} ${unit}${count > 1 ? 's' : ''}`}
                           />
                         ))}
                       </div>
@@ -221,7 +243,7 @@ export function ActivityHeatmap() {
 
               {/* Tooltip */}
               {tooltip && (
-                <HeatmapTooltip count={tooltip.count} x={tooltip.x} y={tooltip.y} />
+                <HeatmapTooltip count={tooltip.count} x={tooltip.x} y={tooltip.y} unit={unit} />
               )}
 
               {/* Legend & Stats */}
@@ -237,7 +259,8 @@ export function ActivityHeatmap() {
                   <span className="text-[10px] text-muted-foreground">Plus</span>
                 </div>
                 <p className="text-[11px] font-medium text-muted-foreground">
-                  <span className="font-semibold text-foreground">{grid.total}</span> évaluations
+                  <span className="font-semibold text-foreground">{grid.total}</span>{' '}
+                  {unit}{grid.total > 1 ? 's' : ''}
                 </p>
               </div>
             </>

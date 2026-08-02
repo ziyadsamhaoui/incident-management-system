@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
   Search,
   Users,
@@ -11,6 +12,7 @@ import {
   AlertTriangle,
   UserCheck,
   Trash2,
+  Eye,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
@@ -304,6 +306,9 @@ export default function UsersPage() {
   const canPromote = (u: UserResponseDTO) => u.role === 'SOUS_CHEF' && u.isActive;
   const canDeactivate = (u: UserResponseDTO) => u.role !== 'ADMIN' && u.isActive;
 
+  // En attente = promoted CHEF_ATELIER who has not claimed their account yet.
+  const isPending = (u: UserResponseDTO) => u.role === 'CHEF_ATELIER' && !u.claimed;
+
   return (
     <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8">
       <div className="max-w-5xl mx-auto space-y-6">
@@ -402,9 +407,12 @@ export default function UsersPage() {
                             <span className="font-mono text-sm font-medium">#{user.matricule}</span>
                           </td>
                           <td className="px-4 py-3">
-                            <span className="font-medium text-foreground">
+                            <Link
+                              href={`/admin/users/${user.id}`}
+                              className="font-medium text-foreground hover:text-blue-600 hover:underline dark:hover:text-blue-400"
+                            >
                               {user.firstName} {user.lastName}
-                            </span>
+                            </Link>
                           </td>
                           <td className="px-4 py-3">
                             <span className={cn('inline-flex rounded-md px-2 py-0.5 text-xs font-medium', ROLE_COLORS[user.role])}>
@@ -415,13 +423,18 @@ export default function UsersPage() {
                             {user.department?.name ?? '—'}
                           </td>
                           <td className="px-4 py-3">
-                            {user.isActive ? (
+                            {isPending(user) ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                                <Clock className="h-3 w-3" />
+                                En attente
+                              </span>
+                            ) : user.isActive ? (
                               <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
                                 <CheckCircle2 className="h-3 w-3" />
                                 Actif
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                              <span className="inline-flex items-center gap-1 text-xs font-medium text-red-600 dark:text-red-400">
                                 <Clock className="h-3 w-3" />
                                 Désactivé
                               </span>
@@ -429,6 +442,13 @@ export default function UsersPage() {
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-1.5">
+                              <Link
+                                href={`/admin/users/${user.id}`}
+                                className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                title="Voir le détail"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                              </Link>
                               {canPromote(user) && (
                                 <button
                                   type="button"
@@ -480,9 +500,12 @@ export default function UsersPage() {
                           {user.firstName[0]}{user.lastName[0]}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">
+                          <Link
+                            href={`/admin/users/${user.id}`}
+                            className="text-sm font-medium text-foreground truncate hover:text-blue-600 hover:underline dark:hover:text-blue-400"
+                          >
                             {user.firstName} {user.lastName}
-                          </p>
+                          </Link>
                           <p className="text-xs text-muted-foreground">
                             #{user.matricule} · {user.department?.name ?? 'Non assigné'}
                           </p>

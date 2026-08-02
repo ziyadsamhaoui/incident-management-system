@@ -73,6 +73,8 @@ interface Filters {
   priorities: IncidentPriority[];
   departments: string[];
   categories: string[];
+  dateFrom: string;
+  dateTo: string;
   scope: 'mine' | 'all';
   sort: 'newest' | 'oldest' | 'priority' | 'time-in-status';
 }
@@ -83,6 +85,8 @@ const DEFAULT_FILTERS: Filters = {
   priorities: [],
   departments: [],
   categories: [],
+  dateFrom: '',
+  dateTo: '',
   scope: 'all',
   sort: 'newest',
 };
@@ -186,6 +190,8 @@ function ActiveFilterChips({
   const chips: { key: keyof Filters; value?: string; label: string }[] = [];
 
   if (filters.search) chips.push({ key: 'search', label: `Recherche: "${filters.search}"` });
+  if (filters.dateFrom) chips.push({ key: 'dateFrom', label: `Depuis le ${filters.dateFrom}` });
+  if (filters.dateTo) chips.push({ key: 'dateTo', label: `Jusqu'au ${filters.dateTo}` });
   filters.statuses.forEach((s) => chips.push({ key: 'statuses', value: s, label: getStatusConfig(s).labelFr }));
   filters.priorities.forEach((p) => chips.push({ key: 'priorities', value: p, label: PRIORITY_LABELS[p] }));
   filters.departments.forEach((d) => chips.push({ key: 'departments', value: d, label: d }));
@@ -466,6 +472,17 @@ export default function AdminIncidentsPage() {
       result = result.filter((i) => filters.categories.includes(i.category));
     }
 
+    if (filters.dateFrom) {
+      const from = new Date(filters.dateFrom);
+      from.setHours(0, 0, 0, 0);
+      result = result.filter((i) => new Date(i.declaredAt).getTime() >= from.getTime());
+    }
+    if (filters.dateTo) {
+      const to = new Date(filters.dateTo);
+      to.setHours(23, 59, 59, 999);
+      result = result.filter((i) => new Date(i.declaredAt).getTime() <= to.getTime());
+    }
+
     if (filters.scope === 'mine') {
       result = result.filter((i) => i.user?.matricule === currentMatricule);
     }
@@ -549,7 +566,9 @@ export default function AdminIncidentsPage() {
 
   const removeFilter = (key: keyof Filters, value?: string) => {
     setFilters((prev) => {
-      if (key === 'search') return { ...prev, search: '' };
+      if (key === 'search' || key === 'dateFrom' || key === 'dateTo') {
+        return { ...prev, [key]: '' };
+      }
       if (Array.isArray(prev[key])) {
         return { ...prev, [key]: (prev[key] as string[]).filter((v) => v !== value) };
       }
@@ -570,7 +589,8 @@ export default function AdminIncidentsPage() {
 
   // ── Filter empty state ──────────────────────────
   const isFiltered = filters.search || filters.statuses.length > 0 || filters.priorities.length > 0 ||
-    filters.departments.length > 0 || filters.categories.length > 0 || filters.scope === 'mine';
+    filters.departments.length > 0 || filters.categories.length > 0 || filters.scope === 'mine' ||
+    filters.dateFrom || filters.dateTo;
   const filteredEmpty = !systemZero && filteredIncidents.length === 0 && isFiltered;
 
   if (!mounted) {
@@ -679,6 +699,31 @@ export default function AdminIncidentsPage() {
               selected={filters.categories}
               onChange={(vals) => updateFilter('categories', vals)}
             />
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Du
+              </span>
+              <input
+                type="date"
+                value={filters.dateFrom}
+                onChange={(e) => updateFilter('dateFrom', e.target.value)}
+                aria-label="Date de début de déclaration"
+                title="Déclaré depuis le"
+                className="h-9 rounded-lg border border-input bg-background px-2.5 text-xs text-muted-foreground outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
+              />
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Au
+              </span>
+              <input
+                type="date"
+                value={filters.dateTo}
+                onChange={(e) => updateFilter('dateTo', e.target.value)}
+                aria-label="Date de fin de déclaration"
+                title="Déclaré jusqu'au"
+                className="h-9 rounded-lg border border-input bg-background px-2.5 text-xs text-muted-foreground outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
+              />
+            </div>
 
             <button
               type="button"
