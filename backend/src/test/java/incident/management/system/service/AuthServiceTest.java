@@ -8,6 +8,7 @@ import incident.management.system.model.UserEntity;
 import incident.management.system.repository.AuditLogRepository;
 import incident.management.system.repository.PasswordResetTokenRepository;
 import incident.management.system.repository.UserRepository;
+import org.springframework.mail.MailSendException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -30,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -57,12 +59,16 @@ class AuthServiceTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
+    @Mock
+    private EmailService emailService;
+
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
         authService = new AuthService(
-                userRepository, passwordResetTokenRepository, auditLogRepository, passwordEncoder);
+                userRepository, passwordResetTokenRepository, auditLogRepository,
+                passwordEncoder, emailService);
     }
 
     @AfterEach
@@ -222,39 +228,62 @@ class AuthServiceTest {
     }
 
     @Nested
-    @DisplayName("Email reset (Track B) — anti-enumeration")
+    @DisplayName("Email reset (Track B) — anti-enumeration + real dispatch")
     class EmailReset {
 
         @Test
-        @DisplayName("unknown email → neutral result, no exception, no token persisted")
-        void unknownEmail_returnsNeutral() {
+        @DisplayName("unknown email → no exception, no token persisted, no email sent")
+        void unknownEmail_returnsNeutrally() {
             when(userRepository.findByEmail("ghost@example.com")).thenReturn(Optional.empty());
 
-            var result = authService.requestPasswordResetEmail("ghost@example.com");
+            authService.requestPasswordResetEmail("ghost@example.com");
 
-            assertThat(result.userFound()).isFalse();
-            assertThat(result.token()).isNull();
             verify(passwordResetTokenRepository, never()).save(any(PasswordResetToken.class));
+            verify(emailService, never()).sendPasswordResetEmail(anyString(), anyString());
         }
 
         @Test
-        @DisplayName("known email in stub mode → token persisted and echoed (dev convenience)")
-        void knownEmail_stubMode_returnsToken() {
+        @DisplayName("known email → token persisted + real email dispatched with deep link (no echo)")
+        void knownEmail_dispatchesRealEmail() {
             UserEntity admin = user(1L, 1001, "Admin", "User", UserRole.ADMIN, true, "admin-hash");
             admin.setEmail("admin@example.com");
             when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
             when(passwordResetTokenRepository.findByUserIdAndUsedFalse(1L))
                     .thenReturn(Optional.empty());
 
-            var result = authService.requestPasswordResetEmail("admin@example.com");
-
-            assertThat(result.userFound()).isTrue();
-            assertThat(result.token()).isNotNull();
+            authService.requestPasswordResetEmail("admin@example.com");
 
             ArgumentCaptor<PasswordResetToken> captor = ArgumentCaptor.forClass(PasswordResetToken.class);
             verify(passwordResetTokenRepository).save(captor.capture());
-            assertThat(captor.getValue().getToken()).isEqualTo(result.token());
-            assertThat(captor.getValue().getExpiryDate()).isBefore(LocalDateTime.now().plusMinutes(11));
+            PasswordResetToken saved = captor.getValue();
+            assertThat(saved.getToken()).isNotBlank();
+            assertThat(saved.getExpiryDate()).isBefore(LocalDateTime.now().plusMinutes(11));
+
+            // The token travels by email only — the deep link embeds it.
+            ArgumentCaptor<String> toCaptor = ArgumentCaptor.forClass(String.class);
+            ArgumentCaptor<String> tokenCaptor = ArgumentCaptor.forClass(String.class);
+            verify(emailService).sendPasswordResetEmail(toCaptor.capture(), tokenCaptor.capture());
+            assertThat(toCaptor.getValue()).isEqualTo("admin@example.com");
+            assertThat(tokenCaptor.getValue()).isEqualTo(saved.getToken());
+        }
+
+        @Test
+        @DisplayName("real SMTP failure (MailSendException) → swallowed, neutral contract preserved, token kept")
+        void smtpFailure_isSwallowed() {
+            UserEntity admin = user(1L, 1001, "Admin", "User", UserRole.ADMIN, true, "admin-hash");
+            admin.setEmail("admin@example.com");
+            when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
+            when(passwordResetTokenRepository.findByUserIdAndUsedFalse(1L))
+                    .thenReturn(Optional.empty());
+            // MailSendException is what JavaMailSender throws on SMTP auth/conn
+            // failures — must NOT propagate (no 500, no address-existence leak).
+            doThrow(new MailSendException("SMTP down"))
+                    .when(emailService).sendPasswordResetEmail(anyString(), anyString());
+
+            authService.requestPasswordResetEmail("admin@example.com");
+
+            // The token must survive — the send failure cannot roll it back.
+            verify(passwordResetTokenRepository).save(any(PasswordResetToken.class));
         }
     }
 

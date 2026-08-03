@@ -304,9 +304,6 @@ class AuthControllerAuthTest extends StandaloneWebMvcTestBase {
         @Test
         @DisplayName("unknown email → 200 with the neutral notice and NO token leak")
         void unknownEmail_returnsNeutral200() throws Exception {
-            when(authService.requestPasswordResetEmail("ghost@example.com"))
-                    .thenReturn(new AuthService.EmailResetResult(false, null));
-
             mockMvc.perform(post("/api/auth/password-reset/request-email")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
@@ -318,11 +315,8 @@ class AuthControllerAuthTest extends StandaloneWebMvcTestBase {
         }
 
         @Test
-        @DisplayName("known email (stub mode) → same 200 neutral notice + dev-only token")
-        void knownEmail_returnsNeutral200WithDevToken() throws Exception {
-            when(authService.requestPasswordResetEmail("admin@example.com"))
-                    .thenReturn(new AuthService.EmailResetResult(true, "dev-uuid-token"));
-
+        @DisplayName("known email → same 200 neutral notice, token NEVER in the response body")
+        void knownEmail_returnsNeutral200WithoutToken() throws Exception {
             mockMvc.perform(post("/api/auth/password-reset/request-email")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
@@ -330,7 +324,8 @@ class AuthControllerAuthTest extends StandaloneWebMvcTestBase {
                                     """))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.message").value(AuthService.EMAIL_NEUTRAL_MESSAGE))
-                    .andExpect(jsonPath("$.token").value("dev-uuid-token"));
+                    .andExpect(jsonPath("$.expiresInMinutes").value(10))
+                    .andExpect(jsonPath("$.token").doesNotExist());
         }
 
         @Test

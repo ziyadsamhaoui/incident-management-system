@@ -234,7 +234,7 @@
 ### 4.3 Track B — Email Request (ADMIN)
 - Field: `email` → `POST /api/auth/password-reset/request-email`.
 - **Neutral-response protection:** the backend always answers `200` with the same non-committal notice `"Si cette adresse est enregistrée, un lien de réinitialisation a été envoyé."` — the frontend renders this success state unconditionally, so **no code path distinguishes an unknown address** (not even a network/4xx/5xx failure; only 429 surfaces the rate-limit countdown).
-- **Dev stub mode** (`app.mail.stub-mode=true`, default): the 10-minute UUID deep link is logged server-side and the token is echoed in the response body (dev-only convenience). **Production blocker:** wire a transactional mail provider (SES / SendGrid / SMTP relay), set `app.mail.stub-mode=false`, and the token then travels by email only — never in the response.
+- **Real email dispatch (Spring Mail → Gmail SMTP):** `EmailService` sends the 10-minute UUID deep link via `JavaMailSender` (branded HTML + plain-text fallback). SMTP credentials come from the `MAIL_USERNAME` / `MAIL_PASSWORD` environment variables (Gmail requires an **App Password** — Google Account → Security → App passwords — when 2-Step Verification is enabled); the deep-link origin comes from `app.frontend-url` (default `http://localhost:3000`, override per environment). The token travels by email only — **never** in the HTTP response. On SMTP failure the link is logged server-side so an operator can still recover it, but the neutral 200 is preserved (an SMTP failure must not leak address existence).
 
 ### 4.4 Track C — Unified Confirmation
 - Fields: token/code (pre-filled, editable) + new password + confirmation.

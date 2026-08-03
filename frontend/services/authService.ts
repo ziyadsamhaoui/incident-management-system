@@ -192,12 +192,12 @@ export async function requestPasswordResetManual(
 }
 
 /**
- * Request an email-based password-reset token (Track B — ADMIN).
+ * Request an email-based password-reset link (Track B — ADMIN).
  *
  * Neutral-response contract: the backend ALWAYS answers with the same
  * non-committal notice whether or not the address exists — this service simply
- * surfaces that body. The optional `token` field appears only in stub (dev)
- * mode for a known address, so the UI never infers email existence from errors.
+ * surfaces that body. The actual reset token is delivered by real email
+ * (Gmail SMTP via Spring Mail) and is never present in the response.
  */
 export async function requestPasswordResetEmail(email: string): Promise<EmailResetResponse> {
   const { data } = await apiClient.post<EmailResetResponse>(

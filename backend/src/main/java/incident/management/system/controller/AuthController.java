@@ -200,18 +200,14 @@ public class AuthController {
                     "expiresInMinutes", 10));
         }
 
-        AuthService.EmailResetResult result = authService.requestPasswordResetEmail(email);
+        authService.requestPasswordResetEmail(email);
 
         // Anti-enumeration: ALWAYS the same neutral 200 — whether or not the
-        // address exists. The plaintext token is echoed ONLY in stub (dev) mode
-        // for a known address so local testing works without a real mailbox.
-        Map<String, Object> bodyOut = new LinkedHashMap<>();
-        bodyOut.put("message", AuthService.EMAIL_NEUTRAL_MESSAGE);
-        bodyOut.put("expiresInMinutes", 10);
-        if (result.token() != null) {
-            bodyOut.put("token", result.token());
-        }
-        return ResponseEntity.ok(bodyOut);
+        // address exists. The reset token travels by email only and is NEVER
+        // returned in the response body.
+        return ResponseEntity.ok(Map.of(
+                "message", AuthService.EMAIL_NEUTRAL_MESSAGE,
+                "expiresInMinutes", 10));
     }
 
     @PostMapping("/password-reset/confirm")

@@ -89,11 +89,14 @@ export default function AdminLoginPage() {
   }, [isAuthenticated, router]);
 
   // Pre-fill email from the password-reset redirect (?email=X)
+  // "undefined"/"null" values (legacy stale-backend redirects) are ignored.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     const email = params.get('email');
-    if (email) setValue('email', email);
+    if (email && email !== 'undefined' && email !== 'null') {
+      setValue('email', email);
+    }
   }, [setValue]);
 
   // Rate-limit interval

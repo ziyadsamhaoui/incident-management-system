@@ -103,11 +103,22 @@ export default function ConfirmResetPage() {
         const data = await confirmPasswordReset(token.trim(), newPassword);
         setSucceeded(true);
         // NO auto-login — route to the correct login lane with the identifier
-        // pre-filled, then show the success notice during the transition.
+        // pre-filled. The URL is built defensively so it can NEVER contain
+        // "undefined"/"null": if the backend omitted the identifier (stale
+        // build) we fall back to the Track A matricule param or drop the query.
+        const role = data.role ?? (isChefCode(token) ? 'CHEF_ATELIER' : 'ADMIN');
+        const identifier =
+          data.loginIdentifier &&
+          data.loginIdentifier !== 'undefined' &&
+          data.loginIdentifier !== 'null'
+            ? data.loginIdentifier
+            : role === 'CHEF_ATELIER'
+              ? matricule.trim()
+              : '';
         const target =
-          data.role === 'ADMIN'
-            ? `/admin/login?email=${encodeURIComponent(data.loginIdentifier)}`
-            : `/login?lane=CHEF_ATELIER&matricule=${encodeURIComponent(data.loginIdentifier)}`;
+          role === 'ADMIN'
+            ? `/admin/login${identifier ? `?email=${encodeURIComponent(identifier)}` : ''}`
+            : `/login?lane=CHEF_ATELIER${identifier ? `&matricule=${encodeURIComponent(identifier)}` : ''}`;
         window.setTimeout(() => router.replace(target), 1800);
       } catch (err) {
         const axiosErr = err as AxiosError;

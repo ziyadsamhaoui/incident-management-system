@@ -1,14 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  ShieldCheck,
-  CheckCircle2,
-  Clock,
-  ArrowLeft,
-  AlertTriangle,
-  Loader2,
-} from 'lucide-react';
+import { ShieldCheck, CheckCircle2, Clock, ArrowLeft, Loader2 } from 'lucide-react';
 import type { AxiosError } from 'axios';
 import { ResetPasswordShell } from '@/components/auth/reset-password-shell';
 import { useTranslation } from '@/lib/i18n';
@@ -34,7 +27,6 @@ export default function AdminResetPage() {
 
   // Neutral success state — identical whether or not the address exists.
   const [sent, setSent] = useState(false);
-  const [devToken, setDevToken] = useState<string | null>(null);
 
   // 429 retry-after countdown
   const [retryAfter, setRetryAfter] = useState(0);
@@ -72,10 +64,9 @@ export default function AdminResetPage() {
       setFieldError(null);
 
       try {
-        const data = await requestPasswordResetEmail(trimmed);
+        await requestPasswordResetEmail(trimmed);
         // ALWAYS the same neutral outcome — the backend never distinguishes.
         setSent(true);
-        setDevToken(data.token ?? null);
       } catch (err) {
         const axiosErr = err as AxiosError;
         if (axiosErr?.response?.status === 429) {
@@ -87,7 +78,6 @@ export default function AdminResetPage() {
         // Any other failure (network, 4xx, 5xx) → neutral notice anyway:
         // the response shape must never leak email existence.
         setSent(true);
-        setDevToken(null);
       } finally {
         setIsSubmitting(false);
       }
@@ -171,29 +161,14 @@ export default function AdminResetPage() {
         </form>
       ) : (
         /* ── Neutral success notice (always identical) ── */
-        <div className="space-y-4">
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-center dark:border-emerald-800 dark:bg-emerald-950/30">
-            <div className="flex items-center justify-center gap-2 text-emerald-700 dark:text-emerald-400">
-              <CheckCircle2 className="h-4 w-4" />
-              <p className="text-sm font-semibold">{fl.adminResetSentTitle}</p>
-            </div>
-            <p className="mt-2 text-sm text-emerald-800 dark:text-emerald-300">
-              {fl.adminResetSent}
-            </p>
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-center dark:border-emerald-800 dark:bg-emerald-950/30">
+          <div className="flex items-center justify-center gap-2 text-emerald-700 dark:text-emerald-400">
+            <CheckCircle2 className="h-4 w-4" />
+            <p className="text-sm font-semibold">{fl.adminResetSentTitle}</p>
           </div>
-
-          {/* Dev-only stub token — only rendered when the backend echoes one. */}
-          {devToken && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/30">
-              <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
-                <AlertTriangle className="h-3.5 w-3.5" />
-                {fl.adminResetDevToken}
-              </p>
-              <p className="mt-1.5 break-all font-mono text-xs text-amber-800 dark:text-amber-300">
-                {devToken}
-              </p>
-            </div>
-          )}
+          <p className="mt-2 text-sm text-emerald-800 dark:text-emerald-300">
+            {fl.adminResetSent}
+          </p>
         </div>
       )}
     </ResetPasswordShell>

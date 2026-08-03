@@ -12,7 +12,6 @@ import incident.management.system.repository.UserRepository;
 import incident.management.system.security.CurrentUserResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,16 +51,7 @@ public class AuthService {
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final AuditLogRepository auditLogRepository;
     private final PasswordEncoder passwordEncoder;
-
-    /**
-     * When {@code true} (dev default) the email dispatcher is a stub: the reset
-     * deep-link is only logged server-side and the plaintext token is echoed
-     * back in the response body for local testing. In production this MUST be
-     * set to {@code false} and a real transactional mail provider (SES,
-     * SendGrid, SMTP relay…) wired in — the token then travels by email only.
-     */
-    @Value("${app.mail.stub-mode:true}")
-    private boolean mailStubMode = true; // Java-side default: unit tests bypass Spring property injection
+    private final EmailService emailService;
 
     private static final int MANUAL_TOKEN_LENGTH = 6;
     private static final int MANUAL_TOKEN_EXPIRY_MINUTES = 15;
@@ -78,14 +68,6 @@ public class AuthService {
     /** Neutral Track B notice — identical regardless of whether the email exists. */
     public static final String EMAIL_NEUTRAL_MESSAGE =
             "Si cette adresse est enregistrée, un lien de réinitialisation a été envoyé.";
-
-    /**
-     * Outcome of a Track B (email) reset request. The response shape is always
-     * identical from the caller's perspective; {@code token} is only populated
-     * in stub (dev) mode for a known address so the local developer can grab
-     * the deep-link value without a real mailbox.
-     */
-    public record EmailResetResult(boolean userFound, String token) {}
 
     /**
      * Outcome of a unified reset confirmation — carries the user's role and
@@ -126,15 +108,16 @@ public class AuthService {
 
     //  Track B: Email Loop (ADMIN)
     //
-    //  Anti-enumeration contract: this method NEVER throws when the address is
-    //  unknown. The caller receives the same neutral result either way, so the
+    //  Anti-enumeration contract: this method NEVER throws and NEVER returns a
+    //  distinguishing value when the address is unknown — an SMTP failure is
+    //  also swallowed (the link is logged server-side as a fallback) so the
     //  HTTP layer can always answer with the same non-committal notice.
-    public EmailResetResult requestPasswordResetEmail(String email) {
+    public void requestPasswordResetEmail(String email) {
         Optional<UserEntity> userOpt = userRepository.findByEmail(email);
 
         if (userOpt.isEmpty()) {
             log.info("Password reset email requested for an unknown address — responding neutrally.");
-            return new EmailResetResult(false, null);
+            return;
         }
 
         UserEntity user = userOpt.get();
@@ -150,12 +133,20 @@ public class AuthService {
 
         passwordResetTokenRepository.save(resetToken);
 
-        // Async email dispatcher. In stub mode only the server logs the link;
-        // in production this MUST dispatch via a transactional mail provider.
-        dispatchPasswordResetEmail(email, token);
+        // Real email dispatch via Gmail SMTP (JavaMailSender). The token travels
+        // by email only — NEVER in the HTTP response. ANY runtime failure
+        // (MailSendException, wrap-up IllegalStateException, etc.) is swallowed:
+        // the link is logged server-side so an operator can still recover it, but
+        // the neutral response is preserved (a failure must not leak existence)
+        // and the already-persisted token must not be rolled back.
+        try {
+            emailService.sendPasswordResetEmail(email, token);
+        } catch (RuntimeException e) {
+            log.error("SMTP dispatch failed for {} — reset link ({} min): {}",
+                    email, EMAIL_TOKEN_EXPIRY_MINUTES, token, e);
+        }
 
         log.info("Email password reset token generated for user {} (email: {})", user.getId(), email);
-        return new EmailResetResult(true, mailStubMode ? token : null);
     }
 
     /**
@@ -280,22 +271,6 @@ public class AuthService {
             return HexFormat.of().formatHex(hash);
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 algorithm unavailable", e);
-        }
-    }
-
-    private void dispatchPasswordResetEmail(String email, String token) {
-        if (mailStubMode) {
-            log.warn("[EMAIL STUB] --- Reset link for {} ---", email);
-            log.warn("[EMAIL STUB] Token: {}", token);
-            log.warn("[EMAIL STUB] Expires in: {} minutes", EMAIL_TOKEN_EXPIRY_MINUTES);
-            log.warn("[EMAIL STUB] Reset URL: http://localhost:3000/auth/reset-password/confirm?token={}", token);
-            log.warn("[EMAIL STUB] --- End of email ---");
-            log.warn("[EMAIL STUB] app.mail.stub-mode=true — no email was actually sent. "
-                    + "PRODUCTION BLOCKER: wire a transactional mail provider (SES / SendGrid / SMTP relay) "
-                    + "and set app.mail.stub-mode=false before deployment.");
-        } else {
-            // Production hook — replace with the real transactional mail provider.
-            log.info("Dispatch password-reset email to {} with 10-minute link", email);
         }
     }
 

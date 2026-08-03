@@ -121,15 +121,25 @@ export interface ManualResetResponse {
 export interface EmailResetResponse {
   message: string;
   expiresInMinutes: number;
-  /** Present ONLY in stub (dev) mode for a known address — never in production. */
-  token?: string;
+  /**
+   * Deliberately no token: the reset token travels by email only and is never
+   * returned in the response body (anti-enumeration + no stub mode).
+   */
 }
 
 /** Response of POST /api/auth/password-reset/confirm (Track C) */
 export interface ConfirmResetResponse {
   message: string;
-  /** Role of the account whose password was just reset (login-lane redirect). */
-  role: 'CHEF_ATELIER' | 'ADMIN';
-  /** Matricule (CHEF_ATELIER) or email (ADMIN) to pre-fill on the login lane. */
-  loginIdentifier: string;
+  /**
+   * Role of the account whose password was just reset (login-lane redirect).
+   * Optional defensively — a stale backend may omit it; the UI then falls back
+   * to inferring the lane from the token shape.
+   */
+  role?: 'CHEF_ATELIER' | 'ADMIN';
+  /**
+   * Matricule (CHEF_ATELIER) or email (ADMIN) to pre-fill on the login lane.
+   * Optional defensively — the UI falls back to the Track A matricule param or
+   * omits the pre-fill entirely rather than emitting "undefined".
+   */
+  loginIdentifier?: string;
 }

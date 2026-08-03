@@ -112,8 +112,6 @@ const T: Record<Lang, Record<string, string>> = {
     adminResetSentTitle: 'Demande envoyée',
     adminResetSent:
       'Si cette adresse est enregistrée, un lien de réinitialisation a été envoyé.',
-    adminResetDevToken:
-      "Mode développement — jeton temporaire (l'email n'est pas envoyé) :",
     // Password reset — Track C (confirm)
     confirmResetTitle: 'Définir un nouveau mot de passe',
     confirmResetSubtitle:
@@ -233,8 +231,6 @@ const T: Record<Lang, Record<string, string>> = {
     adminResetSentTitle: 'تم إرسال الطلب',
     adminResetSent:
       'إذا كان هذا البريد مسجلاً، فقد تم إرسال رابط إعادة التعيين.',
-    adminResetDevToken:
-      'وضع التطوير — رمز مؤقت (لن يتم إرسال بريد إلكتروني):',
     // Password reset — Track C (confirm)
     confirmResetTitle: 'تعيين كلمة مرور جديدة',
     confirmResetSubtitle: 'أدخل الرمز المستلم وكلمة المرور الجديدة.',

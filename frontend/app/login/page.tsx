@@ -69,13 +69,16 @@ export default function LoginPage() {
   }, [activeLane, setValue]);
 
   // Pre-fill from the password-reset redirect (?lane=CHEF_ATELIER&matricule=X)
+  // "undefined"/"null" values (legacy stale-backend redirects) are ignored.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     const lane = params.get('lane');
     const matricule = params.get('matricule');
     if (lane === 'CHEF_ATELIER') setActiveLane('CHEF_ATELIER');
-    if (matricule) setValue('matricule', matricule);
+    if (matricule && matricule !== 'undefined' && matricule !== 'null') {
+      setValue('matricule', matricule);
+    }
   }, [setValue]);
 
   // Clear errors when switching lanes
