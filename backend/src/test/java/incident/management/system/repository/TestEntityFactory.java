@@ -70,6 +70,9 @@ public final class TestEntityFactory {
     }
 
     // Creates a default user with userRole = SOUS_CHEF.
+    // The 50_000 base keeps test matricules far away from the dev roster
+    // (1001–1015, 6767) and the dev admin (0) seeded by DevSeedConfig when
+    // the "dev" profile is active during integration tests.
     public static UserEntity createUser() {
         long n = counter.incrementAndGet();
         return UserEntity.builder()
@@ -77,7 +80,7 @@ public final class TestEntityFactory {
                 .lastName("Last_" + n)
                 .email("user_" + n + "@test.local")
                 .passwordHash("{bcrypt}$2a$10$dummyHashiDontUseInProduction")
-                .matricule((int) (1_000 + n))
+                .matricule((int) (50_000 + n))
                 .isActive(true)
                 .role(UserRole.SOUS_CHEF)
                 .failedLoginAttempts(0)
@@ -85,6 +88,8 @@ public final class TestEntityFactory {
     }
 
     // Creates a default user with userRole = ADMIN.
+    // The 9_000 base is safe while the dev roster stays below 9000 (currently
+    // 1001–1015 + 6767) — keep it out of any future roster range.
     public static UserEntity createAdmin() {
         long n = counter.incrementAndGet();
         return UserEntity.builder()

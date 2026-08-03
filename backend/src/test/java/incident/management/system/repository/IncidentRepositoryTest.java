@@ -307,13 +307,14 @@ class IncidentRepositoryTest extends BaseRepositoryIntegrationTest {
             assertThat(incidentRepository.countByResolvedBy(userA)).isEqualTo(1);
             assertThat(incidentRepository.countByResolvedBy(userB)).isZero();
 
-            // Open (non-terminal) buckets for the reporter view
+            // Open (non-terminal) buckets for the reporter view — userB's third
+            // incident is RESOLVED (terminal) and therefore excluded.
             assertThat(incidentRepository.countByUserAndStatusIn(
                     userA, List.of(IncidentStatus.DECLARED, IncidentStatus.CLAIMED, IncidentStatus.IN_PROGRESS)))
                     .isEqualTo(1);
             assertThat(incidentRepository.countByUserAndStatusIn(
                     userB, List.of(IncidentStatus.DECLARED, IncidentStatus.CLAIMED, IncidentStatus.IN_PROGRESS)))
-                    .isEqualTo(3);
+                    .isEqualTo(2);
             // CLOSED terminal bucket
             assertThat(incidentRepository.countByUserAndStatus(userA, IncidentStatus.CLOSED)).isZero();
         }
@@ -333,10 +334,12 @@ class IncidentRepositoryTest extends BaseRepositoryIntegrationTest {
             resolved.setResolvedAt(LocalDateTime.now().minusDays(1));
             incidentRepository.save(resolved);
 
+            // userA declared 3 incidents today in total: the two still-DECLARED
+            // ones plus the RESOLVED one (all three were reported today).
             List<Object[]> declaredDays = incidentRepository.countDeclaredByDay(userA.getId());
             assertThat(declaredDays).hasSize(1);
             assertThat(declaredDays.get(0)[0]).isEqualTo(LocalDate.now().toString());
-            assertThat(declaredDays.get(0)[1]).isEqualTo(2L);
+            assertThat(declaredDays.get(0)[1]).isEqualTo(3L);
 
             List<Object[]> resolvedDays = incidentRepository.countResolvedByDay(userA.getId());
             assertThat(resolvedDays).hasSize(1);

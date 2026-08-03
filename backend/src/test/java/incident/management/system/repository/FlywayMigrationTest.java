@@ -46,11 +46,11 @@ class FlywayMigrationTest {
                 .as("Flyway migrate() should report success = true")
                 .isTrue();
         assertThat(result.migrationsExecuted)
-                .as("Expected exactly 4 migrations (V1 baseline + V2 refactor + V3 widen date_key + V4 analytics indexes)")
-                .isEqualTo(4);
+                .as("Expected exactly 5 migrations (V1 baseline + V2 refactor + V3 widen date_key + V4 analytics indexes + V5 password-reset hardening)")
+                .isEqualTo(5);
         assertThat(result.migrations)
                 .extracting(m -> m.version)
-                .containsExactly("1", "2", "3", "4");
+                .containsExactly("1", "2", "3", "4", "5");
     }
 
     @Test
@@ -59,8 +59,8 @@ class FlywayMigrationTest {
 
         MigrationInfo[] applied = flyway.info().applied();
         assertThat(applied)
-                .as("Flyway schema_history should have 4 applied migrations")
-                .hasSize(4);
+                .as("Flyway schema_history should have 5 applied migrations")
+                .hasSize(5);
 
         assertThat(applied[0].getVersion().toString())
                 .as("First migration should be version 1")
@@ -89,6 +89,13 @@ class FlywayMigrationTest {
         assertThat(applied[3].getDescription())
                 .as("Fourth migration description")
                 .containsIgnoringCase("activity");
+
+        assertThat(applied[4].getVersion().toString())
+                .as("Fifth migration should be version 5")
+                .isEqualTo("5");
+        assertThat(applied[4].getDescription())
+                .as("Fifth migration description")
+                .containsIgnoringCase("password");
     }
 
     @Test
@@ -131,6 +138,9 @@ class FlywayMigrationTest {
 
         // V2-added junction table (1)
         assertTableExists("admin_department_subscriptions");
+
+        // V5-added system audit log (1)
+        assertTableExists("audit_logs");
     }
 
     @Test
@@ -154,6 +164,14 @@ class FlywayMigrationTest {
         // V4 composite indexes for per-user activity analytics
         assertIndexExists("idx_incidents_resolved_by_resolved_at");
         assertIndexExists("idx_incidents_user_declared_at");
+
+        // V5 password-reset hardening — claim-code columns, partial index and audit log
+        assertColumnExists("users", "claim_code_hash");
+        assertColumnExists("users", "claim_code_expires_at");
+        assertIndexExists("idx_users_claim_code_hash");
+        assertColumnExists("audit_logs", "action");
+        assertColumnExists("audit_logs", "actor_user_id");
+        assertColumnExists("audit_logs", "target_user_id");
 
         // Core columns on primary tables
         assertColumnExists("users", "matricule");
