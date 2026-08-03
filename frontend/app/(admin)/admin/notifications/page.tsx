@@ -254,6 +254,7 @@ export default function AdminNotificationsPage() {
                 }
               />
             ) : (
+
               <div className="divide-y divide-border">
                 {filtered.map((notif, idx) => {
                   const { icon: Icon, color } = notifStyle(notif.type);

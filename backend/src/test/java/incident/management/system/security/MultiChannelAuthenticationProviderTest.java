@@ -256,7 +256,7 @@ class MultiChannelAuthenticationProviderTest {
         @DisplayName("valid email + correct password → authenticated")
         void validEmailAndPassword_authenticates() {
             UserEntity user = createUser(MATRICULE, "Admin", "User", ENCODED_HASH, UserRole.ADMIN);
-            when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+            when(userRepository.findByEmailIgnoreCase(EMAIL)).thenReturn(Optional.of(user));
             when(passwordEncoder.matches(RAW_PASSWORD, ENCODED_HASH)).thenReturn(true);
 
             MultiChannelAuthenticationToken token = new MultiChannelAuthenticationToken(
@@ -274,7 +274,7 @@ class MultiChannelAuthenticationProviderTest {
         @Test
         @DisplayName("unknown email → BadCredentialsException")
         void unknownEmail_throwsException() {
-            when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
+            when(userRepository.findByEmailIgnoreCase(EMAIL)).thenReturn(Optional.empty());
 
             MultiChannelAuthenticationToken token = new MultiChannelAuthenticationToken(
                     EMAIL, RAW_PASSWORD, UserRole.ADMIN, null, null);
@@ -288,7 +288,7 @@ class MultiChannelAuthenticationProviderTest {
         @DisplayName("wrong password → BadCredentialsException")
         void wrongPassword_throwsException() {
             UserEntity user = createUser(MATRICULE, "Admin", "User", ENCODED_HASH, UserRole.ADMIN);
-            when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+            when(userRepository.findByEmailIgnoreCase(EMAIL)).thenReturn(Optional.of(user));
             when(passwordEncoder.matches(anyString(), eq(ENCODED_HASH))).thenReturn(false);
 
             MultiChannelAuthenticationToken token = new MultiChannelAuthenticationToken(
@@ -305,7 +305,7 @@ class MultiChannelAuthenticationProviderTest {
         @DisplayName("null password → BadCredentialsException")
         void nullPassword_throwsException() {
             UserEntity user = createUser(MATRICULE, "Admin", "User", ENCODED_HASH, UserRole.ADMIN);
-            when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+            when(userRepository.findByEmailIgnoreCase(EMAIL)).thenReturn(Optional.of(user));
 
             MultiChannelAuthenticationToken token = new MultiChannelAuthenticationToken(
                     EMAIL, null, UserRole.ADMIN, null, null);
@@ -326,7 +326,7 @@ class MultiChannelAuthenticationProviderTest {
             user.incrementFailedAttempts();
             assertThat(user.isLocked()).isTrue();
 
-            when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+            when(userRepository.findByEmailIgnoreCase(EMAIL)).thenReturn(Optional.of(user));
 
             MultiChannelAuthenticationToken token = new MultiChannelAuthenticationToken(
                     EMAIL, RAW_PASSWORD, UserRole.ADMIN, null, null);
@@ -394,7 +394,7 @@ class MultiChannelAuthenticationProviderTest {
         @Test
         @DisplayName("SOUS_CHEF user authenticating via ADMIN lane fails (email not matched)")
         void sousChefUser_cannotUseAdminLane() {
-            when(userRepository.findByEmail("alice@test.com")).thenReturn(Optional.empty());
+            when(userRepository.findByEmailIgnoreCase("alice@test.com")).thenReturn(Optional.empty());
 
             MultiChannelAuthenticationToken token = new MultiChannelAuthenticationToken(
                     "alice@test.com", "somePass", UserRole.ADMIN, null, null);

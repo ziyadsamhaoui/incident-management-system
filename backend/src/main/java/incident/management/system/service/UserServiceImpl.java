@@ -29,6 +29,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -53,6 +54,28 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserResponse createUser(CreateUserRequest request) {
+        // ADMIN accounts authenticate by email + password — the email is their
+        // login identifier, so it is mandatory (and must be well-formed; the
+        // @Email DTO constraint already rejected malformed values).
+        if (request.role() == UserRole.ADMIN
+                && (request.email() == null || request.email().isBlank())) {
+            throw new IllegalArgumentException(
+                    "L'email est requis pour un compte administrateur.");
+        }
+
+        // Emails are canonicalized (trim + lowercase) so login / reset lookups
+        // (findByEmailIgnoreCase) and the unique constraint always agree.
+        String email = request.email() == null
+                ? null
+                : request.email().trim().toLowerCase(Locale.ROOT);
+
+        // Friendly duplicate guard — the DB unique constraint would otherwise
+        // surface as a generic 500 (no DataIntegrityViolation handler here).
+        if (email != null && userRepository.existsByEmailIgnoreCase(email)) {
+            throw new IllegalArgumentException(
+                    "Un utilisateur avec cet email existe déjà.");
+        }
+
         DepartmentEntity department = null;
         if (request.departmentId() != null) {
             department = departmentRepository.findById(request.departmentId())
@@ -62,6 +85,7 @@ public class UserServiceImpl implements UserService {
         UserEntity user = UserEntity.builder()
                 .firstName(request.firstName())
                 .lastName(request.lastName())
+                .email(email)
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .matricule(request.matricule())
                 .role(request.role())
@@ -115,7 +139,7 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional(readOnly = true)
     public UserResponse getUserByEmail(String email) {
-        return userRepository.findByEmail(email)
+        return userRepository.findByEmailIgnoreCase(email)
                 .map(this::toResponse)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "email", email));
     }
@@ -398,6 +422,7 @@ public class UserServiceImpl implements UserService {
                 entity.getFirstName(),
                 entity.getLastName(),
                 entity.getMatricule(),
+                entity.getEmail(),
                 entity.isActive(),
                 entity.getRole(),
                 deptResponse,

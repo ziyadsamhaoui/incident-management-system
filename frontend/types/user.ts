@@ -10,6 +10,11 @@ export interface UserResponseDTO {
   firstName: string;
   lastName: string;
   matricule: number;
+  /**
+   * Canonical (lowercased) login email — populated only for ADMIN accounts,
+   * null for matricule-authenticated roles.
+   */
+  email: string | null;
   isActive: boolean;
   role: 'SOUS_CHEF' | 'CHEF_ATELIER' | 'ADMIN';
   department: DepartmentRef | null;
@@ -29,6 +34,11 @@ export interface CreateUserRequestDTO {
   matricule: number;
   role: 'SOUS_CHEF' | 'CHEF_ATELIER' | 'ADMIN';
   departmentId: number | null;
+  /**
+   * Login identifier for ADMIN accounts (mandatory for that role); send null
+   * for the matricule-authenticated roles.
+   */
+  email: string | null;
 }
 
 /** Legacy alias used by settings/profile screens */

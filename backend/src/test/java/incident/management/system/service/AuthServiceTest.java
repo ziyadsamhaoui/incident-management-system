@@ -234,7 +234,7 @@ class AuthServiceTest {
         @Test
         @DisplayName("unknown email → no exception, no token persisted, no email sent")
         void unknownEmail_returnsNeutrally() {
-            when(userRepository.findByEmail("ghost@example.com")).thenReturn(Optional.empty());
+            when(userRepository.findByEmailIgnoreCase("ghost@example.com")).thenReturn(Optional.empty());
 
             authService.requestPasswordResetEmail("ghost@example.com");
 
@@ -247,7 +247,7 @@ class AuthServiceTest {
         void knownEmail_dispatchesRealEmail() {
             UserEntity admin = user(1L, 1001, "Admin", "User", UserRole.ADMIN, true, "admin-hash");
             admin.setEmail("admin@example.com");
-            when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
+            when(userRepository.findByEmailIgnoreCase("admin@example.com")).thenReturn(Optional.of(admin));
             when(passwordResetTokenRepository.findByUserIdAndUsedFalse(1L))
                     .thenReturn(Optional.empty());
 
@@ -272,7 +272,7 @@ class AuthServiceTest {
         void smtpFailure_isSwallowed() {
             UserEntity admin = user(1L, 1001, "Admin", "User", UserRole.ADMIN, true, "admin-hash");
             admin.setEmail("admin@example.com");
-            when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
+            when(userRepository.findByEmailIgnoreCase("admin@example.com")).thenReturn(Optional.of(admin));
             when(passwordResetTokenRepository.findByUserIdAndUsedFalse(1L))
                     .thenReturn(Optional.empty());
             // MailSendException is what JavaMailSender throws on SMTP auth/conn

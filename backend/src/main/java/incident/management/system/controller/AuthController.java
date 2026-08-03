@@ -351,7 +351,7 @@ public class AuthController {
     // Resolve the account referenced by the login request so lockout metadata can be returned.
     private java.util.Optional<UserEntity> findUserForLockout(LoginRequest request) {
         if (request.email() != null && !request.email().isBlank()) {
-            return userRepository.findByEmail(request.email());
+            return userRepository.findByEmailIgnoreCase(request.email());
         }
         if (request.matricule() != null && !request.matricule().isBlank()) {
             try {
@@ -374,7 +374,7 @@ public class AuthController {
     }
 
     private void tryUpdateFailedAttemptsByEmail(String email) {
-        userRepository.findByEmail(email).ifPresent(user -> {
+        userRepository.findByEmailIgnoreCase(email).ifPresent(user -> {
             user.incrementFailedAttempts();
             userRepository.save(user);
             if (user.isLocked()) {

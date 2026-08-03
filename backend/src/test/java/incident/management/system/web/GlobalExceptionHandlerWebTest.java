@@ -97,7 +97,7 @@ class GlobalExceptionHandlerWebTest extends StandaloneWebMvcTestBase {
         @Test
         @DisplayName("all empty fields → 400 Bad Request with field errors")
         void allEmptyFields_returns400WithFieldErrors() throws Exception {
-            var request = new CreateUserRequest("", "", "", 0, null, null);
+            var request = new CreateUserRequest("", "", "", 0, null, null, null);
 
             mockMvc.perform(post("/api/users")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -114,7 +114,7 @@ class GlobalExceptionHandlerWebTest extends StandaloneWebMvcTestBase {
         @Test
         @DisplayName("blank strings + missing role → 400 with exact error messages")
         void missingRole_returns400WithFieldErrors() throws Exception {
-            var request = new CreateUserRequest("", "", "", 0, null, null);
+            var request = new CreateUserRequest("", "", "", 0, null, null, null);
 
             mockMvc.perform(post("/api/users")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -130,7 +130,7 @@ class GlobalExceptionHandlerWebTest extends StandaloneWebMvcTestBase {
         @DisplayName("valid payload passes validation and returns 201")
         void validPayload_passesValidation() throws Exception {
             var request = new CreateUserRequest(
-                    "John", "Doe", "securePass123", 12345, UserRole.SOUS_CHEF, null);
+                    "John", "Doe", "securePass123", 12345, UserRole.SOUS_CHEF, null, null);
 
             mockMvc.perform(post("/api/users")
                             .contentType(MediaType.APPLICATION_JSON)

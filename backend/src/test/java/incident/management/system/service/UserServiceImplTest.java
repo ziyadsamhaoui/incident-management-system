@@ -1,5 +1,6 @@
 package incident.management.system.service;
 
+import incident.management.system.dto.CreateUserRequest;
 import incident.management.system.dto.UserActivityResponse;
 import incident.management.system.enums.IncidentStatus;
 import incident.management.system.enums.UserRole;
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -307,6 +309,80 @@ class UserServiceImplTest {
 
             assertThat(response.avgTimeToClaimMinutes()).isZero();
             assertThat(response.avgMttrMinutes()).isZero();
+        }
+    }
+
+    //  ========================================================================
+    //  createUser — ADMIN email requirement & canonicalization
+    //  ========================================================================
+
+    @Nested
+    @DisplayName("createUser — email handling")
+    class CreateUserTest {
+
+        @Test
+        @DisplayName("ADMIN without email → rejected (email is the admin login identifier)")
+        void adminWithoutEmail_rejected() {
+            var request = new CreateUserRequest(
+                    "Admin", "New", "securePass123", 5001, UserRole.ADMIN, null, null);
+
+            assertThatThrownBy(() -> userService.createUser(request))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("email est requis");
+
+            verify(userRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("ADMIN with email → email canonicalized (trim + lowercase) and persisted")
+        void adminWithEmail_canonicalized() {
+            var request = new CreateUserRequest(
+                    "Admin", "New", "securePass123", 5002,
+                    UserRole.ADMIN, null, "  New.Admin@ICGLMA.MA ");
+            when(passwordEncoder.encode("securePass123")).thenReturn("encoded");
+            when(userRepository.save(any(UserEntity.class)))
+                    .thenAnswer(invocation -> invocation.getArgument(0));
+
+            var response = userService.createUser(request);
+
+            assertThat(response.email()).isEqualTo("new.admin@icglma.ma");
+            assertThat(response.role()).isEqualTo(UserRole.ADMIN);
+            assertThat(response.claimed()).isTrue();
+
+            ArgumentCaptor<UserEntity> captor = ArgumentCaptor.forClass(UserEntity.class);
+            verify(userRepository).save(captor.capture());
+            assertThat(captor.getValue().getEmail()).isEqualTo("new.admin@icglma.ma");
+            assertThat(captor.getValue().getPasswordHash()).isEqualTo("encoded");
+        }
+
+        @Test
+        @DisplayName("duplicate admin email → rejected with a friendly message")
+        void duplicateEmail_rejected() {
+            var request = new CreateUserRequest(
+                    "Admin", "Dup", "securePass123", 5004,
+                    UserRole.ADMIN, null, "boss@icglma.ma");
+            when(userRepository.existsByEmailIgnoreCase("boss@icglma.ma")).thenReturn(true);
+
+            assertThatThrownBy(() -> userService.createUser(request))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("email existe déjà");
+
+            verify(userRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("SOUS_CHEF without email → created with null email")
+        void nonAdminWithoutEmail_ok() {
+            var request = new CreateUserRequest(
+                    "Op", "Floor", "securePass123", 5003, UserRole.SOUS_CHEF, null, null);
+            when(passwordEncoder.encode("securePass123")).thenReturn("encoded");
+            when(userRepository.save(any(UserEntity.class)))
+                    .thenAnswer(invocation -> invocation.getArgument(0));
+
+            var response = userService.createUser(request);
+
+            assertThat(response.email()).isNull();
+            assertThat(response.role()).isEqualTo(UserRole.SOUS_CHEF);
         }
     }
 

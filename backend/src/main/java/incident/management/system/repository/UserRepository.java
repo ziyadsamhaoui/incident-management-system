@@ -17,6 +17,20 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
     Optional<UserEntity> findByEmail(String email);
 
     /**
+     * Case-insensitive email lookup (emails are stored canonicalized to
+     * lowercase, but this tolerates mixed-case input from legacy rows and
+     * human typists on the login / reset screens).
+     */
+    Optional<UserEntity> findByEmailIgnoreCase(String email);
+
+    /**
+     * True when any account already holds the email (case-insensitive) —
+     * used by {@code UserServiceImpl.createUser} to reject duplicate admin
+     * emails with a friendly 400 before the DB unique constraint fires.
+     */
+    boolean existsByEmailIgnoreCase(String email);
+
+    /**
      * Finds the user holding an active supervisor-mediated reset code
      * (hashed code + expiry in the future). See {@code V5__password_reset_hardening.sql}.
      */

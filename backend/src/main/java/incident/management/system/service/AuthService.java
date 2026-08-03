@@ -113,7 +113,7 @@ public class AuthService {
     //  also swallowed (the link is logged server-side as a fallback) so the
     //  HTTP layer can always answer with the same non-committal notice.
     public void requestPasswordResetEmail(String email) {
-        Optional<UserEntity> userOpt = userRepository.findByEmail(email);
+        Optional<UserEntity> userOpt = userRepository.findByEmailIgnoreCase(email);
 
         if (userOpt.isEmpty()) {
             log.info("Password reset email requested for an unknown address — responding neutrally.");

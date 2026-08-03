@@ -9,6 +9,11 @@ public record UserResponse(
         String firstName,
         String lastName,
         int matricule,
+        /**
+         * Canonical (lowercased) login email — populated only for ADMIN
+         * accounts, {@code null} for matricule-authenticated roles.
+         */
+        String email,
         boolean isActive,
         UserRole role,
         DepartmentResponse department,

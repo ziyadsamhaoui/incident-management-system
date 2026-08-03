@@ -27,6 +27,7 @@ import {
   KeyRound,
   Copy,
   Check,
+  Mail,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -427,6 +428,13 @@ export default function AdminUserDetailPage() {
                     <span className={cn('inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium', status.badgeClass)}>
                       <span className={cn('inline-block h-1.5 w-1.5 rounded-full', status.dotClass)} />
                       {status.label}
+                    </span>
+                  )}
+                  {/* Email — login identifier for ADMIN accounts */}
+                  {user.email && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border bg-muted/50 px-3 py-1 text-xs font-medium text-muted-foreground">
+                      <Mail className="h-3 w-3" />
+                      {user.email}
                     </span>
                   )}
                   {/* Department — omitted entirely for ADMIN */}

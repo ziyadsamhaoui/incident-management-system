@@ -74,16 +74,24 @@ function CreateUserModal({
   const [role, setRole] = useState<'SOUS_CHEF' | 'CHEF_ATELIER' | 'ADMIN'>('SOUS_CHEF');
   const [departmentId, setDepartmentId] = useState<string>('none');
   const [password, setPassword] = useState('');
+  // Only ADMIN accounts authenticate by email — the field is shown and required
+  // for that role only.
+  const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const { data: departments } = useAsync(getDepartments, []);
+
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const emailOk =
+    role !== 'ADMIN' || (email.trim() !== '' && EMAIL_RE.test(email.trim()));
 
   const isValid =
     firstName.trim() !== '' &&
     lastName.trim() !== '' &&
     matricule.trim() !== '' &&
     password.trim() !== '' &&
+    emailOk &&
     !Number.isNaN(Number(matricule));
 
   const handleSubmit = async () => {
@@ -97,6 +105,7 @@ function CreateUserModal({
       matricule: Number(matricule),
       role,
       departmentId: departmentId === 'none' ? null : Number(departmentId),
+      email: role === 'ADMIN' ? email.trim() : null,
     };
     try {
       await createUser(payload);
@@ -105,6 +114,7 @@ function CreateUserModal({
       setLastName('');
       setMatricule('');
       setPassword('');
+      setEmail('');
       setRole('SOUS_CHEF');
       setDepartmentId('none');
       onCreated();
@@ -186,6 +196,23 @@ function CreateUserModal({
               </SelectContent>
             </Select>
           </div>
+          {/* Email — only for ADMIN accounts (their login identifier) */}
+          {role === 'ADMIN' && (
+            <div className="space-y-1.5">
+              <Label htmlFor="new-user-email">Adresse email</Label>
+              <Input
+                id="new-user-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="nouvel.admin@icglma.ma"
+                autoComplete="off"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Identifiant de connexion administrateur (avec le mot de passe).
+              </p>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="new-user-password">Mot de passe initial</Label>
             <Input

@@ -96,7 +96,7 @@ public class MultiChannelAuthenticationProvider implements AuthenticationProvide
 
     private Authentication authenticateAdmin(MultiChannelAuthenticationToken token) {
         String email = (String) token.getPrincipal();
-        UserEntity user = userRepository.findByEmail(email)
+        UserEntity user = userRepository.findByEmailIgnoreCase(email)
                 .orElseThrow(() -> {
                     log.warn("ADMIN login — no user found for email: {}", email);
                     return new BadCredentialsException("Invalid credentials");
