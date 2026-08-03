@@ -140,6 +140,60 @@ class RateLimitingServiceTest {
         }
     }
 
+    // Manual password-reset rate limiting (3 req / 15 min)
+    @Nested
+    @DisplayName("Manual password-reset: 3 requests / 15 minutes")
+    class PasswordResetRateLimiting {
+
+        private static final String CLIENT_KEY = "ip:127.0.0.1";
+        private static final String RESET_PATH = "/api/auth/password-reset/request-manual";
+        private static final String HTTP_METHOD = "POST";
+
+        @Test
+        @DisplayName("3 requests within window are all allowed")
+        void threeRequests_allAllowed() {
+            for (int i = 0; i < 3; i++) {
+                rateLimitingService.consume(CLIENT_KEY, RESET_PATH, HTTP_METHOD);
+            }
+            // Should not throw
+        }
+
+        @Test
+        @DisplayName("4th request within same window is rejected with RateLimitExceededException")
+        void fourthRequest_rejected() {
+            for (int i = 0; i < 3; i++) {
+                rateLimitingService.consume(CLIENT_KEY, RESET_PATH, HTTP_METHOD);
+            }
+
+            assertThatThrownBy(() ->
+                    rateLimitingService.consume(CLIENT_KEY, RESET_PATH, HTTP_METHOD))
+                    .isInstanceOf(RateLimitExceededException.class)
+                    .hasMessageContaining("Rate limit exceeded")
+                    .satisfies(ex -> {
+                        RateLimitExceededException rle = (RateLimitExceededException) ex;
+                        assertThat(rle.getRetryAfterSeconds()).isPositive();
+                    });
+        }
+
+        @Test
+        @DisplayName("getLimit returns 3 for the manual password-reset endpoint")
+        void getLimit_returns3() {
+            assertThat(rateLimitingService.getLimit(RESET_PATH, HTTP_METHOD)).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("different clients have independent password-reset buckets")
+        void differentClients_independentBuckets() {
+            for (int i = 0; i < 3; i++) {
+                rateLimitingService.consume("ip:client-a", RESET_PATH, HTTP_METHOD);
+            }
+            for (int i = 0; i < 3; i++) {
+                rateLimitingService.consume("ip:client-b", RESET_PATH, HTTP_METHOD);
+            }
+            // Neither should throw
+        }
+    }
+
     // Rule resolution
     @Nested
     @DisplayName("Rule resolution")
@@ -155,6 +209,15 @@ class RateLimitingServiceTest {
         @DisplayName("auth refresh endpoint matches AUTH rule")
         void authRefresh_matchesAuthRule() {
             assertThat(RateLimitingService.resolveRule("/api/auth/refresh", "POST")).isNotNull();
+        }
+
+        @Test
+        @DisplayName("manual password-reset endpoint matches its dedicated rule (not the generic AUTH rule)")
+        void manualPasswordReset_matchesDedicatedRule() {
+            assertThat(RateLimitingService.resolveRule(
+                    "/api/auth/password-reset/request-manual", "POST")).isNotNull();
+            assertThat(rateLimitingService.getLimit(
+                    "/api/auth/password-reset/request-manual", "POST")).isEqualTo(3);
         }
 
         @Test

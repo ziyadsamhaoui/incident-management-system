@@ -71,6 +71,17 @@ public class UserEntity {
     @Column
     private LocalDateTime lockoutEnd;
 
+    /**
+     * SHA-256 hex hash of the active supervisor-mediated reset code. Only the
+     * hash is stored — never the plaintext code (see {@link #claimCodeExpiresAt}).
+     */
+    @Column(length = 64)
+    private String claimCodeHash;
+
+    /** Strict TTL of the active reset code; codes past this instant are invalid. */
+    @Column
+    private LocalDateTime claimCodeExpiresAt;
+
     public void deactivate() {
         this.isActive = false;
         this.deletedAt = LocalDateTime.now();

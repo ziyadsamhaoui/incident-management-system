@@ -1,9 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Sidebar } from '@/components/layout/sidebar';
-import { Header } from '@/components/layout/header';
 import { AuthGuard } from '@/components/auth/auth-guard';
+import { Header } from '@/components/layout/header';
 import { NavigationProgressProvider } from '@/components/ui/navigation-progress';
 
 export default function ChefAtelierLayout({
@@ -11,22 +9,17 @@ export default function ChefAtelierLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
   return (
     <AuthGuard allowedRoles={['CHEF_ATELIER']}>
       <NavigationProgressProvider>
-        <div className="flex h-screen overflow-hidden bg-background">
-          {/* Scoped sidebar for CHEF_ATELIER */}
-          <Sidebar open={sidebarOpen} onOpenChange={setSidebarOpen} variant="chef-atelier" />
+        <div className="flex h-screen flex-col overflow-hidden bg-background">
+          {/* TopNav only — no sidebar for CHEF_ATELIER */}
+          <Header kiosk />
 
-          {/* Main content area */}
-          <div className="flex flex-1 flex-col overflow-hidden">
-            <Header onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
-            <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-              {children}
-            </main>
-          </div>
+          {/* Main content — full viewport width */}
+          <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+            {children}
+          </main>
         </div>
       </NavigationProgressProvider>
     </AuthGuard>

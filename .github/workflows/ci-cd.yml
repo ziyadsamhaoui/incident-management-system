@@ -78,8 +78,7 @@ jobs:
 
       # 5. Full build with static code analysis and integration tests
       - name: Build, analyze & verify with Maven
-        run: ./mvnw clean verify -B -V
-        working-directory: backend
+        run: ./backend/mvnw clean verify -B -V
         env:
           SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_DB }}
           SPRING_DATASOURCE_USERNAME: ${{ env.POSTGRES_USER }}

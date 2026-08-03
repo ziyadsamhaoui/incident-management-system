@@ -172,13 +172,19 @@ export async function logout(): Promise<void> {
 
 /**
  * Request a manual password-reset token (Track A — CHEF_ATELIER / floor staff).
+ * Requires the full identity bar (matricule + firstName + lastName) matching
+ * the login identity threshold — the backend rejects any mismatch generically.
  */
-export async function requestPasswordResetManual(matricule: number) {
+export async function requestPasswordResetManual(
+  matricule: number,
+  firstName: string,
+  lastName: string,
+) {
   const { data } = await apiClient.post<{
     message: string;
     token: string;
     expiresInMinutes: number;
-  }>('/api/auth/password-reset/request-manual', { matricule });
+  }>('/api/auth/password-reset/request-manual', { matricule, firstName, lastName });
   return data;
 }
 

@@ -6,6 +6,7 @@ import type {
   UpdateUserRequestDTO,
   UserActivityDTO,
   ActiveAdminCountDTO,
+  GenerateResetCodeResponse,
 } from '@/types/user';
 import type { Page } from '@/types/incident';
 
@@ -86,6 +87,19 @@ export async function getActiveAdminCount(): Promise<ActiveAdminCountDTO> {
  */
 export async function getUserActivity(id: number): Promise<UserActivityDTO> {
   const { data } = await apiClient.get<UserActivityDTO>(`/api/users/${id}/activity`);
+  return data;
+}
+
+/**
+ * Generate a supervisor-mediated 6-char reset code for a CHEF_ATELIER / SOUS_CHEF
+ * (ADMIN only). Returns the plaintext code for in-person handoff.
+ */
+export async function generateResetCode(
+  id: number,
+): Promise<GenerateResetCodeResponse> {
+  const { data } = await apiClient.post<GenerateResetCodeResponse>(
+    `/api/admin/users/${id}/generate-reset-code`,
+  );
   return data;
 }
 

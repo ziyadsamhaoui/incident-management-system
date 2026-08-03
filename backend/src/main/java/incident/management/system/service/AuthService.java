@@ -1,22 +1,46 @@
 package incident.management.system.service;
 
+import incident.management.system.dto.GenerateResetCodeResponse;
+import incident.management.system.enums.UserRole;
 import incident.management.system.exception.ResourceNotFoundException;
+import incident.management.system.model.AuditLogEntity;
 import incident.management.system.model.PasswordResetToken;
 import incident.management.system.model.UserEntity;
+import incident.management.system.repository.AuditLogRepository;
 import incident.management.system.repository.PasswordResetTokenRepository;
 import incident.management.system.repository.UserRepository;
+import incident.management.system.security.CurrentUserResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.HexFormat;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 
-// Encapsulate the dual-track password reset logic (Track A, Track B, Track C)
-
+/**
+ * Encapsulates the dual-track password reset logic (Track A, Track B, Track C)
+ * plus the supervisor-mediated reset-code flow introduced by the
+ * authentication hardening:
+ * <ul>
+ *   <li><b>Track A (public manual):</b> {@code matricule + firstName + lastName}
+ *       identity bar — exact, case-insensitive match against an active
+ *       CHEF_ATELIER account. Any mismatch yields the generic
+ *       {@code "Identifiants invalides"} to prevent identity enumeration.</li>
+ *   <li><b>Supervisor-mediated (ADMIN):</b> an admin generates a 6-character
+ *       code for in-person handoff. Only the SHA-256 hash of the code is
+ *       persisted on the user with a strict 15-minute TTL, and the action is
+ *       recorded in the system audit log ({@code GENERATE_RESET_CODE}).</li>
+ * </ul>
+ */
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -25,18 +49,34 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final AuditLogRepository auditLogRepository;
     private final PasswordEncoder passwordEncoder;
 
     private static final int MANUAL_TOKEN_LENGTH = 6;
     private static final int MANUAL_TOKEN_EXPIRY_MINUTES = 15;
+    private static final int RESET_CODE_EXPIRY_MINUTES = 15;
     private static final int EMAIL_TOKEN_EXPIRY_MINUTES = 10;
 
     private static final String ALPHANUMERIC = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // avoid ambiguous chars (0/O, 1/I)
 
+    /** Generic failure message — never reveals whether the identity matched. */
+    private static final String INVALID_IDENTIFIERS = "Identifiants invalides";
+
+    private static final String GENERATE_RESET_CODE_ACTION = "GENERATE_RESET_CODE";
+
     //  Track A: No-Email, Manual Token Loop (CHEF_ATELIER)
-    public String requestPasswordResetManual(int matricule) {
+    public String requestPasswordResetManual(int matricule, String firstName, String lastName) {
         UserEntity user = userRepository.findByMatricule(matricule)
-                .orElseThrow(() -> new ResourceNotFoundException("User", "matricule", matricule));
+                .orElseThrow(() -> new IllegalArgumentException(INVALID_IDENTIFIERS));
+
+        // Identity bar — must mirror the login threshold: active, claimed
+        // CHEF_ATELIER whose first/last name match exactly (case-insensitive).
+        if (!user.isActive()
+                || user.getRole() != UserRole.CHEF_ATELIER
+                || isUnclaimed(user)
+                || !matchesIdentity(user, firstName, lastName)) {
+            throw new IllegalArgumentException(INVALID_IDENTIFIERS);
+        }
 
         invalidateExistingTokens(user.getId());
 
@@ -78,8 +118,71 @@ public class AuthService {
         return token;
     }
 
+    /**
+     * Supervisor-mediated reset-code generation (ADMIN only — enforced at the
+     * controller). Generates a secure 6-character alphanumeric code, persists
+     * only its SHA-256 hash on the target user with a strict 15-minute TTL,
+     * records a {@code GENERATE_RESET_CODE} audit entry, and returns the
+     * plaintext code for in-person handoff to the employee.
+     */
+    public GenerateResetCodeResponse generateAdminResetCode(Long targetUserId) {
+        UserEntity user = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", targetUserId));
+
+        // Only floor roles are eligible — never ADMIN. Target must be active.
+        if (user.getRole() == UserRole.ADMIN || !user.isActive()) {
+            throw new IllegalArgumentException(
+                    "Impossible de générer un code de réinitialisation pour ce compte.");
+        }
+
+        // Single active code per user: any previously issued code is invalidated.
+        user.setClaimCodeHash(null);
+        user.setClaimCodeExpiresAt(null);
+
+        String code = generateManualToken();
+        LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(RESET_CODE_EXPIRY_MINUTES);
+
+        user.setClaimCodeHash(sha256Hex(code));
+        user.setClaimCodeExpiresAt(expiresAt);
+        userRepository.save(user);
+
+        // System audit log: who generated the code, for whom, and until when.
+        UserEntity actor = CurrentUserResolver.resolve(userRepository);
+        auditLogRepository.save(AuditLogEntity.builder()
+                .action(GENERATE_RESET_CODE_ACTION)
+                .actorUserId(actor != null ? actor.getId() : null)
+                .targetUserId(user.getId())
+                .details("Reset code for " + user.getAuditLabel()
+                        + " (expires " + expiresAt + ")")
+                .build());
+
+        log.info("Admin-mediated reset code generated for user {} (matricule: {})",
+                user.getId(), user.getMatricule());
+
+        return new GenerateResetCodeResponse(code, expiresAt);
+    }
+
     //  Track C: Unified Confirmation
     public void confirmPasswordReset(String token, String newPassword) {
+        // Primary path: supervisor-mediated 6-char claim code (hashed on user).
+        // Codes are uppercase; normalize the input for a deterministic match.
+        String claimHash = sha256Hex(token.trim().toUpperCase(Locale.ROOT));
+        Optional<UserEntity> claimUser =
+                userRepository.findByClaimCodeHashAndClaimCodeExpiresAtAfter(claimHash, LocalDateTime.now());
+
+        if (claimUser.isPresent()) {
+            UserEntity user = claimUser.get();
+            user.setPasswordHash(passwordEncoder.encode(newPassword));
+            user.resetFailedAttempts();
+            // The code is single-use — consume it after a successful reset.
+            user.setClaimCodeHash(null);
+            user.setClaimCodeExpiresAt(null);
+            userRepository.save(user);
+            log.info("Password reset confirmed via supervisor-mediated code for user {}", user.getId());
+            return;
+        }
+
+        // Legacy path: Track A (manual) / Track B (email) tokens.
         PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(token)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid or expired reset token"));
 
@@ -109,6 +212,15 @@ public class AuthService {
                 });
     }
 
+    private boolean matchesIdentity(UserEntity user, String firstName, String lastName) {
+        return user.getFirstName().trim().equalsIgnoreCase(firstName.trim())
+                && user.getLastName().trim().equalsIgnoreCase(lastName.trim());
+    }
+
+    private boolean isUnclaimed(UserEntity user) {
+        return user.getPasswordHash() == null || user.getPasswordHash().isBlank();
+    }
+
     // Generates a random alphanumeric string of length 6
     private String generateManualToken() {
         SecureRandom random = new SecureRandom();
@@ -119,6 +231,16 @@ public class AuthService {
         return sb.toString();
     }
 
+    // Deterministic SHA-256 hex hash — queryable by the confirm flow.
+    private static String sha256Hex(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 algorithm unavailable", e);
+        }
+    }
 
     private void dispatchPasswordResetEmailAsync(String email, String token) {
         log.info("[EMAIL STUB] --- Password reset link for {} ---", email);

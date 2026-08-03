@@ -48,6 +48,14 @@ export interface SetDepartmentPayload {
   departmentId: number;
 }
 
+/** Response of POST /api/admin/users/{id}/generate-reset-code */
+export interface GenerateResetCodeResponse {
+  /** Plaintext 6-character code for in-person handoff (shown once). */
+  code: string;
+  /** ISO timestamp at which the code expires (15-minute TTL). */
+  expiresAt: string;
+}
+
 /** A single YYYY-MM-DD bucket of an aggregated count. */
 export interface DayCount {
   date: string;

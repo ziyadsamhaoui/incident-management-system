@@ -29,6 +29,10 @@ public class RateLimitingService {
     private static final int INCIDENT_MAX_REQUESTS = 10;
     private static final Duration INCIDENT_WINDOW = Duration.ofMinutes(1);
 
+    // Public manual password-reset: 3 attempts per 15-minute window (per IP)
+    private static final int PASSWORD_RESET_MAX_REQUESTS = 3;
+    private static final Duration PASSWORD_RESET_WINDOW = Duration.ofMinutes(15);
+
     // Stale bucket eviction: 5 minutes of inactivity
     private static final Duration EVICTION_IDLE_TIMEOUT = Duration.ofMinutes(5);
 
@@ -40,8 +44,10 @@ public class RateLimitingService {
     @PostConstruct
     void startCleaner() {
         cleaner.scheduleAtFixedRate(this::evictStaleEntries, 1, 1, TimeUnit.MINUTES);
-        log.info("RateLimitingService initialized: auth={}/min, incident creation={}/min",
-                AUTH_MAX_REQUESTS, INCIDENT_MAX_REQUESTS);
+        log.info("RateLimitingService initialized: auth={}/min, incident creation={}/min, "
+                        + "password reset manual={}/{}",
+                AUTH_MAX_REQUESTS, INCIDENT_MAX_REQUESTS,
+                PASSWORD_RESET_MAX_REQUESTS, PASSWORD_RESET_WINDOW);
     }
 
     @PreDestroy
@@ -134,6 +140,13 @@ public class RateLimitingService {
         String path = requestPath.toLowerCase();
         String method = httpMethod.toUpperCase();
 
+        // Public manual password-reset: stricter budget than the generic auth rule
+        // (checked first so it wins over the catch-all AUTH rule below).
+        if ("POST".equals(method) && (path.equals("/api/auth/password-reset/request-manual")
+                || path.equals("/api/auth/password-reset/request-manual/"))) {
+            return RateLimitRule.PASSWORD_RESET_MANUAL;
+        }
+
         // Auth endpoints: all POST requests under /api/auth/**
         if ("POST".equals(method) && path.startsWith("/api/auth/")) {
             return RateLimitRule.AUTH;
@@ -169,7 +182,8 @@ public class RateLimitingService {
     //  Inner types
     enum RateLimitRule {
         AUTH("auth", AUTH_MAX_REQUESTS, AUTH_WINDOW),
-        INCIDENT_CREATE("incident_create", INCIDENT_MAX_REQUESTS, INCIDENT_WINDOW);
+        INCIDENT_CREATE("incident_create", INCIDENT_MAX_REQUESTS, INCIDENT_WINDOW),
+        PASSWORD_RESET_MANUAL("password_reset_manual", PASSWORD_RESET_MAX_REQUESTS, PASSWORD_RESET_WINDOW);
 
         final String name;
         final int maxRequests;

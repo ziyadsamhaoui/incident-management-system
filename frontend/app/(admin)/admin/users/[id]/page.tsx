@@ -25,6 +25,8 @@ import {
   UserCheck,
   Inbox,
   KeyRound,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -55,11 +57,12 @@ import {
   updateUser,
   getActiveAdminCount,
   getUserActivity,
+  generateResetCode,
 } from '@/services/userService';
 import { getIncidents } from '@/services/incidentService';
 import { getStatusConfig } from '@/lib/constants/incidentStatus';
 import { ActivityHeatmap } from '@/components/dashboard/activity-heatmap';
-import type { UserResponseDTO, UserActivityDTO } from '@/types/user';
+import type { UserResponseDTO, UserActivityDTO, GenerateResetCodeResponse } from '@/types/user';
 import type { IncidentDTO } from '@/types/incident';
 
 // ── Role / Status metadata ────────────────────────
@@ -189,6 +192,13 @@ export default function AdminUserDetailPage() {
   const [editReason, setEditReason] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
 
+  // Supervisor-mediated reset code modal
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetData, setResetData] = useState<GenerateResetCodeResponse | null>(null);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
   // ── Data ─────────────────────────────────────────
   const { data: user, loading, error, refetch } = useAsync<UserResponseDTO>(
     () => getUser(userId),
@@ -267,6 +277,34 @@ export default function AdminUserDetailPage() {
     setEditReason('');
     setEditError(null);
     setEditOpen(true);
+  };
+
+  //  Supervisor-mediated reset code (admin generates, employee redeems in person)
+  const openResetCode = async () => {
+    setResetOpen(true);
+    setResetLoading(true);
+    setResetError(null);
+    setResetData(null);
+    setCopied(false);
+    try {
+      const data = await generateResetCode(userId);
+      setResetData(data);
+    } catch (err) {
+      setResetError(extractErrorMessage(err));
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const copyResetCode = async () => {
+    if (!resetData) return;
+    try {
+      await navigator.clipboard.writeText(resetData.code);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard unavailable — the code remains visible for manual transcription.
+    }
   };
 
   const handleEditSubmit = async () => {
@@ -458,6 +496,21 @@ export default function AdminUserDetailPage() {
               <Button size="sm" variant="outline" className="gap-1.5 shrink-0 border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400" onClick={() => setAction('cancel-promotion')}>
                 <ShieldX className="h-3.5 w-3.5" />
                 Annuler la promotion
+              </Button>
+            </div>
+          )}
+
+          {user.role === 'CHEF_ATELIER' && user.claimed && user.isActive && (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between rounded-lg border p-3.5">
+              <div>
+                <p className="text-sm font-medium">Générer un code de réinitialisation</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Génère un code à usage unique (valable 15 minutes) à remettre en main propre à l&apos;agent.
+                </p>
+              </div>
+              <Button size="sm" className="gap-1.5 shrink-0 bg-blue-600 hover:bg-blue-700 text-white" onClick={openResetCode}>
+                <KeyRound className="h-3.5 w-3.5" />
+                Générer un code de réinitialisation
               </Button>
             </div>
           )}
@@ -684,6 +737,87 @@ export default function AdminUserDetailPage() {
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Supervisor-mediated reset code modal ── */}
+      <Dialog open={resetOpen} onOpenChange={(open) => { if (!open && !resetLoading) { setResetOpen(false); setResetData(null); setResetError(null); setCopied(false); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="h-4 w-4 text-primary" />
+              Code de réinitialisation
+            </DialogTitle>
+            <DialogDescription className="pt-1">
+              Code à usage unique destiné à {user.firstName} {user.lastName} (#{user.matricule}).
+            </DialogDescription>
+          </DialogHeader>
+
+          {resetLoading && (
+            <div className="flex flex-col items-center gap-3 py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Génération du code...</p>
+            </div>
+          )}
+
+          {resetError && !resetLoading && (
+            <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{resetError}</span>
+            </div>
+          )}
+
+          {resetData && !resetLoading && (
+            <div className="space-y-4 py-2">
+              {/* Prominent, copyable code badge */}
+              <div className="rounded-xl border bg-slate-50 p-5 text-center dark:bg-slate-800/60">
+                <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Code à 6 caractères
+                </p>
+                <div className="flex items-center justify-center gap-3">
+                  <span className="font-mono text-3xl font-bold tracking-[0.3em] text-blue-600 dark:text-blue-400">
+                    {resetData.code}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={copyResetCode}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors hover:bg-muted"
+                    title={copied ? 'Copié !' : 'Copier le code'}
+                    aria-label={copied ? 'Code copié' : 'Copier le code'}
+                  >
+                    {copied ? (
+                      <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    ) : (
+                      <Copy className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </button>
+                </div>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Expire le{' '}
+                  {new Date(resetData.expiresAt).toLocaleString('fr-FR', {
+                    day: 'numeric',
+                    month: 'long',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </p>
+              </div>
+
+              {/* Explicit expiry warning — mandatory copy */}
+              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  Ce code expire dans 15 minutes. Communiquez-le directement à l&apos;agent.
+                </span>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetOpen(false)} disabled={resetLoading}>
+              Fermer
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

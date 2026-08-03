@@ -3,6 +3,8 @@ package incident.management.system.web;
 import incident.management.system.config.RoleEnforcementFilter;
 import incident.management.system.config.StandaloneWebMvcTestBase;
 import incident.management.system.controller.AdminController;
+import incident.management.system.dto.GenerateResetCodeResponse;
+import incident.management.system.service.AuthService;
 import incident.management.system.service.CategoryService;
 import incident.management.system.service.DepartmentService;
 import incident.management.system.service.ProductionLineService;
@@ -25,6 +27,7 @@ import java.lang.reflect.Method;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -46,12 +49,15 @@ class AdminControllerWebTest extends StandaloneWebMvcTestBase {
     @Mock
     private StationService stationService;
 
+    @Mock
+    private AuthService authService;
+
     private AdminController adminController;
 
     @BeforeEach
     void setUp() {
         adminController = new AdminController(
-                categoryService, departmentService, sectionService,
+                authService, categoryService, departmentService, sectionService,
                 productionLineService, stationService);
         SecurityContextHolder.clearContext();
     }
@@ -180,6 +186,17 @@ class AdminControllerWebTest extends StandaloneWebMvcTestBase {
         }
 
         @Test
+        @DisplayName("SOUS_CHEF → POST /api/admin/users/1/generate-reset-code → 403")
+        void sousChefGenerateResetCode_returns403() throws Exception {
+            SecurityContextHolder.getContext().setAuthentication(
+                    new UsernamePasswordAuthenticationToken("alice", "pass",
+                            List.of(() -> "ROLE_SOUS_CHEF")));
+
+            mockMvc.perform(post("/api/admin/users/1/generate-reset-code"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
         @DisplayName("ADMIN → GET /api/admin/categories → 200 (allowed)")
         void adminGetAllCategories_returnsOk() throws Exception {
             // PageableHandlerMethodArgumentResolver needed for Pageable parameters
@@ -252,6 +269,17 @@ class AdminControllerWebTest extends StandaloneWebMvcTestBase {
         void deleteCategory_returnsNoContent() throws Exception {
             mockMvc.perform(MockMvcRequestBuilders.delete("/api/admin/categories/1"))
                     .andExpect(status().isNoContent());
+        }
+
+        @Test
+        @DisplayName("POST /api/admin/users/1/generate-reset-code → 200 OK with code + expiry")
+        void generateResetCode_returnsOk() throws Exception {
+            when(authService.generateAdminResetCode(1L))
+                    .thenReturn(new GenerateResetCodeResponse(
+                            "X7K9P2", java.time.LocalDateTime.now().plusMinutes(15)));
+
+            mockMvc.perform(post("/api/admin/users/1/generate-reset-code"))
+                    .andExpect(status().isOk());
         }
 
         @Test

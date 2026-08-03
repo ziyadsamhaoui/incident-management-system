@@ -16,6 +16,13 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
 
     Optional<UserEntity> findByEmail(String email);
 
+    /**
+     * Finds the user holding an active supervisor-mediated reset code
+     * (hashed code + expiry in the future). See {@code V5__password_reset_hardening.sql}.
+     */
+    Optional<UserEntity> findByClaimCodeHashAndClaimCodeExpiresAtAfter(
+            String claimCodeHash, java.time.LocalDateTime now);
+
     boolean existsByMatricule(int matricule);
 
     List<UserEntity> findByDepartmentAndRole(DepartmentEntity department, UserRole role);

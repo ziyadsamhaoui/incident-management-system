@@ -49,3 +49,18 @@
 - Replace mock data with real API calls (`GET /api/incidents`, `GET /api/admin-activity`)
 - Add real notification system for subscription alerts
 - Implement `useTranslation()` hook integration for Arabic (`AR`) locale support
+
+---
+
+## ✅ COMPLETED: Authentication Hardening (Password-Reset Security)
+
+### Phase 3: Supervisor-Mediated Reset-Code State Machine
+- ✅ **Public endpoint hardened** (`POST /api/auth/password-reset/request-manual`): payload now strictly `{ matricule, firstName, lastName }`; exact case-insensitive identity bar against active claimed `CHEF_ATELIER` accounts; generic `400 "Identifiants invalides"` on any mismatch (no enumeration); dedicated rate limit **3 attempts / 15 min / IP**.
+- ✅ **Admin-mediated code generation** (`POST /api/admin/users/{id}/generate-reset-code`, ADMIN-only): secure 6-char code, persisted **only as a SHA-256 hash** on `users.claim_code_hash` with a strict 15-min TTL (`claim_code_expires_at`); single active code per user; plaintext returned once for in-person handoff.
+- ✅ **Audit trail**: new `audit_logs` table records `GENERATE_RESET_CODE` with `actor_user_id` (performed-by admin) and `target_user_id` (migration `V5__password_reset_hardening.sql`).
+- ✅ **Unified confirmation**: `POST /api/auth/password-reset/confirm` now redeems supervisor-mediated claim codes (normalized, hash-matched, single-use, consumed on success) and keeps the legacy Track A/B token flow.
+- ✅ **Admin UI**: "Générer un code de réinitialisation" CTA + modal on `/admin/users/[id]` (claimed + active `CHEF_ATELIER` only) with copyable code badge, expiry timestamp, loading/error states, and the mandatory warning "Ce code expire dans 15 minutes. Communiquez-le directement à l'agent."
+- ✅ **Tests**: `AuthServiceTest` (identity bar, hash+TTL+audit persistence, claim-code redemption, legacy path), `RateLimitingServiceTest` (3/15-min rule), `AdminControllerWebTest` (ADMIN-only RBAC + endpoint).
+
+### Deferred (downstream)
+- Employee-facing redemption page where the agent enters matricule + 6-char code + new password (existing `confirm` endpoint already accepts the code).

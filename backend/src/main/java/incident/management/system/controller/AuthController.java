@@ -178,7 +178,8 @@ public class AuthController {
     public ResponseEntity<Map<String, Object>> requestPasswordResetManual(
             @Valid @RequestBody PasswordResetRequest request) {
 
-        String token = authService.requestPasswordResetManual(request.matricule());
+        String token = authService.requestPasswordResetManual(
+                request.matricule(), request.firstName(), request.lastName());
 
         return ResponseEntity.ok(Map.of(
                 "message", "Manual password reset token generated.",

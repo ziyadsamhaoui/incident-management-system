@@ -2,9 +2,11 @@ package incident.management.system.controller;
 
 import incident.management.system.dto.CategoryResponse;
 import incident.management.system.dto.DepartmentResponse;
+import incident.management.system.dto.GenerateResetCodeResponse;
 import incident.management.system.dto.ProductionLineResponse;
 import incident.management.system.dto.SectionResponse;
 import incident.management.system.dto.StationResponse;
+import incident.management.system.service.AuthService;
 import incident.management.system.service.CategoryService;
 import incident.management.system.service.DepartmentService;
 import incident.management.system.service.ProductionLineService;
@@ -38,6 +40,7 @@ import java.util.Map;
 @Slf4j
 public class AdminController {
 
+    private final AuthService authService;
     private final CategoryService categoryService;
     private final DepartmentService departmentService;
     private final SectionService sectionService;
@@ -54,6 +57,21 @@ public class AdminController {
         body.put("status", HttpStatus.CONFLICT.value());
         body.put("message", "Impossible de supprimer : cet élément est référencé par des données existantes (incidents ou sous-entités).");
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    //  Supervisor-mediated reset-code generation (authentication hardening)
+
+    /**
+     * Generates a 6-character, single-use reset code for a CHEF_ATELIER or
+     * SOUS_CHEF account — for in-person handoff to the employee. Only the
+     * SHA-256 hash of the code is persisted (15-minute TTL); the plaintext
+     * is returned once in the response body. Requires ADMIN (class-level
+     * {@code @PreAuthorize} + explicit guard here).
+     */
+    @PostMapping("/users/{id}/generate-reset-code")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<GenerateResetCodeResponse> generateResetCode(@PathVariable Long id) {
+        return ResponseEntity.ok(authService.generateAdminResetCode(id));
     }
 
     //  Categories
