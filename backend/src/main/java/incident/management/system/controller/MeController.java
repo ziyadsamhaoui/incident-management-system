@@ -20,7 +20,8 @@ import java.util.Map;
  * <ul>
  *   <li>{@code GET /api/me} — the authenticated user's profile (used for
  *       subscriptions, notifications and "my incidents" queries).</li>
- *   <li>{@code PATCH /api/users/me/department} — one-shot onboarding assignment.</li>
+ *   <li>{@code PATCH /api/users/me/department} — assign or change the current
+ *       user's department (changeable anytime, e.g. from Settings).</li>
  * </ul>
  * The authenticated principal is identified by its matricule (see
  * {@code MultiChannelAuthenticationToken}).

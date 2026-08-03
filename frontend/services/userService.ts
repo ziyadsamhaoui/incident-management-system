@@ -89,7 +89,7 @@ export async function getUserActivity(id: number): Promise<UserActivityDTO> {
   return data;
 }
 
-/** One-shot onboarding — assign the current user's department. */
+/** Assign or change the current user's department (changeable anytime). */
 export async function setMyDepartment(
   payload: SetDepartmentPayload,
 ): Promise<UserResponseDTO> {

@@ -43,7 +43,7 @@ export interface UserProfileDTO {
   isFirstLogin: boolean;
 }
 
-/** Payload for setting the current user's department (one-shot onboarding) */
+/** Payload for assigning / changing the current user's department */
 export interface SetDepartmentPayload {
   departmentId: number;
 }

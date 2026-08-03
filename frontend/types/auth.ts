@@ -47,7 +47,7 @@ export interface AuthState {
   firstName: string | null;
   /** Human-readable last name */
   lastName: string | null;
-  /** Department assigned to the user (null = unassigned, triggers onboarding) */
+  /** Department assigned to the user (null = unassigned) */
   departmentId: string | null;
   /** Human-readable department name */
   departmentName: string | null;

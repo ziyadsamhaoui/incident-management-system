@@ -1,5 +1,6 @@
 'use client';
 
+import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import {
@@ -12,12 +13,24 @@ import {
   Languages,
   CheckCircle2,
   Globe,
+  AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useTranslation } from '@/lib/i18n';
+import { useAsync, extractErrorMessage } from '@/lib/use-async';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { getDepartments } from '@/services/referenceService';
+import { setMyDepartment } from '@/services/userService';
 
 //  Language options
 
@@ -73,10 +86,23 @@ export default function ChefAtelierSettingsPage() {
     matricule,
     roles,
     departmentName,
+    departmentId,
+    setDepartment,
   } = useAuthStore();
 
   const { lang, setLang } = useTranslation();
   const { theme, setTheme } = useTheme();
+
+  // Department state — real list from the API + save feedback
+  const {
+    data: departments,
+    loading: depsLoading,
+    error: depsError,
+    refetch: refetchDeps,
+  } = useAsync(getDepartments, []);
+  const [deptSaving, setDeptSaving] = useState(false);
+  const [deptError, setDeptError] = useState<string | null>(null);
+  const [deptSuccess, setDeptSuccess] = useState(false);
 
   const primaryRole = (roles[0]?.replace('ROLE_', '') ?? '') as string;
 
@@ -84,6 +110,30 @@ export default function ChefAtelierSettingsPage() {
     primaryRole === 'CHEF_ATELIER'
       ? "Chef d'atelier"
       : 'Opérateur';
+
+  //  Department change — persisted to the backend, not definitive
+  const handleDepartmentChange = useCallback(
+    async (value: string) => {
+      if (!value || value === departmentId) return;
+      const deptId = Number(value);
+      const dept = departments?.find((d) => d.id === deptId);
+
+      setDeptSaving(true);
+      setDeptError(null);
+      setDeptSuccess(false);
+      try {
+        await setMyDepartment({ departmentId: deptId });
+        setDepartment(String(deptId), dept?.name ?? value);
+        setDeptSuccess(true);
+        window.setTimeout(() => setDeptSuccess(false), 2500);
+      } catch (err) {
+        setDeptError(extractErrorMessage(err));
+      } finally {
+        setDeptSaving(false);
+      }
+    },
+    [departmentId, departments, setDepartment],
+  );
 
   return (
     <div className="mx-auto w-full max-w-lg px-4 py-6 sm:px-0 sm:py-8 space-y-5">
@@ -138,7 +188,7 @@ export default function ChefAtelierSettingsPage() {
             </div>
           </div>
 
-          {/* Row 2: Matricule · Département */}
+          {/* Row 2: Matricule · Département (changeable) */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
@@ -153,12 +203,69 @@ export default function ChefAtelierSettingsPage() {
               <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                 Département
               </label>
-              <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm text-muted-foreground truncate">
-                <div className="flex items-center gap-2">
-                  <Building2 className="h-3.5 w-3.5 shrink-0" />
-                  <span>{departmentName ?? 'Non assigné'}</span>
+              {depsLoading ? (
+                <div className="flex h-9 items-center gap-2 rounded-lg border bg-muted/30 px-3 text-sm text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span className="text-xs">Chargement...</span>
                 </div>
-              </div>
+              ) : depsError ? (
+                <div className="flex h-9 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 text-xs text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">Échec du chargement</span>
+                  <button
+                    type="button"
+                    onClick={refetchDeps}
+                    className="shrink-0 font-medium underline underline-offset-2 hover:text-red-900 dark:hover:text-red-300"
+                  >
+                    Réessayer
+                  </button>
+                </div>
+              ) : departments && departments.length > 0 ? (
+                <Select
+                  value={departmentId ?? ''}
+                  onValueChange={handleDepartmentChange}
+                  disabled={deptSaving}
+                >
+                  <SelectTrigger className="h-9 w-full text-sm">
+                    <SelectValue placeholder="Sélectionner un département..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departments.map((dept) => (
+                      <SelectItem key={dept.id} value={String(dept.id)}>
+                        {dept.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="flex h-9 items-center gap-2 rounded-lg border bg-muted/30 px-3 text-sm text-muted-foreground">
+                  <Building2 className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate text-xs italic">
+                    {departmentName ?? 'Aucun département disponible'}
+                  </span>
+                </div>
+              )}
+              {deptSaving && (
+                <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Enregistrement...
+                </p>
+              )}
+              {deptSuccess && (
+                <p className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Département mis à jour.
+                </p>
+              )}
+              {deptError && (
+                <p className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{deptError}</span>
+                </p>
+              )}
+              <p className="text-[11px] text-muted-foreground">
+                Vous pouvez changer de département à tout moment.
+              </p>
             </div>
           </div>
 

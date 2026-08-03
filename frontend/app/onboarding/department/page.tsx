@@ -9,6 +9,7 @@ import {
   Loader2,
   AlertTriangle,
   ArrowRight,
+  Info,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Button } from '@/components/ui/button';
@@ -163,12 +164,12 @@ export default function OnboardingDepartmentPage() {
                   )}
                 </div>
 
-                {/* Security notice */}
-                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
-                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                {/* Notice — the department is not definitive */}
+                <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-800 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400">
+                  <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>
-                    Cette sélection est définitive. Une fois configuré, votre
-                    département ne peut être modifié que par un administrateur.
+                    Vous pourrez modifier votre département à tout moment depuis
+                    la page Paramètres.
                   </span>
                 </div>
 
