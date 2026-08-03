@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from 'next-themes';
 import { Lock, Sun, Moon } from 'lucide-react';
@@ -304,12 +305,12 @@ export function LoginFormShell({
                 </label>
                 {/* Hide forgot-password link for SOUS_CHEF (operator) lane */}
                 {showForgotPassword && (
-                  <button
-                    type="button"
+                  <Link
+                    href="/auth/reset-password/chef-atelier"
                     className="text-sm font-medium text-[#0F62FE] transition-colors hover:text-[#0353E9] hover:underline dark:text-blue-400 dark:hover:text-blue-300"
                   >
                     {t.forgotPassword}
-                  </button>
+                  </Link>
                 )}
               </div>
 

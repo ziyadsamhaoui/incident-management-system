@@ -222,50 +222,98 @@ class AuthServiceTest {
     }
 
     @Nested
+    @DisplayName("Email reset (Track B) — anti-enumeration")
+    class EmailReset {
+
+        @Test
+        @DisplayName("unknown email → neutral result, no exception, no token persisted")
+        void unknownEmail_returnsNeutral() {
+            when(userRepository.findByEmail("ghost@example.com")).thenReturn(Optional.empty());
+
+            var result = authService.requestPasswordResetEmail("ghost@example.com");
+
+            assertThat(result.userFound()).isFalse();
+            assertThat(result.token()).isNull();
+            verify(passwordResetTokenRepository, never()).save(any(PasswordResetToken.class));
+        }
+
+        @Test
+        @DisplayName("known email in stub mode → token persisted and echoed (dev convenience)")
+        void knownEmail_stubMode_returnsToken() {
+            UserEntity admin = user(1L, 1001, "Admin", "User", UserRole.ADMIN, true, "admin-hash");
+            admin.setEmail("admin@example.com");
+            when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
+            when(passwordResetTokenRepository.findByUserIdAndUsedFalse(1L))
+                    .thenReturn(Optional.empty());
+
+            var result = authService.requestPasswordResetEmail("admin@example.com");
+
+            assertThat(result.userFound()).isTrue();
+            assertThat(result.token()).isNotNull();
+
+            ArgumentCaptor<PasswordResetToken> captor = ArgumentCaptor.forClass(PasswordResetToken.class);
+            verify(passwordResetTokenRepository).save(captor.capture());
+            assertThat(captor.getValue().getToken()).isEqualTo(result.token());
+            assertThat(captor.getValue().getExpiryDate()).isBefore(LocalDateTime.now().plusMinutes(11));
+        }
+    }
+
+    @Nested
     @DisplayName("Password reset confirmation")
     class ConfirmReset {
 
         @Test
-        @DisplayName("supervisor-mediated code → password reset and code consumed")
+        @DisplayName("supervisor-mediated code → password reset, code consumed, lockout cleared, role returned")
         void claimCode_resetsAndConsumes() {
             UserEntity chef = claimedChef();
+            chef.setFailedLoginAttempts(5);
+            chef.setLockoutEnd(LocalDateTime.now().plusMinutes(10));
             when(userRepository.findByClaimCodeHashAndClaimCodeExpiresAtAfter(anyString(), any()))
                     .thenReturn(Optional.of(chef));
             when(passwordEncoder.encode("newSecret")).thenReturn("encoded-newSecret");
 
-            authService.confirmPasswordReset("X7K9P2", "newSecret");
+            var confirmation = authService.confirmPasswordReset("X7K9P2", "newSecret");
 
             assertThat(chef.getPasswordHash()).isEqualTo("encoded-newSecret");
             assertThat(chef.getClaimCodeHash()).isNull();
             assertThat(chef.getClaimCodeExpiresAt()).isNull();
+            // Lockout escape hatch — a reset clears the failure counter + lock.
+            assertThat(chef.getFailedLoginAttempts()).isZero();
+            assertThat(chef.getLockoutEnd()).isNull();
+            assertThat(confirmation.role()).isEqualTo(UserRole.CHEF_ATELIER);
+            assertThat(confirmation.loginIdentifier()).isEqualTo("2001");
             verify(userRepository).save(chef);
             // Legacy token table must not be consulted for this path.
             verify(passwordResetTokenRepository, never()).findByToken(anyString());
         }
 
         @Test
-        @DisplayName("legacy Track A/B token → existing behaviour preserved")
+        @DisplayName("legacy Track A/B token → existing behaviour preserved, ADMIN returns email identifier")
         void legacyToken_stillWorks() {
             when(userRepository.findByClaimCodeHashAndClaimCodeExpiresAtAfter(anyString(), any()))
                     .thenReturn(Optional.empty());
 
-            UserEntity chef = claimedChef();
+            UserEntity admin = user(1L, 1001, "Admin", "User", UserRole.ADMIN, true, "admin-hash");
+            admin.setEmail("admin@example.com");
             PasswordResetToken legacy = PasswordResetToken.builder()
                     .id(7L)
-                    .userId(2001L)
+                    .userId(1L)
                     .token("ABCDEF")
                     .expiryDate(LocalDateTime.now().plusMinutes(10))
                     .used(false)
                     .build();
             when(passwordResetTokenRepository.findByToken("ABCDEF")).thenReturn(Optional.of(legacy));
-            when(userRepository.findById(2001L)).thenReturn(Optional.of(chef));
+            when(userRepository.findById(1L)).thenReturn(Optional.of(admin));
             when(passwordEncoder.encode("newSecret")).thenReturn("encoded-newSecret");
 
-            authService.confirmPasswordReset("ABCDEF", "newSecret");
+            var confirmation = authService.confirmPasswordReset("ABCDEF", "newSecret");
 
-            assertThat(chef.getPasswordHash()).isEqualTo("encoded-newSecret");
+            assertThat(admin.getPasswordHash()).isEqualTo("encoded-newSecret");
+            assertThat(admin.getFailedLoginAttempts()).isZero();
             assertThat(legacy.isUsed()).isTrue();
-            verify(userRepository).save(chef);
+            assertThat(confirmation.role()).isEqualTo(UserRole.ADMIN);
+            assertThat(confirmation.loginIdentifier()).isEqualTo("admin@example.com");
+            verify(userRepository).save(admin);
             verify(passwordResetTokenRepository).save(legacy);
         }
     }

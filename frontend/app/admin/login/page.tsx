@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { motion } from 'framer-motion';
@@ -73,6 +74,7 @@ export default function AdminLoginPage() {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<AdminLoginFormValues>({
     resolver: zodResolver(adminLoginSchema),
@@ -85,6 +87,14 @@ export default function AdminLoginPage() {
       router.replace('/dashboard');
     }
   }, [isAuthenticated, router]);
+
+  // Pre-fill email from the password-reset redirect (?email=X)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const email = params.get('email');
+    if (email) setValue('email', email);
+  }, [setValue]);
 
   // Rate-limit interval
   useEffect(() => {
@@ -310,14 +320,14 @@ export default function AdminLoginPage() {
               {errors.password && <p className={errorTextClass}>{errors.password.message}</p>}
             </div>
 
-            {/* Forgot Password */}
+            {/* Forgot Password — admin lane → Track B request screen */}
             <div className="flex justify-end">
-              <button
-                type="button"
+              <Link
+                href="/auth/reset-password/admin"
                 className="text-sm font-medium text-[#0F62FE] transition-colors hover:text-[#0353E9] hover:underline dark:text-blue-400 dark:hover:text-blue-300"
               >
                 {fl.forgotPassword}
-              </button>
+              </Link>
             </div>
 
             {/* Error alert */}

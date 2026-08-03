@@ -108,3 +108,28 @@ export interface AdminLoginFormValues {
   email: string;
   password: string;
 }
+
+/** Response of POST /api/auth/password-reset/request-manual (Track A) */
+export interface ManualResetResponse {
+  message: string;
+  /** 6-character alphanumeric code shown once on screen. */
+  token: string;
+  expiresInMinutes: number;
+}
+
+/** Response of POST /api/auth/password-reset/request-email (Track B) */
+export interface EmailResetResponse {
+  message: string;
+  expiresInMinutes: number;
+  /** Present ONLY in stub (dev) mode for a known address — never in production. */
+  token?: string;
+}
+
+/** Response of POST /api/auth/password-reset/confirm (Track C) */
+export interface ConfirmResetResponse {
+  message: string;
+  /** Role of the account whose password was just reset (login-lane redirect). */
+  role: 'CHEF_ATELIER' | 'ADMIN';
+  /** Matricule (CHEF_ATELIER) or email (ADMIN) to pre-fill on the login lane. */
+  loginIdentifier: string;
+}

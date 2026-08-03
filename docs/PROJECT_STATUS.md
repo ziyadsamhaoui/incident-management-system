@@ -64,3 +64,16 @@
 
 ### Deferred (downstream)
 - Employee-facing redemption page where the agent enters matricule + 6-char code + new password (existing `confirm` endpoint already accepts the code).
+
+---
+
+## ✅ COMPLETED: Public Password-Reset Screens (Track A / B / C)
+
+### Phase 4: Self-Service & Email Reset UX + Password Policy
+- ✅ **Route architecture** — `/auth/reset-password/chef-atelier` (Track A), `/auth/reset-password/admin` (Track B), `/auth/reset-password/confirm` (Track C); "Mot de passe oublié ?" links wired on the CHEF_ATELIER lane and the ADMIN login (hidden on the passwordless SOUS_CHEF lane).
+- ✅ **Track A (CHEF_ATELIER):** identity bar (`matricule`/`firstName`/`lastName`), generic `"Identifiants invalides"` on any mismatch (no enumeration), 6-char code in large mono typography with a **live 15-minute countdown**, "Continuer" CTA pre-filling the confirm screen (`?code=&matricule=`), helper copy for admin handoff.
+- ✅ **Track B (ADMIN email):** neutral-response protection — the backend always returns the same non-committal 200 notice and the UI renders it unconditionally (no email-existence leak, not even via error states); dev stub mode (`app.mail.stub-mode=true`) logs the 10-min UUID deep link and echoes the token locally; production mail provider flagged as a deployment blocker.
+- ✅ **Track C (confirm):** pre-filled editable token, **STRICT 8-char minimum** (`@Size(min=8)` on `PasswordResetConfirmRequest` + `ClaimAccountRequest`, mirrored in `resetPasswordSchema`/`claimSchema`), live length+match feedback with disabled submit, **NO auto-login** — redirect to the correct lane with the identifier pre-filled, expired-token copy with links back to both request screens, lockout state cleared on reset.
+- ✅ **Admin-assisted flow:** "Générer un code de réinitialisation" moved under a **Zone de danger** heading on `/admin/users/[id]`; modal now shows a live 15-minute countdown + expired state + regenerate action; **Piste d'audit** card renders `GENERATE_RESET_CODE` entries as "Code de réinitialisation généré par [admin] le [date]" via the new `GET /api/users/{id}/audit-logs` endpoint.
+- ✅ **Security rules:** request endpoints are reachable while locked (escape hatch — reset clears `failedLoginAttempts`/`lockoutEnd`); 5 req/min/IP on `/api/auth/**` with visual `Retry-After` countdowns; all reset screens fully i18n'd (FR/AR).
+- ✅ **Tests:** `AuthServiceTest` (email neutrality + stub token, confirm returns role/login identifier, lockout cleared), `AuthControllerAuthTest` (neutral 200 + no-token-leak for unknown email, confirm payload), `UserServiceImplTest` (audit-log endpoint with actor resolution).

@@ -1,5 +1,6 @@
 package incident.management.system.service;
 
+import incident.management.system.dto.AuditLogResponse;
 import incident.management.system.dto.CreateUserRequest;
 import incident.management.system.dto.DepartmentResponse;
 import incident.management.system.dto.UpdateUserRequest;
@@ -50,6 +51,13 @@ public interface UserService {
      * guard on the admin surface.
      */
     long countActiveAdmins();
+
+    /**
+     * Recent system audit entries targeting the given user (e.g.
+     * {@code GENERATE_RESET_CODE}), newest first — displayed on the admin user
+     * detail page as the "piste d'audit" strip.
+     */
+    List<AuditLogResponse> getUserAuditLogs(Long id);
 
     void deleteUser(Long id);
 

@@ -8,6 +8,6 @@ public record PasswordResetConfirmRequest(
         String token,
 
         @NotBlank(message = "New password must not be blank")
-        @Size(min = 6, message = "New password must be at least 6 characters")
+        @Size(min = 8, message = "New password must be at least 8 characters")
         String newPassword
 ) {}

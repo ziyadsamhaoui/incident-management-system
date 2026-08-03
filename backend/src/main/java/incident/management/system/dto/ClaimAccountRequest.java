@@ -14,6 +14,6 @@ public record ClaimAccountRequest(
         String lastName,
 
         @NotBlank(message = "Le mot de passe est requis")
-        @Size(min = 4, message = "Le mot de passe doit contenir au moins 4 caractères")
+        @Size(min = 8, message = "Le mot de passe doit contenir au moins 8 caractères")
         String newPassword
 ) {}

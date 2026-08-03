@@ -212,3 +212,39 @@
 2. No permanent tokens — both the manual token and the admin code carry a 15-minute TTL.
 3. No unauthenticated admin endpoints — `generate-reset-code` is ADMIN-only end to end.
 4. No silent failures — backend DTO validation + generic error + UI loading/error states.
+
+---
+
+# Self-Service & Email Reset Screens (Frontend)
+
+## Section 4: Public Reset Routes — Track A / Track B / Track C
+
+### 4.1 Routing Architecture
+- `/auth/reset-password/chef-atelier` — **Track A** self-service request screen. Reached from the "Mot de passe oublié ?" link on the **CHEF_ATELIER** login lane only (the link is strictly hidden for the passwordless `SOUS_CHEF` lane).
+- `/auth/reset-password/admin` — **Track B** email request screen. Reached from the "Mot de passe oublié ?" link on the **ADMIN** login page.
+- `/auth/reset-password/confirm` — **Track C** unified confirmation screen. Accepts `?token=` (Track B email deep link) or `?code=&matricule=` (Track A handoff / admin verbal handoff, editable).
+- Admin-assisted entry point: "Générer un code de réinitialisation" lives in the **Zone de danger** of `/admin/users/[id]` for claimed + active `CHEF_ATELIER` accounts (ADMIN only).
+
+### 4.2 Track A — Self-Service Identity Bar (CHEF_ATELIER)
+- Fields: `matricule`, `firstName`, `lastName` → `POST /api/auth/password-reset/request-manual`.
+- **On success:** the 6-character code renders in large monospace typography with a **live 15-minute countdown** (`CountdownTimer`) and a primary **"Continuer"** CTA that navigates to Track C pre-filling `?code=…&matricule=…` (the token input stays editable).
+- **On failure:** a single generic `"Identifiants invalides"` message — the UI never discloses which field failed (backend returns the identical 400 for every mismatch).
+- Secondary copy: *"Toujours bloqué ? Demandez à un administrateur de générer un code pour vous."*
+
+### 4.3 Track B — Email Request (ADMIN)
+- Field: `email` → `POST /api/auth/password-reset/request-email`.
+- **Neutral-response protection:** the backend always answers `200` with the same non-committal notice `"Si cette adresse est enregistrée, un lien de réinitialisation a été envoyé."` — the frontend renders this success state unconditionally, so **no code path distinguishes an unknown address** (not even a network/4xx/5xx failure; only 429 surfaces the rate-limit countdown).
+- **Dev stub mode** (`app.mail.stub-mode=true`, default): the 10-minute UUID deep link is logged server-side and the token is echoed in the response body (dev-only convenience). **Production blocker:** wire a transactional mail provider (SES / SendGrid / SMTP relay), set `app.mail.stub-mode=false`, and the token then travels by email only — never in the response.
+
+### 4.4 Track C — Unified Confirmation
+- Fields: token/code (pre-filled, editable) + new password + confirmation.
+- **STRICT minimum 8 characters** (backend `@Size(min=8)` on `PasswordResetConfirmRequest` AND `ClaimAccountRequest`; frontend `resetPasswordSchema` + `claimSchema` mirror it). Real-time inline strength feedback (length met / passwords match); submission stays disabled until both pass.
+- **NO auto-login.** On success the API returns `role` + `loginIdentifier`; the UI shows "Mot de passe mis à jour, connectez-vous." then redirects to the correct lane with the identifier pre-filled (`/login?lane=CHEF_ATELIER&matricule=…` or `/admin/login?email=…`).
+- **Expired/invalid token:** explicit copy *"Ce code a expiré, veuillez en demander un nouveau."* with direct links back to both request screens (§4.2 / §4.3).
+- **Lockout clearance:** completing a reset calls `user.resetFailedAttempts()` — `failedLoginAttempts` is zeroed and `lockoutEnd` cleared, so the post-reset login lane shows no residual lockout timer.
+
+### 4.5 Cross-Cutting Rules
+- **Lockout escape hatch:** the public request endpoints are NOT gated behind `isLocked()` — a locked account can still request a reset (then reset clears the lock via §4.4).
+- **Rate limiting:** `POST /api/auth/**` is limited to **5 req/min/IP** (`RateLimitRule.AUTH`); `request-manual` gets a stricter dedicated **3 req/15 min/IP** (`PASSWORD_RESET_MANUAL`). All three screens render the `Retry-After` seconds as a visual countdown on 429.
+- **i18n:** every string on these screens goes through `useTranslation()` (FR/AR dictionaries in `lib/i18n.ts`) — no hardcoded copy.
+- **Audit strip:** `GET /api/users/{id}/audit-logs` (ADMIN) feeds the "Piste d'audit" card on `/admin/users/[id]`, rendering `GENERATE_RESET_CODE` entries as "Code de réinitialisation généré par [admin] le [date]".

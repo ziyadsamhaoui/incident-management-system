@@ -7,6 +7,7 @@ import type {
   UserActivityDTO,
   ActiveAdminCountDTO,
   GenerateResetCodeResponse,
+  AuditLogEntry,
 } from '@/types/user';
 import type { Page } from '@/types/incident';
 
@@ -87,6 +88,15 @@ export async function getActiveAdminCount(): Promise<ActiveAdminCountDTO> {
  */
 export async function getUserActivity(id: number): Promise<UserActivityDTO> {
   const { data } = await apiClient.get<UserActivityDTO>(`/api/users/${id}/activity`);
+  return data;
+}
+
+/**
+ * Recent audit entries targeting a user (ADMIN only) — "piste d'audit" strip
+ * on the user detail page, e.g. "Code de réinitialisation généré par …".
+ */
+export async function getUserAuditLogs(id: number): Promise<AuditLogEntry[]> {
+  const { data } = await apiClient.get<AuditLogEntry[]>(`/api/users/${id}/audit-logs`);
   return data;
 }
 

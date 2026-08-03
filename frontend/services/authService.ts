@@ -6,6 +6,9 @@ import type {
   ClaimAccountRequest,
   CheckMatriculeResponse,
   AccountUnclaimedError,
+  ManualResetResponse,
+  EmailResetResponse,
+  ConfirmResetResponse,
 } from '@/types/auth';
 import type { AxiosError } from 'axios';
 
@@ -173,41 +176,48 @@ export async function logout(): Promise<void> {
 /**
  * Request a manual password-reset token (Track A — CHEF_ATELIER / floor staff).
  * Requires the full identity bar (matricule + firstName + lastName) matching
- * the login identity threshold — the backend rejects any mismatch generically.
+ * the login identity threshold — the backend rejects any mismatch generically
+ * with "Identifiants invalides" (no identity enumeration).
  */
 export async function requestPasswordResetManual(
   matricule: number,
   firstName: string,
   lastName: string,
-) {
-  const { data } = await apiClient.post<{
-    message: string;
-    token: string;
-    expiresInMinutes: number;
-  }>('/api/auth/password-reset/request-manual', { matricule, firstName, lastName });
+): Promise<ManualResetResponse> {
+  const { data } = await apiClient.post<ManualResetResponse>(
+    '/api/auth/password-reset/request-manual',
+    { matricule, firstName, lastName },
+  );
   return data;
 }
 
 /**
  * Request an email-based password-reset token (Track B — ADMIN).
+ *
+ * Neutral-response contract: the backend ALWAYS answers with the same
+ * non-committal notice whether or not the address exists — this service simply
+ * surfaces that body. The optional `token` field appears only in stub (dev)
+ * mode for a known address, so the UI never infers email existence from errors.
  */
-export async function requestPasswordResetEmail(email: string) {
-  const { data } = await apiClient.post<{
-    message: string;
-    token: string;
-    expiresInMinutes: number;
-  }>('/api/auth/password-reset/request-email', { email });
+export async function requestPasswordResetEmail(email: string): Promise<EmailResetResponse> {
+  const { data } = await apiClient.post<EmailResetResponse>(
+    '/api/auth/password-reset/request-email',
+    { email },
+  );
   return data;
 }
 
 /**
  * Confirm a password reset (Track C — unified endpoint).
+ * Returns the account's role + login identifier so the UI can route to the
+ * correct login lane (matricule pre-filled for CHEF_ATELIER, email for ADMIN).
+ * NO auto-login: the user must log in explicitly with the new password.
  */
 export async function confirmPasswordReset(
   token: string,
   newPassword: string,
-) {
-  const { data } = await apiClient.post<{ message: string }>(
+): Promise<ConfirmResetResponse> {
+  const { data } = await apiClient.post<ConfirmResetResponse>(
     '/api/auth/password-reset/confirm',
     { token, newPassword },
   );

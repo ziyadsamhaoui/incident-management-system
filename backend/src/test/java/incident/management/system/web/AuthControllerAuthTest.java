@@ -296,6 +296,61 @@ class AuthControllerAuthTest extends StandaloneWebMvcTestBase {
         }
     }
 
+    //  Password Reset — Track B neutrality + Track C redirect payload
+    @Nested
+    @DisplayName("Password reset — email neutrality & confirm redirect payload")
+    class PasswordResetFlow {
+
+        @Test
+        @DisplayName("unknown email → 200 with the neutral notice and NO token leak")
+        void unknownEmail_returnsNeutral200() throws Exception {
+            when(authService.requestPasswordResetEmail("ghost@example.com"))
+                    .thenReturn(new AuthService.EmailResetResult(false, null));
+
+            mockMvc.perform(post("/api/auth/password-reset/request-email")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    { "email": "ghost@example.com" }
+                                    """))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.message").value(AuthService.EMAIL_NEUTRAL_MESSAGE))
+                    .andExpect(jsonPath("$.token").doesNotExist());
+        }
+
+        @Test
+        @DisplayName("known email (stub mode) → same 200 neutral notice + dev-only token")
+        void knownEmail_returnsNeutral200WithDevToken() throws Exception {
+            when(authService.requestPasswordResetEmail("admin@example.com"))
+                    .thenReturn(new AuthService.EmailResetResult(true, "dev-uuid-token"));
+
+            mockMvc.perform(post("/api/auth/password-reset/request-email")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    { "email": "admin@example.com" }
+                                    """))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.message").value(AuthService.EMAIL_NEUTRAL_MESSAGE))
+                    .andExpect(jsonPath("$.token").value("dev-uuid-token"));
+        }
+
+        @Test
+        @DisplayName("confirm → 200 with role + loginIdentifier for login-lane redirect (no auto-login)")
+        void confirm_returnsRoleAndLoginIdentifier() throws Exception {
+            when(authService.confirmPasswordReset("ABC123", "newSecretPass"))
+                    .thenReturn(new AuthService.ResetConfirmation(UserRole.CHEF_ATELIER, "2001"));
+
+            mockMvc.perform(post("/api/auth/password-reset/confirm")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    { "token": "ABC123", "newPassword": "newSecretPass" }
+                                    """))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.message").value("Password has been successfully reset"))
+                    .andExpect(jsonPath("$.role").value("CHEF_ATELIER"))
+                    .andExpect(jsonPath("$.loginIdentifier").value("2001"));
+        }
+    }
+
     //  Edge Cases
     @Nested
     @DisplayName("Edge cases: unexpected / malformed payloads")

@@ -1,5 +1,6 @@
 package incident.management.system.service;
 
+import incident.management.system.dto.AuditLogResponse;
 import incident.management.system.dto.CreateUserRequest;
 import incident.management.system.dto.DepartmentResponse;
 import incident.management.system.dto.UpdateUserRequest;
@@ -11,7 +12,9 @@ import incident.management.system.enums.IncidentStatus;
 import incident.management.system.model.AdminDepartmentSubscription;
 import incident.management.system.model.DepartmentEntity;
 import incident.management.system.model.UserEntity;
+import incident.management.system.model.AuditLogEntity;
 import incident.management.system.repository.AdminDepartmentSubscriptionRepository;
+import incident.management.system.repository.AuditLogRepository;
 import incident.management.system.repository.DepartmentRepository;
 import incident.management.system.repository.IncidentRepository;
 import incident.management.system.repository.PasswordResetTokenRepository;
@@ -26,6 +29,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static incident.management.system.enums.IncidentStatus.CLAIMED;
@@ -42,6 +47,7 @@ public class UserServiceImpl implements UserService {
     private final DepartmentRepository departmentRepository;
     private final IncidentRepository incidentRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final AuditLogRepository auditLogRepository;
     private final PasswordEncoder passwordEncoder;
     private final AdminDepartmentSubscriptionRepository subscriptionRepository;
 
@@ -289,6 +295,40 @@ public class UserServiceImpl implements UserService {
     @Transactional(readOnly = true)
     public long countActiveAdmins() {
         return userRepository.countByRoleAndIsActive(UserRole.ADMIN, true);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AuditLogResponse> getUserAuditLogs(Long id) {
+        UserEntity user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+
+        List<AuditLogEntity> entries =
+                auditLogRepository.findTop50ByTargetUserIdOrderByCreatedAtDesc(user.getId());
+
+        // Batch-resolve actor names with a single IN query (no N+1 lookups).
+        List<Long> actorIds = entries.stream()
+                .map(AuditLogEntity::getActorUserId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<Long, String> actorNames = actorIds.isEmpty()
+                ? Map.of()
+                : userRepository.findAllById(actorIds).stream()
+                        .collect(Collectors.toMap(
+                                UserEntity::getId,
+                                a -> a.getFirstName() + " " + a.getLastName()));
+
+        return entries.stream()
+                .map(entry -> new AuditLogResponse(
+                        entry.getId(),
+                        entry.getAction(),
+                        entry.getActorUserId() != null
+                                ? actorNames.get(entry.getActorUserId())
+                                : null,
+                        entry.getDetails(),
+                        entry.getCreatedAt()))
+                .collect(Collectors.toList());
     }
 
     //  ========================================================================

@@ -1,6 +1,7 @@
 package incident.management.system.controller;
 
 import incident.management.system.dto.ActiveAdminCountResponse;
+import incident.management.system.dto.AuditLogResponse;
 import incident.management.system.dto.CreateUserRequest;
 import incident.management.system.dto.DepartmentResponse;
 import incident.management.system.dto.UpdateUserRequest;
@@ -81,6 +82,15 @@ public class UserController {
     @GetMapping("/{id}/activity")
     public ResponseEntity<UserActivityResponse> getUserActivity(@PathVariable Long id) {
         return ResponseEntity.ok(userService.getUserActivity(id));
+    }
+
+    /**
+     * Recent audit entries targeting this user ("piste d'audit"), newest
+     * first — e.g. "Code de réinitialisation généré par [admin] le [date]".
+     */
+    @GetMapping("/{id}/audit-logs")
+    public ResponseEntity<List<AuditLogResponse>> getUserAuditLogs(@PathVariable Long id) {
+        return ResponseEntity.ok(userService.getUserAuditLogs(id));
     }
 
     @PutMapping("/{id}/deactivate")

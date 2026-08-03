@@ -82,6 +82,57 @@ const T: Record<Lang, Record<string, string>> = {
     adminLoginSubmit: 'Se connecter',
     adminLoginSubmitting: 'Connexion...',
     backToFloor: "Retour au terminal de l'atelier",
+    // Password reset — shared
+    resetTitle: 'Réinitialisation du mot de passe',
+    resetBackToLogin: 'Retour à la connexion',
+    resetRateLimited: 'Trop de requêtes. Réessayez dans',
+    resetFieldRequired: 'Champ obligatoire',
+    resetRequestChefLink: "Demander un code (Chef d'atelier)",
+    resetRequestAdminLink: 'Demander un lien (Administrateur)',
+    // Password reset — Track A (CHEF_ATELIER self-service)
+    chefResetTitle: 'Réinitialiser votre mot de passe',
+    chefResetSubtitle:
+      'Vérifiez votre identité pour recevoir un code de réinitialisation.',
+    chefResetSubmit: 'Recevoir mon code',
+    chefResetSubmitting: 'Vérification en cours...',
+    resetCodeBadge: 'Votre code de réinitialisation',
+    resetCodeExpiresLabel: 'Expire dans',
+    resetCodeExpired: 'Code expiré — demandez-en un nouveau.',
+    resetContinue: 'Continuer',
+    resetRequestNewCode: 'Demander un nouveau code',
+    invalidIdentifiers: 'Identifiants invalides',
+    resetBlockedHelp:
+      "Toujours bloqué ? Demandez à un administrateur de générer un code pour vous.",
+    // Password reset — Track B (ADMIN email)
+    adminResetTitle: 'Réinitialiser le mot de passe administrateur',
+    adminResetSubtitle:
+      'Saisissez votre adresse email pour recevoir un lien de réinitialisation.',
+    adminResetSubmit: 'Envoyer le lien',
+    adminResetSubmitting: 'Envoi en cours...',
+    adminResetSentTitle: 'Demande envoyée',
+    adminResetSent:
+      'Si cette adresse est enregistrée, un lien de réinitialisation a été envoyé.',
+    adminResetDevToken:
+      "Mode développement — jeton temporaire (l'email n'est pas envoyé) :",
+    // Password reset — Track C (confirm)
+    confirmResetTitle: 'Définir un nouveau mot de passe',
+    confirmResetSubtitle:
+      'Saisissez le code reçu ainsi que votre nouveau mot de passe.',
+    resetTokenLabel: 'Code de réinitialisation',
+    resetTokenPlaceholder: 'Code à 6 caractères ou jeton reçu',
+    resetTokenRequired: 'Veuillez saisir le code reçu',
+    resetPasswordMin: 'Au moins 8 caractères',
+    resetPasswordMinHint:
+      'Le mot de passe doit contenir au moins 8 caractères.',
+    resetPasswordMismatch: 'Les mots de passe ne correspondent pas.',
+    resetPasswordMatch: 'Les mots de passe correspondent.',
+    resetConfirmSubmit: 'Mettre à jour le mot de passe',
+    resetConfirmSubmitting: 'Mise à jour en cours...',
+    resetSuccessTitle: 'Mot de passe mis à jour, connectez-vous.',
+    resetSuccessSubtitle:
+      'Votre mot de passe a été modifié. Redirection vers la page de connexion…',
+    resetTokenExpired:
+      'Ce code a expiré, veuillez en demander un nouveau.',
   },
   AR: {
     title: 'التسجيل في حسابك',
@@ -153,6 +204,53 @@ const T: Record<Lang, Record<string, string>> = {
     adminLoginSubmit: 'تسجيل الدخول',
     adminLoginSubmitting: 'جارٍ تسجيل الدخول...',
     backToFloor: 'العودة إلى واجهة الورشة',
+    // Password reset — shared
+    resetTitle: 'إعادة تعيين كلمة المرور',
+    resetBackToLogin: 'العودة إلى تسجيل الدخول',
+    resetRateLimited: 'طلبات كثيرة جداً. حاول بعد',
+    resetFieldRequired: 'حقل مطلوب',
+    resetRequestChefLink: 'طلب رمز (رئيس الورشة)',
+    resetRequestAdminLink: 'طلب رابط (مسؤول)',
+    // Password reset — Track A (CHEF_ATELIER self-service)
+    chefResetTitle: 'إعادة تعيين كلمة المرور',
+    chefResetSubtitle: 'تحقق من هويتك لتلقي رمز إعادة التعيين.',
+    chefResetSubmit: 'استلام رمزي',
+    chefResetSubmitting: 'جارٍ التحقق...',
+    resetCodeBadge: 'رمز إعادة التعيين الخاص بك',
+    resetCodeExpiresLabel: 'ينتهي خلال',
+    resetCodeExpired: 'انتهت صلاحية الرمز — اطلب رمزاً جديداً.',
+    resetContinue: 'متابعة',
+    resetRequestNewCode: 'طلب رمز جديد',
+    invalidIdentifiers: 'بيانات غير صحيحة',
+    resetBlockedHelp:
+      'لا تزال عالقاً؟ اطلب من مسؤول توليد رمز لك.',
+    // Password reset — Track B (ADMIN email)
+    adminResetTitle: 'إعادة تعيين كلمة مرور المسؤول',
+    adminResetSubtitle:
+      'أدخل بريدك الإلكتروني لتلقي رابط إعادة التعيين.',
+    adminResetSubmit: 'إرسال الرابط',
+    adminResetSubmitting: 'جارٍ الإرسال...',
+    adminResetSentTitle: 'تم إرسال الطلب',
+    adminResetSent:
+      'إذا كان هذا البريد مسجلاً، فقد تم إرسال رابط إعادة التعيين.',
+    adminResetDevToken:
+      'وضع التطوير — رمز مؤقت (لن يتم إرسال بريد إلكتروني):',
+    // Password reset — Track C (confirm)
+    confirmResetTitle: 'تعيين كلمة مرور جديدة',
+    confirmResetSubtitle: 'أدخل الرمز المستلم وكلمة المرور الجديدة.',
+    resetTokenLabel: 'رمز إعادة التعيين',
+    resetTokenPlaceholder: 'الرمز المكون من 6 أحرف أو الرمز المستلم',
+    resetTokenRequired: 'يرجى إدخال الرمز المستلم',
+    resetPasswordMin: '8 أحرف على الأقل',
+    resetPasswordMinHint: 'يجب أن تتكون كلمة المرور من 8 أحرف على الأقل.',
+    resetPasswordMismatch: 'كلمتا المرور غير متطابقتين.',
+    resetPasswordMatch: 'كلمتا المرور متطابقتان.',
+    resetConfirmSubmit: 'تحديث كلمة المرور',
+    resetConfirmSubmitting: 'جارٍ التحديث...',
+    resetSuccessTitle: 'تم تحديث كلمة المرور، سجّل الدخول.',
+    resetSuccessSubtitle:
+      'تم تعديل كلمة المرور. جارٍ التحويل إلى صفحة تسجيل الدخول…',
+    resetTokenExpired: 'انتهت صلاحية هذا الرمز، يرجى طلب رمز جديد.',
   },
 };
 

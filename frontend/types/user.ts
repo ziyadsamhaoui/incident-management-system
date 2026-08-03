@@ -56,6 +56,18 @@ export interface GenerateResetCodeResponse {
   expiresAt: string;
 }
 
+/** A single system audit entry targeting a user (GET /api/users/{id}/audit-logs). */
+export interface AuditLogEntry {
+  id: number;
+  /** Machine-readable action, e.g. GENERATE_RESET_CODE. */
+  action: string;
+  /** Resolved "FirstName LastName" of the acting admin, or null if deleted. */
+  actorName: string | null;
+  details: string | null;
+  /** ISO timestamp of the action. */
+  createdAt: string;
+}
+
 /** A single YYYY-MM-DD bucket of an aggregated count. */
 export interface DayCount {
   date: string;

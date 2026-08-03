@@ -57,12 +57,14 @@ import {
   updateUser,
   getActiveAdminCount,
   getUserActivity,
+  getUserAuditLogs,
   generateResetCode,
 } from '@/services/userService';
+import { CountdownTimer } from '@/components/auth/countdown-timer';
 import { getIncidents } from '@/services/incidentService';
 import { getStatusConfig } from '@/lib/constants/incidentStatus';
 import { ActivityHeatmap } from '@/components/dashboard/activity-heatmap';
-import type { UserResponseDTO, UserActivityDTO, GenerateResetCodeResponse } from '@/types/user';
+import type { UserResponseDTO, UserActivityDTO, GenerateResetCodeResponse, AuditLogEntry } from '@/types/user';
 import type { IncidentDTO } from '@/types/incident';
 
 // ── Role / Status metadata ────────────────────────
@@ -197,6 +199,7 @@ export default function AdminUserDetailPage() {
   const [resetLoading, setResetLoading] = useState(false);
   const [resetData, setResetData] = useState<GenerateResetCodeResponse | null>(null);
   const [resetError, setResetError] = useState<string | null>(null);
+  const [resetExpired, setResetExpired] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // ── Data ─────────────────────────────────────────
@@ -207,6 +210,11 @@ export default function AdminUserDetailPage() {
   const { data: me } = useAsync<UserResponseDTO>(getMe, []);
   const { data: activity, loading: activityLoading, error: activityError, refetch: refetchActivity } =
     useAsync<UserActivityDTO>(() => getUserActivity(userId), [userId]);
+  // Audit strip — recent security/admin actions targeting this user.
+  const { data: auditLogs, refetch: refetchAuditLogs } = useAsync<AuditLogEntry[]>(
+    () => getUserAuditLogs(userId),
+    [userId],
+  );
   // Recent incidents are only relevant for reporters (SOUS_CHEF / CHEF_ATELIER).
   const { data: incidents, loading: incidentsLoading } = useAsync(
     () =>
@@ -279,16 +287,30 @@ export default function AdminUserDetailPage() {
     setEditOpen(true);
   };
 
-  //  Supervisor-mediated reset code (admin generates, employee redeems in person)
-  const openResetCode = async () => {
+  //  Supervisor-mediated reset code — step 1: confirm consequences first
+  //  (spec §4: the danger-zone action opens a confirmation modal before any
+  //  code is issued, so an accidental open never burns the previous code).
+  const openResetCode = () => {
     setResetOpen(true);
+    setResetLoading(false);
+    setResetError(null);
+    setResetData(null);
+    setResetExpired(false);
+    setCopied(false);
+  };
+
+  //  Step 2: actually issue a fresh code (invalidates any previous one).
+  const generateResetCodeNow = async () => {
     setResetLoading(true);
     setResetError(null);
     setResetData(null);
+    setResetExpired(false);
     setCopied(false);
     try {
       const data = await generateResetCode(userId);
       setResetData(data);
+      // The issuance is audited server-side — refresh the audit strip.
+      refetchAuditLogs();
     } catch (err) {
       setResetError(extractErrorMessage(err));
     } finally {
@@ -466,6 +488,12 @@ export default function AdminUserDetailPage() {
 
       {/* ── 5.3 Admin actions ─────────────────────── */}
       <div className="space-y-3">
+          {/* Danger zone — credential & role transitions */}
+          {(user.role === 'CHEF_ATELIER' && user.claimed && user.isActive) && (
+            <h3 className="pt-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Zone de danger
+            </h3>
+          )}
           {/* Role transition — depends on the current role state */}
           {user.role === 'SOUS_CHEF' && user.isActive && (
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between rounded-lg border p-3.5">
@@ -581,6 +609,54 @@ export default function AdminUserDetailPage() {
             </div>
           )}
       </div>
+
+      {/* ── 5.3b Piste d'audit ────────────────────── */}
+      <Card>
+        <CardHeader className="px-4 py-3">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+            Piste d&apos;audit
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {!auditLogs ? (
+            <div className="space-y-2 px-4 py-4">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-2/3" />
+            </div>
+          ) : auditLogs.length === 0 ? (
+            <EmptyState
+              compact
+              icon={Inbox}
+              title="Aucune entrée d'audit."
+              description="Les actions de sécurité (codes de réinitialisation, …) apparaîtront ici."
+            />
+          ) : (
+            <div className="divide-y divide-border">
+              {auditLogs.map((entry) => (
+                <div key={entry.id} className="flex items-start gap-3 px-4 py-3">
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    {entry.action === 'GENERATE_RESET_CODE' ? (
+                      <p className="text-sm text-foreground/90">
+                        Code de réinitialisation généré par{' '}
+                        <span className="font-semibold">
+                          {entry.actorName ?? 'Administrateur'}
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="text-sm text-foreground/90">{entry.action}</p>
+                    )}
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      le {formatDateTime(entry.createdAt)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ── 5.4 Role-conditioned activity ─────────── */}
       <div className="space-y-5">
@@ -767,6 +843,29 @@ export default function AdminUserDetailPage() {
             </div>
           )}
 
+          {/* Step 1 — confirm consequences before issuing any code */}
+          {!resetLoading && !resetError && !resetData && (
+            <div className="space-y-4 py-2">
+              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  Un code à usage unique (valable 15 minutes) sera généré. Une fois la
+                  réinitialisation finalisée par l&apos;agent, son mot de passe actuel sera
+                  invalidé et devra être remplacé par le nouveau mot de passe saisi.
+                </span>
+              </div>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button variant="outline" onClick={() => setResetOpen(false)}>
+                  Annuler
+                </Button>
+                <Button onClick={generateResetCodeNow} className="gap-2 bg-blue-600 hover:bg-blue-700 text-white">
+                  <KeyRound className="h-4 w-4" />
+                  Générer le code
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+
           {resetData && !resetLoading && (
             <div className="space-y-4 py-2">
               {/* Prominent, copyable code badge */}
@@ -792,32 +891,64 @@ export default function AdminUserDetailPage() {
                     )}
                   </button>
                 </div>
-                <p className="mt-3 text-xs text-muted-foreground">
-                  Expire le{' '}
-                  {new Date(resetData.expiresAt).toLocaleString('fr-FR', {
-                    day: 'numeric',
-                    month: 'long',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </p>
+                {/* Live 15-minute expiration countdown + absolute expiry */}
+                <div className="mt-3 flex flex-col items-center gap-1">
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Clock className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
+                    Expire dans{' '}
+                    <CountdownTimer
+                      expiresAt={resetData.expiresAt}
+                      bare
+                      onExpire={() => setResetExpired(true)}
+                    />
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {new Date(resetData.expiresAt).toLocaleString('fr-FR', {
+                      day: 'numeric',
+                      month: 'long',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </p>
+                </div>
               </div>
 
-              {/* Explicit expiry warning — mandatory copy */}
-              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <span>
-                  Ce code expire dans 15 minutes. Communiquez-le directement à l&apos;agent.
-                </span>
-              </div>
+              {/* Expired state — code is dead, offer a fresh one inline */}
+              {resetExpired ? (
+                <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <div className="flex-1">
+                    <span>Ce code a expiré. Générez-en un nouveau pour cet agent.</span>
+                    <button
+                      type="button"
+                      onClick={generateResetCodeNow}
+                      className="mt-1 block font-semibold underline decoration-red-400 underline-offset-2 transition-colors hover:text-red-900 dark:hover:text-red-200"
+                    >
+                      Régénérer un code
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Explicit expiry warning — mandatory copy */
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    Ce code expire dans 15 minutes. Communiquez-le directement à l&apos;agent.
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setResetOpen(false)} disabled={resetLoading}>
-              Fermer
-            </Button>
-          </DialogFooter>
+          {/* Close affordance only when a code/error is shown (the confirm
+              step carries its own Annuler/Générer actions) */}
+          {(resetData || resetError) && !resetLoading && (
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setResetOpen(false)} disabled={resetLoading}>
+                Fermer
+              </Button>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 

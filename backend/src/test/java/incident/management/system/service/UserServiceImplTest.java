@@ -3,8 +3,10 @@ package incident.management.system.service;
 import incident.management.system.dto.UserActivityResponse;
 import incident.management.system.enums.IncidentStatus;
 import incident.management.system.enums.UserRole;
+import incident.management.system.model.AuditLogEntity;
 import incident.management.system.model.UserEntity;
 import incident.management.system.repository.AdminDepartmentSubscriptionRepository;
+import incident.management.system.repository.AuditLogRepository;
 import incident.management.system.repository.DepartmentRepository;
 import incident.management.system.repository.IncidentRepository;
 import incident.management.system.repository.PasswordResetTokenRepository;
@@ -42,6 +44,7 @@ class UserServiceImplTest {
     @Mock private DepartmentRepository departmentRepository;
     @Mock private IncidentRepository incidentRepository;
     @Mock private PasswordResetTokenRepository passwordResetTokenRepository;
+    @Mock private AuditLogRepository auditLogRepository;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private AdminDepartmentSubscriptionRepository subscriptionRepository;
 
@@ -52,7 +55,8 @@ class UserServiceImplTest {
     void setUp() {
         userService = new UserServiceImpl(
                 userRepository, departmentRepository, incidentRepository,
-                passwordResetTokenRepository, passwordEncoder, subscriptionRepository);
+                passwordResetTokenRepository, auditLogRepository,
+                passwordEncoder, subscriptionRepository);
         SecurityContextHolder.clearContext();
     }
 
@@ -315,6 +319,54 @@ class UserServiceImplTest {
     void countActiveAdminsDelegates() {
         when(userRepository.countByRoleAndIsActive(UserRole.ADMIN, true)).thenReturn(2L);
         assertThat(userService.countActiveAdmins()).isEqualTo(2L);
+    }
+
+    @Test
+    @DisplayName("getUserAuditLogs resolves the actor name and returns newest-first entries")
+    void getUserAuditLogsResolvesActors() {
+        UserEntity target = user(40L, UserRole.SOUS_CHEF, true, "");
+        UserEntity actor = user(41L, UserRole.ADMIN, true, "{bcrypt}h");
+        AuditLogEntity entry = AuditLogEntity.builder()
+                .id(1L)
+                .action("GENERATE_RESET_CODE")
+                .actorUserId(actor.getId())
+                .targetUserId(target.getId())
+                .details("Reset code for First_40_Last_40_1040")
+                .build();
+
+        when(userRepository.findById(40L)).thenReturn(Optional.of(target));
+        when(auditLogRepository.findTop50ByTargetUserIdOrderByCreatedAtDesc(40L))
+                .thenReturn(List.of(entry));
+        when(userRepository.findAllById(List.of(41L))).thenReturn(List.of(actor));
+
+        var logs = userService.getUserAuditLogs(40L);
+
+        assertThat(logs).hasSize(1);
+        assertThat(logs.get(0).action()).isEqualTo("GENERATE_RESET_CODE");
+        assertThat(logs.get(0).actorName()).isEqualTo("First_41 Last_41");
+    }
+
+    @Test
+    @DisplayName("getUserAuditLogs leaves actorName null when the actor no longer exists")
+    void getUserAuditLogsHandlesDeletedActor() {
+        UserEntity target = user(42L, UserRole.SOUS_CHEF, true, "");
+        AuditLogEntity entry = AuditLogEntity.builder()
+                .id(2L)
+                .action("GENERATE_RESET_CODE")
+                .actorUserId(999L)
+                .targetUserId(target.getId())
+                .details("Reset code")
+                .build();
+
+        when(userRepository.findById(42L)).thenReturn(Optional.of(target));
+        when(auditLogRepository.findTop50ByTargetUserIdOrderByCreatedAtDesc(42L))
+                .thenReturn(List.of(entry));
+        when(userRepository.findAllById(List.of(999L))).thenReturn(List.of());
+
+        var logs = userService.getUserAuditLogs(42L);
+
+        assertThat(logs).hasSize(1);
+        assertThat(logs.get(0).actorName()).isNull();
     }
 
     @Test

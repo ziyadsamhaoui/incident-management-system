@@ -193,25 +193,40 @@ public class AuthController {
 
         String email = body.get("email");
         if (email == null || email.isBlank()) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("error", "email is required"));
+            // Validation is deliberately generic — an empty field must not be
+            // distinguishable from an unknown address.
+            return ResponseEntity.ok(Map.of(
+                    "message", AuthService.EMAIL_NEUTRAL_MESSAGE,
+                    "expiresInMinutes", 10));
         }
 
-        String token = authService.requestPasswordResetEmail(email);
+        AuthService.EmailResetResult result = authService.requestPasswordResetEmail(email);
 
-        return ResponseEntity.ok(Map.of(
-                "message", "If the email address is registered, a password reset link has been sent.",
-                "token", token,
-                "expiresInMinutes", 10));
+        // Anti-enumeration: ALWAYS the same neutral 200 — whether or not the
+        // address exists. The plaintext token is echoed ONLY in stub (dev) mode
+        // for a known address so local testing works without a real mailbox.
+        Map<String, Object> bodyOut = new LinkedHashMap<>();
+        bodyOut.put("message", AuthService.EMAIL_NEUTRAL_MESSAGE);
+        bodyOut.put("expiresInMinutes", 10);
+        if (result.token() != null) {
+            bodyOut.put("token", result.token());
+        }
+        return ResponseEntity.ok(bodyOut);
     }
 
     @PostMapping("/password-reset/confirm")
-    public ResponseEntity<Map<String, String>> confirmPasswordReset(
+    public ResponseEntity<Map<String, Object>> confirmPasswordReset(
             @Valid @RequestBody PasswordResetConfirmRequest request) {
 
-        authService.confirmPasswordReset(request.token(), request.newPassword());
+        AuthService.ResetConfirmation confirmation =
+                authService.confirmPasswordReset(request.token(), request.newPassword());
 
-        return ResponseEntity.ok(Map.of("message", "Password has been successfully reset"));
+        // role + loginIdentifier let the frontend route to the correct login
+        // lane with the matricule/email pre-filled (no auto-login).
+        return ResponseEntity.ok(Map.of(
+                "message", "Password has been successfully reset",
+                "role", confirmation.role().name(),
+                "loginIdentifier", confirmation.loginIdentifier()));
     }
 
     // Matricule Verification (Boolean-Only, No PII)
