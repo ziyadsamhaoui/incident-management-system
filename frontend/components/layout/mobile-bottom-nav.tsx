@@ -32,7 +32,7 @@ interface TabItem {
 
 const BOTTOM_TABS: TabItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Incidents', href: '/incidents', icon: AlertTriangle, dotColor: 'bg-rose-500' },
+  { label: 'Incidents', href: '/admin/incidents', icon: AlertTriangle, dotColor: 'bg-rose-500' },
   { label: 'Users', href: '/users', icon: Users, dotColor: 'bg-amber-500' },
   { label: 'Plus', href: '#more', icon: MoreHorizontal },
 ];

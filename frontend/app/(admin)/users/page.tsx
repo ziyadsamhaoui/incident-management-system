@@ -13,6 +13,7 @@ import {
   UserCheck,
   Trash2,
   Eye,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
@@ -239,6 +240,8 @@ function TableSkeleton() {
 export default function UsersPage() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [departmentFilter, setDepartmentFilter] = useState('all');
+  const [filterOpen, setFilterOpen] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -248,8 +251,12 @@ export default function UsersPage() {
     () => getUsers({ page: 0, size: 100 }),
     [],
   );
+  const { data: departments } = useAsync(getDepartments, []);
 
   const users = useMemo(() => data?.content ?? [], [data]);
+
+  const hasActiveFilters =
+    search.trim() !== '' || roleFilter !== 'all' || departmentFilter !== 'all';
 
   const filteredUsers = users.filter((u) => {
     if (search) {
@@ -262,8 +269,20 @@ export default function UsersPage() {
         return false;
     }
     if (roleFilter !== 'all' && u.role !== roleFilter) return false;
+    if (departmentFilter !== 'all' && String(u.department?.id ?? '') !== departmentFilter) {
+      return false;
+    }
     return true;
   });
+
+  const resetFilters = () => {
+    setSearch('');
+    setRoleFilter('all');
+    setDepartmentFilter('all');
+  };
+
+  const activeFilterCount =
+    (roleFilter !== 'all' ? 1 : 0) + (departmentFilter !== 'all' ? 1 : 0);
 
   // Admin promotes a SOUS_CHEF directly — no request/approval workflow.
   const handlePromote = async (id: number) => {
@@ -326,7 +345,7 @@ export default function UsersPage() {
             className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-sm font-medium transition-all active:scale-[0.97]"
           >
             <UserPlus className="h-4 w-4" />
-            + Nouvel Utilisateur
+            Nouvel Utilisateur
           </button>
           <CreateUserModal open={createOpen} onOpenChange={setCreateOpen} onCreated={refetch} />
         </div>
@@ -339,26 +358,60 @@ export default function UsersPage() {
 
         {/* Filters */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative w-full sm:w-72">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Rechercher par nom ou matricule..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-10 w-full pl-9"
-            />
+          {/* Search + mobile filter tab */}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="relative flex-1 sm:w-72">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Rechercher par nom ou matricule..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-10 w-full pl-9"
+              />
+            </div>
+            {/* Mobile-only filter tab (department + role) */}
+            <button
+              type="button"
+              onClick={() => setFilterOpen(true)}
+              className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-input bg-background text-muted-foreground transition-colors hover:bg-muted sm:hidden"
+              aria-label="Filtrer par département et rôle"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              {activeFilterCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-blue-600 text-[9px] font-bold text-white">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
           </div>
-          <Select value={roleFilter} onValueChange={setRoleFilter}>
-            <SelectTrigger className="h-10 w-[180px]">
-              <SelectValue placeholder="Tous les rôles" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Tous les rôles</SelectItem>
-              <SelectItem value="SOUS_CHEF">Opérateurs</SelectItem>
-              <SelectItem value="CHEF_ATELIER">Chefs d'atelier</SelectItem>
-              <SelectItem value="ADMIN">Administrateurs</SelectItem>
-            </SelectContent>
-          </Select>
+
+          {/* Desktop filters */}
+          <div className="hidden sm:flex items-center gap-2">
+            <Select value={roleFilter} onValueChange={setRoleFilter}>
+              <SelectTrigger className="h-10 w-[170px]">
+                <SelectValue placeholder="Tous les rôles" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les rôles</SelectItem>
+                <SelectItem value="SOUS_CHEF">Opérateurs</SelectItem>
+                <SelectItem value="CHEF_ATELIER">Chefs d'atelier</SelectItem>
+                <SelectItem value="ADMIN">Administrateurs</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+              <SelectTrigger className="h-10 w-[190px]">
+                <SelectValue placeholder="Tous les départements" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les départements</SelectItem>
+                {(departments ?? []).map((d) => (
+                  <SelectItem key={d.id} value={String(d.id)}>
+                    {d.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* Users Table (desktop) / Card List (mobile) */}
@@ -371,15 +424,14 @@ export default function UsersPage() {
                 icon={Users}
                 title="Aucun utilisateur enregistré."
                 description={
-                  search || roleFilter !== 'all'
+                  hasActiveFilters
                     ? 'Aucun résultat ne correspond à vos filtres actuels.'
                     : 'Créez votre premier compte pour commencer.'
                 }
-                actionLabel={search || roleFilter !== 'all' ? 'Effacer les filtres' : '+ Nouvel utilisateur'}
+                actionLabel={hasActiveFilters ? 'Effacer les filtres' : 'Nouvel utilisateur'}
                 onAction={() => {
-                  if (search || roleFilter !== 'all') {
-                    setSearch('');
-                    setRoleFilter('all');
+                  if (hasActiveFilters) {
+                    resetFilters();
                   } else {
                     setCreateOpen(true);
                   }
@@ -393,11 +445,12 @@ export default function UsersPage() {
                     <thead>
                       <tr className="border-b text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                         <th className="px-4 py-3">Matricule</th>
-                        <th className="px-4 py-3">Nom complet</th>
+                        <th className="px-4 py-3">Prénom</th>
+                        <th className="px-4 py-3">Nom</th>
                         <th className="px-4 py-3">Rôle</th>
                         <th className="px-4 py-3">Département</th>
                         <th className="px-4 py-3">Statut</th>
-                        <th className="px-4 py-3 w-44">Actions</th>
+                        <th className="px-4 py-3 w-52" />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -411,7 +464,15 @@ export default function UsersPage() {
                               href={`/admin/users/${user.id}`}
                               className="font-medium text-foreground hover:text-blue-600 hover:underline dark:hover:text-blue-400"
                             >
-                              {user.firstName} {user.lastName}
+                              {user.firstName}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-3">
+                            <Link
+                              href={`/admin/users/${user.id}`}
+                              className="font-medium text-foreground hover:text-blue-600 hover:underline dark:hover:text-blue-400"
+                            >
+                              {user.lastName}
                             </Link>
                           </td>
                           <td className="px-4 py-3">
@@ -444,10 +505,11 @@ export default function UsersPage() {
                             <div className="flex items-center gap-1.5">
                               <Link
                                 href={`/admin/users/${user.id}`}
-                                className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 px-2 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground dark:border-slate-700"
                                 title="Voir le détail"
                               >
                                 <Eye className="h-3.5 w-3.5" />
+                                Voir
                               </Link>
                               {canPromote(user) && (
                                 <button
@@ -463,21 +525,6 @@ export default function UsersPage() {
                                     <UserCheck className="h-3 w-3" />
                                   )}
                                   Promouvoir
-                                </button>
-                              )}
-                              {canDeactivate(user) && (
-                                <button
-                                  type="button"
-                                  disabled={busyId === user.id}
-                                  onClick={() => setDeactivateTarget(user)}
-                                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50"
-                                  title="Désactiver le compte"
-                                >
-                                  {busyId === user.id ? (
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                  ) : (
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  )}
                                 </button>
                               )}
                             </div>
@@ -553,6 +600,67 @@ export default function UsersPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Mobile filter dialog (department + role) */}
+        <Dialog open={filterOpen} onOpenChange={setFilterOpen}>
+          <DialogContent className="sm:max-w-xs">
+            <DialogHeader>
+              <DialogTitle>Filtres</DialogTitle>
+              <DialogDescription>
+                Filtrer les utilisateurs par rôle et département.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <Label>Rôle</Label>
+                <Select value={roleFilter} onValueChange={setRoleFilter}>
+                  <SelectTrigger className="h-10 w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tous les rôles</SelectItem>
+                    <SelectItem value="SOUS_CHEF">Opérateurs</SelectItem>
+                    <SelectItem value="CHEF_ATELIER">Chefs d'atelier</SelectItem>
+                    <SelectItem value="ADMIN">Administrateurs</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Département</Label>
+                <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+                  <SelectTrigger className="h-10 w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tous les départements</SelectItem>
+                    {(departments ?? []).map((d) => (
+                      <SelectItem key={d.id} value={String(d.id)}>
+                        {d.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setRoleFilter('all');
+                  setDepartmentFilter('all');
+                }}
+              >
+                Réinitialiser
+              </Button>
+              <Button
+                onClick={() => setFilterOpen(false)}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Appliquer
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Deactivate confirmation dialog */}
         <Dialog open={deactivateTarget !== null} onOpenChange={(open) => { if (!open) setDeactivateTarget(null); }}>

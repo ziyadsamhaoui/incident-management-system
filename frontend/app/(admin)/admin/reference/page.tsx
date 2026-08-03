@@ -26,6 +26,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
@@ -76,13 +83,18 @@ interface RefTab {
   icon: React.ElementType;
   /** Raw fetch result — each tab maps it to { id, name, parent? } */
   fetch: () => Promise<unknown[]>;
-  create: (name: string) => Promise<unknown>;
-  update: (id: number, name: string) => Promise<unknown>;
+  create: (name: string, parentId: number | null) => Promise<unknown>;
+  update: (id: number, name: string, parentId: number | null) => Promise<unknown>;
   remove: (id: number) => Promise<void>;
   emptyTitle: string;
   emptyCta: string;
   /** Map a raw record to the display shape */
-  toItem: (raw: unknown) => { id: number; name: string; parent?: string };
+  toItem: (raw: unknown) => { id: number; name: string; parent?: string; parentId?: number };
+  /**
+   * Optional parent picker shown in the create/edit dialog (e.g. a section
+   * for production lines, a production line for stations).
+   */
+  parent?: { label: string; fetch: () => Promise<unknown[]> };
 }
 
 const REF_TABS: RefTab[] = [
@@ -127,14 +139,15 @@ const REF_TABS: RefTab[] = [
     label: 'Lignes de production',
     icon: MapPin,
     fetch: getProductionLines,
-    create: (name) => createProductionLine(name, null),
-    update: (id, name) => updateProductionLine(id, name, null),
+    create: createProductionLine,
+    update: updateProductionLine,
     remove: deleteProductionLine,
     emptyTitle: 'Aucune ligne de production enregistrée.',
     emptyCta: '+ Ajouter',
+    parent: { label: 'Section', fetch: getSections },
     toItem: (raw) => {
-      const r = raw as { id: number; name: string; section: { name: string } | null };
-      return { id: r.id, name: r.name, parent: r.section?.name ?? undefined };
+      const r = raw as { id: number; name: string; section: { id: number; name: string } | null };
+      return { id: r.id, name: r.name, parent: r.section?.name, parentId: r.section?.id };
     },
   },
   {
@@ -142,15 +155,16 @@ const REF_TABS: RefTab[] = [
     label: 'Stations',
     icon: Cpu,
     fetch: getStations,
-    create: (name) => createStation(name, null),
-    update: (id, name) => updateStation(id, name, null),
+    create: createStation,
+    update: updateStation,
     remove: deleteStation,
     emptyTitle: 'Aucune station enregistrée.',
     emptyCta: '+ Ajouter',
-    toItem: (raw) => ({
-      id: (raw as { id: number }).id,
-      name: (raw as { code: string }).code,
-    }),
+    parent: { label: 'Ligne de production', fetch: getProductionLines },
+    toItem: (raw) => {
+      const r = raw as { id: number; code: string; productionLineId: number | null };
+      return { id: r.id, name: r.code, parentId: r.productionLineId ?? undefined };
+    },
   },
 ];
 
@@ -201,8 +215,9 @@ function ReferenceDataContent() {
   const [search, setSearch] = useState('');
   const [deleteGuard, setDeleteGuard] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<{ id: string; name: string } | null>(null);
+  const [editTarget, setEditTarget] = useState<{ id: string; name: string; parentId?: number } | null>(null);
   const [newName, setNewName] = useState('');
+  const [newParentId, setNewParentId] = useState('none');
   const [adding, setAdding] = useState(false);
   const [busyDeleteId, setBusyDeleteId] = useState<number | null>(null);
 
@@ -210,11 +225,22 @@ function ReferenceDataContent() {
 
   const { data, loading, error, refetch } = useAsync(activeSection.fetch, [activeTab]);
 
+  // Parent options (sections / production lines) for the create/edit dialog.
+  const { data: parentOptions } = useAsync(
+    () => (activeSection.parent ? activeSection.parent.fetch() : Promise.resolve([])),
+    [activeTab],
+  );
+
   const items = useMemo(
     () =>
       (data ?? []).map((item) => {
         const mapped = activeSection.toItem(item);
-        return { id: String(mapped.id), name: mapped.name, parent: mapped.parent };
+        return {
+          id: String(mapped.id),
+          name: mapped.name,
+          parent: mapped.parent,
+          parentId: mapped.parentId,
+        };
       }),
     [data, activeSection],
   );
@@ -229,13 +255,15 @@ function ReferenceDataContent() {
   const openCreateDialog = () => {
     setEditTarget(null);
     setNewName('');
+    setNewParentId('none');
     setDeleteGuard(null);
     setAddOpen(true);
   };
 
-  const openEditDialog = (item: { id: string; name: string }) => {
-    setEditTarget({ id: item.id, name: item.name });
+  const openEditDialog = (item: { id: string; name: string; parentId?: number }) => {
+    setEditTarget({ id: item.id, name: item.name, parentId: item.parentId });
     setNewName(item.name);
+    setNewParentId(item.parentId != null ? String(item.parentId) : 'none');
     setDeleteGuard(null);
     setAddOpen(true);
   };
@@ -244,23 +272,26 @@ function ReferenceDataContent() {
     setAddOpen(false);
     setEditTarget(null);
     setNewName('');
+    setNewParentId('none');
   };
 
   const handleSubmit = async () => {
     const name = newName.trim();
-    if (!name) return;
+    const needsParent = activeSection.parent !== undefined;
+    if (!name || (needsParent && newParentId === 'none')) return;
+    const parentId = newParentId !== 'none' ? Number(newParentId) : null;
     setAdding(true);
     setDeleteGuard(null);
     try {
       if (editTarget) {
-        // No-op when the name did not change
-        if (name === editTarget.name) {
+        // No-op when nothing changed
+        if (name === editTarget.name && (editTarget.parentId ?? null) === parentId) {
           closeDialog();
           return;
         }
-        await activeSection.update(Number(editTarget.id), name);
+        await activeSection.update(Number(editTarget.id), name, parentId);
       } else {
-        await activeSection.create(name);
+        await activeSection.create(name, parentId);
       }
       closeDialog();
       refetch();
@@ -369,10 +400,40 @@ function ReferenceDataContent() {
                       autoFocus
                     />
                   </div>
+                  {activeSection.parent && (
+                    <div className="space-y-1.5 pb-2">
+                      <Label>{activeSection.parent.label}</Label>
+                      <Select value={newParentId} onValueChange={setNewParentId}>
+                        <SelectTrigger className="h-10 w-full">
+                          <SelectValue placeholder={`Sélectionner ${activeSection.parent.label.toLowerCase()}...`} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(parentOptions ?? []).map((p) => {
+                            const opt = p as { id: number; name: string };
+                            return (
+                              <SelectItem key={opt.id} value={String(opt.id)}>
+                                {opt.name}
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                      {(parentOptions ?? []).length === 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          Aucune {activeSection.parent.label.toLowerCase()} disponible pour le
+                          moment — créez-en une d&apos;abord.
+                        </p>
+                      )}
+                    </div>
+                  )}
                   <DialogFooter>
                     <Button
                       onClick={handleSubmit}
-                      disabled={!newName.trim() || adding}
+                      disabled={
+                        !newName.trim() ||
+                        adding ||
+                        (activeSection.parent !== undefined && newParentId === 'none')
+                      }
                       className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
                     >
                       {adding && <Loader2 className="h-4 w-4 animate-spin" />}

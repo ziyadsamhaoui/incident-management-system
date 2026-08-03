@@ -23,6 +23,10 @@ public class ProductionLineService {
     private final SectionRepository sectionRepository;
 
     public ProductionLineResponse createProductionLine(String name, Long sectionId) {
+        if (sectionId == null) {
+            throw new IllegalArgumentException(
+                    "Veuillez sélectionner une section pour créer une ligne de production.");
+        }
         SectionEntity section = sectionRepository.findById(sectionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Section", "id", sectionId));
         ProductionLineEntity entity = ProductionLineEntity.builder()

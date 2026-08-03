@@ -21,6 +21,10 @@ public class StationService {
     private final ProductionLineRepository productionLineRepository;
 
     public StationResponse createStation(String code, int rowIndex, int lineIndex, boolean isWorking, Long productionLineId) {
+        if (productionLineId == null) {
+            throw new IllegalArgumentException(
+                    "Veuillez sélectionner une ligne de production pour créer une station.");
+        }
         ProductionLineEntity productionLine = productionLineRepository.findById(productionLineId)
                 .orElseThrow(() -> new ResourceNotFoundException("ProductionLine", "id", productionLineId));
         StationEntity entity = StationEntity.builder()

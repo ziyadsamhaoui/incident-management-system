@@ -28,22 +28,22 @@ interface StepDefinition {
 }
 
 const STEPS: StepDefinition[] = [
-  { key: 'DECLARED', label: 'Declared', icon: FileText, threshold: ['DECLARED'] },
-  { key: 'CLAIMED', label: 'Claimed', icon: UserCheck, threshold: ['CLAIMED'] },
+  { key: 'DECLARED', label: 'Déclaré', icon: FileText, threshold: ['DECLARED'] },
+  { key: 'CLAIMED', label: 'Pris en charge', icon: UserCheck, threshold: ['CLAIMED'] },
   {
     key: 'IN_PROGRESS',
-    label: 'In Progress',
+    label: 'En cours',
     icon: Activity,
     threshold: ['IN_PROGRESS'],
   },
   {
     key: 'EVALUATED',
-    label: 'Evaluated',
+    label: 'Évalué',
     icon: CheckCircle2,
     threshold: ['RESOLVED', 'NON_RESOLVED'],
     isMulti: true,
   },
-  { key: 'CLOSED', label: 'Closed', icon: CheckCheck, threshold: ['CLOSED'] },
+  { key: 'CLOSED', label: 'Clôturé', icon: CheckCheck, threshold: ['CLOSED'] },
 ];
 
 // ── Status → progress index mapping ──────────────

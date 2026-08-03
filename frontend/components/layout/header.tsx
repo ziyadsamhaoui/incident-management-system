@@ -5,7 +5,6 @@ import { useRouter, usePathname } from 'next/navigation';
 import {
   Menu,
   LogOut,
-  Bell,
   Search,
   Command,
   ChevronDown,
@@ -16,6 +15,7 @@ import {
 import { useNavigationProgress } from '@/components/ui/navigation-progress';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { NotificationsDropdown } from '@/components/layout/notifications-dropdown';
 import { useAuthStore } from '@/store/useAuthStore';
 import { logout as logoutApi } from '@/services/authService';
 import {
@@ -155,12 +155,12 @@ export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: H
             </Button>
           )}
 
-          {/* Admin search trigger — far left, wider */}
+          {/* Admin search trigger — far left, wider (hidden on mobile, < 768px) */}
           {isAdmin && (
             <Button
               variant="outline"
               size="sm"
-              className="h-9 gap-2 text-slate-400 border-slate-700 hover:text-slate-100 hover:border-slate-600 sm:min-w-[280px] lg:min-w-[400px] xl:min-w-[480px] justify-between"
+              className="hidden md:flex h-9 gap-2 text-slate-400 border-slate-700 hover:text-slate-100 hover:border-slate-600 md:min-w-[280px] lg:min-w-[400px] xl:min-w-[480px] justify-between"
               onClick={() => setSearchOpen(true)}
             >
               <span className="flex items-center gap-2 min-w-0">
@@ -177,12 +177,12 @@ export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: H
 
         {/* ── Right side: actions + user ───────────── */}
         <div className="flex items-center gap-2">
-          {/* Mobile search icon — visible below sm breakpoint */}
+          {/* Mobile search icon — visible below md breakpoint */}
           {isAdmin && (
             <Button
               variant="ghost"
               size="icon"
-              className="sm:hidden text-slate-400 hover:text-slate-100 hover:bg-slate-800 min-w-[44px] min-h-[44px]"
+              className="md:hidden text-slate-400 hover:text-slate-100 hover:bg-slate-800 min-w-[44px] min-h-[44px]"
               onClick={() => setSearchOpen(true)}
             >
               <Search className="h-5 w-5" />
@@ -190,25 +190,8 @@ export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: H
             </Button>
           )}
 
-          {/* Notification bell — admin only, links to notifications page */}
-          {isAdmin && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                startNavigation();
-                router.push('/admin/notifications');
-              }}
-              className="relative text-slate-400 hover:text-slate-100 hover:bg-slate-800 min-w-[44px] min-h-[44px]"
-            >
-              <Bell className="h-5 w-5" />
-              <span className="absolute right-1 top-1 flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400/40" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
-              </span>
-              <span className="sr-only">Notifications</span>
-            </Button>
-          )}
+          {/* Notification bell — admin only, opens the dropdown panel */}
+          {isAdmin && <NotificationsDropdown />}
 
           {/* ── User Profile Dropdown ────────────────── */}
           <DropdownMenu>

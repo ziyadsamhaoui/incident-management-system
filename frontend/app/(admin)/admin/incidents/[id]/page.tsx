@@ -1,17 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft,
   AlertTriangle,
-  Clock,
   ShieldAlert,
   Wrench,
   MessageSquare,
   Zap,
   Settings,
+  Building2,
+  MapPin,
   UserCheck,
   CheckCircle2,
   XCircle,
@@ -21,13 +22,13 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { getStatusConfig } from '@/lib/constants/incidentStatus';
+import { IncidentStepper } from '@/components/incidents/incident-stepper';
 import { EvaluationModal } from '@/components/incidents/evaluation-modal';
 import { ErrorState } from '@/components/ui/error-state';
 import { useAsync, extractErrorMessage } from '@/lib/use-async';
-import { getIncidentDetail, claimIncident, evaluateIncident } from '@/services/incidentService';
+import { getIncidentDetail, claimIncident, progressIncident, evaluateIncident } from '@/services/incidentService';
 import type { IncidentDetailDTO, IncidentHistoryEntry } from '@/types/incident';
 
 // ── Category Icon Map ─────────────────────────────
@@ -61,12 +62,12 @@ const PRIORITY_CLASSES: Record<string, string> = {
 };
 
 const STATUS_ACTION_LABELS: Record<string, string> = {
-  DECLARED: 'Incident Declared',
-  CLAIMED: 'Claimed by',
-  IN_PROGRESS: 'In Progress',
-  RESOLVED: 'Resolved',
-  NON_RESOLVED: 'Not Resolved',
-  CLOSED: 'Closed',
+  DECLARED: 'Incident déclaré',
+  CLAIMED: 'Pris en charge par',
+  IN_PROGRESS: 'En cours',
+  RESOLVED: 'Résolu',
+  NON_RESOLVED: 'Non résolu',
+  CLOSED: 'Clôturé',
 };
 
 // ── Timeline Entry ────────────────────────────────
@@ -136,6 +137,7 @@ export default function AdminIncidentDetailPage() {
 
   const [evalOpen, setEvalOpen] = useState(false);
   const [evalLoading, setEvalLoading] = useState(false);
+  const [progressing, setProgressing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const { data: incident, loading, error, refetch } = useAsync<IncidentDetailDTO>(
@@ -151,6 +153,22 @@ export default function AdminIncidentDetailPage() {
       refetch();
     }
   }, [incidentId, prevId, refetch]);
+
+  // Auto-advance CLAIMED → IN_PROGRESS right after the admin claims, so the
+  // Évaluer button is immediately available (no manual intermediate step).
+  const autoProgressAttempted = useRef(false);
+  useEffect(() => {
+    if (incident?.status !== 'CLAIMED' || progressing || autoProgressAttempted.current) {
+      return;
+    }
+    autoProgressAttempted.current = true;
+    setProgressing(true);
+    setActionError(null);
+    progressIncident(incidentId)
+      .then(() => refetch())
+      .catch((err) => setActionError(extractErrorMessage(err)))
+      .finally(() => setProgressing(false));
+  }, [incident?.status, incidentId, progressing, refetch]);
 
   const handleClaim = async () => {
     setActionError(null);
@@ -175,6 +193,7 @@ export default function AdminIncidentDetailPage() {
       setEvalLoading(false);
     }
   };
+
 
   if (loading) {
     return (
@@ -232,9 +251,15 @@ export default function AdminIncidentDetailPage() {
               {incident.category}
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full border bg-muted/50 px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+              <Building2 className="h-3 w-3" />
               {incident.department}
-              {incident.station && ` · ${incident.station}`}
             </span>
+            {incident.station && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border bg-muted/50 px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                <MapPin className="h-3 w-3" />
+                {incident.station}
+              </span>
+            )}
             <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium', cfg.textClass, 'bg-muted/50')}>
               <span className={cn('inline-block h-1.5 w-1.5 rounded-full', cfg.dotClass)} />
               {cfg.labelFr}
@@ -250,17 +275,17 @@ export default function AdminIncidentDetailPage() {
               Prendre en charge
             </Button>
           )}
+          {incident.status === 'CLAIMED' && progressing && (
+            <span className="inline-flex items-center gap-2 rounded-lg border bg-blue-50 px-4 py-2 text-sm text-blue-700 dark:bg-blue-950/30 dark:text-blue-400">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Progression automatique vers « En cours »...
+            </span>
+          )}
           {incident.status === 'IN_PROGRESS' && (
             <Button onClick={() => setEvalOpen(true)} size="sm" className="gap-2 bg-amber-600 hover:bg-amber-700">
               <CheckCircle2 className="h-4 w-4" />
               Évaluer
             </Button>
-          )}
-          {incident.status === 'RESOLVED' && (
-            <Badge variant="outline" className="gap-1.5 border-emerald-200 text-emerald-700 dark:border-emerald-800 dark:text-emerald-400">
-              <Clock className="h-3 w-3" />
-              Clôture automatique ~10 min après résolution
-            </Badge>
           )}
         </div>
       </div>
@@ -274,7 +299,26 @@ export default function AdminIncidentDetailPage() {
       <Card>
         <CardContent className="p-4">
           <h3 className="text-sm font-semibold mb-2">Description</h3>
-          <p className="text-sm text-muted-foreground leading-relaxed">{incident.description}</p>
+          <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{incident.description}</p>
+        </CardContent>
+      </Card>
+
+      {/* ── Progression stepper (all timestamps) ──── */}
+      <Card>
+        <CardContent className="p-4">
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold">
+            <Activity className="h-4 w-4 text-muted-foreground" />
+            Progression
+          </h3>
+          <IncidentStepper
+            status={incident.status}
+            declaredAt={incident.declaredAt}
+            claimedAt={incident.claimedAt}
+            inProgressAt={incident.inProgressAt}
+            resolvedAt={incident.resolvedAt ?? incident.closedAt}
+            closedAt={incident.closedAt}
+            isNonResolved={incident.status === 'NON_RESOLVED'}
+          />
         </CardContent>
       </Card>
 

@@ -23,10 +23,21 @@ import {
   Zap,
   Settings,
   Inbox,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { getStatusConfig } from '@/lib/constants/incidentStatus';
 import type { IncidentStatus, IncidentPriority } from '@/types/incident';
 import type { IncidentDTO } from '@/types/incident';
@@ -47,6 +58,22 @@ import { TableSkeleton } from '@/components/ui/skeleton';
 const PRIORITY_LABELS: Record<string, string> = { LOW: 'Faible', MEDIUM: 'Moyenne', HIGH: 'Élevée', CRITICAL: 'Critique' };
 const PRIORITY_CLASSES: Record<string, string> = { LOW: 'text-slate-500 bg-slate-100 dark:bg-slate-800', MEDIUM: 'text-amber-600 bg-amber-50 dark:bg-amber-900/20', HIGH: 'text-orange-600 bg-orange-50 dark:bg-orange-900/20', CRITICAL: 'text-red-600 bg-red-50 dark:bg-red-900/20' };
 const PRIORITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+
+const STATUS_OPTIONS = [
+  { value: 'DECLARED', label: 'Déclaré' },
+  { value: 'CLAIMED', label: 'Pris en charge' },
+  { value: 'IN_PROGRESS', label: 'En cours' },
+  { value: 'RESOLVED', label: 'Résolu' },
+  { value: 'NON_RESOLVED', label: 'Non résolu' },
+  { value: 'CLOSED', label: 'Clôturé' },
+];
+
+const PRIORITY_OPTIONS = [
+  { value: 'CRITICAL', label: 'Critique' },
+  { value: 'HIGH', label: 'Élevée' },
+  { value: 'MEDIUM', label: 'Moyenne' },
+  { value: 'LOW', label: 'Faible' },
+];
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
   Sécurité: ShieldAlert,
@@ -172,6 +199,42 @@ function MultiSelectDropdown({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Chip-style multi-select (mobile filter dialog) ─
+
+function FilterCheckGroup({
+  options,
+  selected,
+  onToggle,
+}: {
+  options: { value: string; label: string }[];
+  selected: string[];
+  onToggle: (value: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((opt) => {
+        const isSel = selected.includes(opt.value);
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onToggle(opt.value)}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors',
+              isSel
+                ? 'border-primary bg-primary/5 text-primary'
+                : 'border-input text-muted-foreground hover:border-muted-foreground/30',
+            )}
+          >
+            {isSel && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -415,6 +478,7 @@ export default function AdminIncidentsPage() {
   const [evaluateTarget, setEvaluateTarget] = useState<IncidentDTO | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
 
   // ── Real data ─────────────────────────────────────
   const incidentsFetch = useAsync(() => getIncidents({ size: 200 }), []);
@@ -578,6 +642,43 @@ export default function AdminIncidentsPage() {
 
   const clearAllFilters = () => setFilters(DEFAULT_FILTERS);
 
+  // Toggle a multi-select filter value (shared by desktop dropdowns + mobile dialog)
+  const toggleFilterValue = (key: 'statuses' | 'priorities' | 'departments' | 'categories', value: string) => {
+    setFilters((prev) => {
+      const arr = prev[key] as string[];
+      return {
+        ...prev,
+        [key]: arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value],
+      };
+    });
+  };
+
+  // Reset only the filters exposed inside the mobile dialog (search stays intact)
+  const resetDialogFilters = () => {
+    setFilters((prev) => ({
+      ...prev,
+      statuses: [],
+      priorities: [],
+      departments: [],
+      categories: [],
+      dateFrom: '',
+      dateTo: '',
+      scope: 'all',
+      sort: 'newest',
+    }));
+  };
+
+  // Badge count for the mobile filter tab (excludes search — it has its own input)
+  const activeFilterCount =
+    filters.statuses.length +
+    filters.priorities.length +
+    filters.departments.length +
+    filters.categories.length +
+    (filters.dateFrom ? 1 : 0) +
+    (filters.dateTo ? 1 : 0) +
+    (filters.scope === 'mine' ? 1 : 0) +
+    (filters.sort !== 'newest' ? 1 : 0);
+
   // ── Pagination ──────────────────────────────────
   const PAGE_SIZE = 10;
   const [page, setPage] = useState(1);
@@ -649,39 +750,46 @@ export default function AdminIncidentsPage() {
         {/* ── 2.2 — Multi-Filter Bar ────────────────── */}
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative w-full sm:w-48 lg:w-56">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="text"
-                value={filters.search}
-                onChange={(e) => updateFilter('search', e.target.value)}
-                placeholder="Réf., description, nom..."
-                className="h-9 w-full rounded-lg border border-input bg-background pl-8 pr-3 text-xs outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
-              />
+            {/* Search + mobile filter tab */}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-72">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="text"
+                  value={filters.search}
+                  onChange={(e) => updateFilter('search', e.target.value)}
+                  placeholder="Rechercher par référence, nom ou description..."
+                  className="h-10 w-full pl-9"
+                />
+              </div>
+              {/* Mobile-only filter tab (opens the filter dialog) */}
+              <button
+                type="button"
+                onClick={() => setFilterOpen(true)}
+                className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-input bg-background text-muted-foreground transition-colors hover:bg-muted sm:hidden"
+                aria-label="Filtrer les incidents"
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                {activeFilterCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-blue-600 text-[9px] font-bold text-white">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
             </div>
 
+            {/* Desktop filters (hidden on mobile — replaced by the filter dialog) */}
+            <div className="hidden sm:flex flex-wrap items-center gap-2">
             <MultiSelectDropdown
               label="Statut"
-              options={[
-                { value: 'DECLARED', label: 'Déclaré' },
-                { value: 'CLAIMED', label: 'Pris en charge' },
-                { value: 'IN_PROGRESS', label: 'En cours' },
-                { value: 'RESOLVED', label: 'Résolu' },
-                { value: 'NON_RESOLVED', label: 'Non résolu' },
-                { value: 'CLOSED', label: 'Clôturé' },
-              ]}
+              options={STATUS_OPTIONS}
               selected={filters.statuses}
               onChange={(vals) => updateFilter('statuses', vals)}
             />
 
             <MultiSelectDropdown
               label="Priorité"
-              options={[
-                { value: 'CRITICAL', label: 'Critique' },
-                { value: 'HIGH', label: 'Élevée' },
-                { value: 'MEDIUM', label: 'Moyenne' },
-                { value: 'LOW', label: 'Faible' },
-              ]}
+              options={PRIORITY_OPTIONS}
               selected={filters.priorities}
               onChange={(vals) => updateFilter('priorities', vals)}
             />
@@ -751,6 +859,7 @@ export default function AdminIncidentsPage() {
                 <option value="time-in-status">Temps en statut</option>
               </select>
               <ArrowUpDown className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+            </div>
             </div>
           </div>
 
@@ -864,8 +973,7 @@ export default function AdminIncidentsPage() {
                             <th className="px-5 py-4">Statut</th>
                             <th className="px-5 py-4">Déclaré par</th>
                             <th className="px-5 py-4">Temps</th>
-                            <th className="px-5 py-4">Actions</th>
-                            <th className="px-5 py-4 w-14" />
+                            <th className="px-5 py-4 w-24" />
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border whitespace-nowrap">
@@ -910,29 +1018,6 @@ export default function AdminIncidentsPage() {
                                 <td className="px-5 py-4 text-sm text-muted-foreground">
                                   {formatElapsed(inc.claimedAt ?? inc.declaredAt)}
                                 </td>
-                                <td className="px-5 py-4">
-                                  <div className="flex items-center gap-2">
-                                    {inc.status === 'DECLARED' && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleClaim(inc.id)}
-                                        className="flex h-8 items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400"
-                                      >
-                                        <UserCheck className="h-3.5 w-3.5" />
-                                        Prendre
-                                      </button>
-                                    )}
-                                    {inc.status === 'IN_PROGRESS' && (
-                                      <button
-                                        type="button"
-                                        onClick={() => setEvaluateTarget(inc)}
-                                        className="flex h-8 items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400"
-                                      >
-                                        Évaluer
-                                      </button>
-                                    )}
-                                  </div>
-                                </td>
                                 <td className="px-5 py-4 text-right">
                                   <button
                                     type="button"
@@ -940,10 +1025,11 @@ export default function AdminIncidentsPage() {
                                       startNavigation();
                                       router.push(`/admin/incidents/${inc.id}`);
                                     }}
-                                    className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground dark:border-slate-700"
                                     title="Voir les détails"
                                   >
-                                    <Eye className="h-4 w-4" />
+                                    <Eye className="h-3.5 w-3.5" />
+                                    Voir
                                   </button>
                                 </td>
                               </tr>
@@ -1075,6 +1161,99 @@ export default function AdminIncidentsPage() {
             </Button>
           </div>
         )}
+
+        {/* ── Mobile filter dialog ───────────────────── */}
+        <Dialog open={filterOpen} onOpenChange={setFilterOpen}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Filtres</DialogTitle>
+              <DialogDescription>
+                Filtrer les incidents par statut, priorité, département et catégorie.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="max-h-[60vh] space-y-4 overflow-y-auto py-2 pr-1">
+              <div className="space-y-1.5">
+                <Label>Statut</Label>
+                <FilterCheckGroup options={STATUS_OPTIONS} selected={filters.statuses} onToggle={(v) => toggleFilterValue('statuses', v)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Priorité</Label>
+                <FilterCheckGroup options={PRIORITY_OPTIONS} selected={filters.priorities} onToggle={(v) => toggleFilterValue('priorities', v)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Département</Label>
+                <FilterCheckGroup options={departmentOptions} selected={filters.departments} onToggle={(v) => toggleFilterValue('departments', v)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Catégorie</Label>
+                <FilterCheckGroup options={categoryOptions} selected={filters.categories} onToggle={(v) => toggleFilterValue('categories', v)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Date de déclaration</Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={filters.dateFrom}
+                    onChange={(e) => updateFilter('dateFrom', e.target.value)}
+                    aria-label="Date de début de déclaration"
+                    className="h-9 flex-1 min-w-0 rounded-lg border border-input bg-background px-2.5 text-xs text-muted-foreground outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
+                  />
+                  <span className="text-xs text-muted-foreground">—</span>
+                  <input
+                    type="date"
+                    value={filters.dateTo}
+                    onChange={(e) => updateFilter('dateTo', e.target.value)}
+                    aria-label="Date de fin de déclaration"
+                    className="h-9 flex-1 min-w-0 rounded-lg border border-input bg-background px-2.5 text-xs text-muted-foreground outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Portée</Label>
+                <button
+                  type="button"
+                  onClick={() => updateFilter('scope', filters.scope === 'mine' ? 'all' : 'mine')}
+                  className={cn(
+                    'flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-colors',
+                    filters.scope === 'mine'
+                      ? 'border-primary bg-primary/5 text-primary'
+                      : 'border-input text-muted-foreground hover:border-muted-foreground/30',
+                  )}
+                >
+                  <UserCheck className="h-3.5 w-3.5" />
+                  {filters.scope === 'mine' ? 'Mes incidents uniquement' : 'Tous les incidents'}
+                </button>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Trier par</Label>
+                <div className="relative">
+                  <select
+                    value={filters.sort}
+                    onChange={(e) => updateFilter('sort', e.target.value)}
+                    className="flex h-9 w-full items-center gap-1.5 rounded-lg border border-input bg-background px-3 text-xs font-medium text-muted-foreground outline-none appearance-none cursor-pointer hover:border-muted-foreground/30"
+                  >
+                    <option value="newest">Plus récents</option>
+                    <option value="oldest">Plus anciens</option>
+                    <option value="priority">Priorité</option>
+                    <option value="time-in-status">Temps en statut</option>
+                  </select>
+                  <ArrowUpDown className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+                </div>
+              </div>
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="outline" onClick={resetDialogFilters}>
+                Réinitialiser
+              </Button>
+              <Button
+                onClick={() => setFilterOpen(false)}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Appliquer
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* ── Evaluate Modal ─────────────────────────── */}
         {evaluateTarget && (

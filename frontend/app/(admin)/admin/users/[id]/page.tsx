@@ -426,15 +426,8 @@ export default function AdminUserDetailPage() {
         <ErrorState message={actionError} compact onRetry={() => setActionError(null)} />
       )}
 
-      {/* ── 5.3 Danger Zone ───────────────────────── */}
-      <Card className="border-red-200 dark:border-red-900/60">
-        <CardHeader className="px-4 py-3 border-b border-red-100 dark:border-red-900/40 bg-red-50/40 dark:bg-red-950/20 rounded-t-xl">
-          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-red-700 dark:text-red-400">
-            <ShieldX className="h-4 w-4" />
-            Zone de danger — Actions d&apos;administration
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-4 space-y-3">
+      {/* ── 5.3 Admin actions ─────────────────────── */}
+      <div className="space-y-3">
           {/* Role transition — depends on the current role state */}
           {user.role === 'SOUS_CHEF' && user.isActive && (
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between rounded-lg border p-3.5">
@@ -534,8 +527,7 @@ export default function AdminUserDetailPage() {
               </Button>
             </div>
           )}
-        </CardContent>
-      </Card>
+      </div>
 
       {/* ── 5.4 Role-conditioned activity ─────────── */}
       <div className="space-y-5">
