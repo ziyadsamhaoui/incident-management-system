@@ -328,8 +328,15 @@ class IncidentRepositoryTest extends BaseRepositoryIntegrationTest {
             // One declared by userB — must be excluded from userA's buckets
             persistIncident(userB, departmentA, IncidentStatus.DECLARED);
 
-            // userA resolved one incident yesterday
-            IncidentEntity resolved = persistIncident(userA, departmentB, IncidentStatus.RESOLVED);
+            // userA resolved one incident yesterday. resolved_at is mapped with
+            // @Column(updatable = false), so it must be populated before the
+            // INSERT — setting it after save() would be a no-op UPDATE.
+            IncidentEntity resolved = TestEntityFactory.createIncident();
+            resolved.setUser(userA);
+            resolved.setDepartment(departmentB);
+            resolved.setStation(station);
+            resolved.setCategory(category);
+            resolved.setStatus(IncidentStatus.RESOLVED);
             resolved.setResolvedBy(userA);
             resolved.setResolvedAt(LocalDateTime.now().minusDays(1));
             incidentRepository.save(resolved);
