@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import {
@@ -18,10 +18,14 @@ import {
   Eye,
   EyeOff,
   Save,
+  Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useTranslation } from '@/lib/i18n';
+import { useAsync, extractErrorMessage } from '@/lib/use-async';
+import { getMe, updateUser } from '@/services/userService';
+import type { UserResponseDTO } from '@/types/user';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -79,10 +83,14 @@ export default function AdminSettingsPage() {
     lastName,
     matricule,
     departmentName,
+    setUserIdentity,
   } = useAuthStore();
 
   const { lang, setLang } = useTranslation();
   const { theme, setTheme } = useTheme();
+
+  // Real profile from /api/me — source of truth for names + email.
+  const { data: me, loading: meLoading } = useAsync<UserResponseDTO>(getMe, []);
 
   // ── Form state ──────────────────────────────────
   const [formValues, setFormValues] = useState({
@@ -95,9 +103,21 @@ export default function AdminSettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSave = () => {
+  // Hydrate the form once /api/me arrives (real names + read-only email).
+  useEffect(() => {
+    if (me) {
+      setFormValues({
+        firstName: me.firstName,
+        lastName: me.lastName,
+        email: me.email ?? '',
+      });
+    }
+  }, [me]);
+
+  const handleSave = async () => {
     setError(null);
 
     // Validate password
@@ -110,9 +130,30 @@ export default function AdminSettingsPage() {
       return;
     }
 
-    // Mock save
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    // Persist the corrected names (email is not editable) and refresh the
+    // session identity so the header widget shows the updated full name.
+    if (me) {
+      setSaving(true);
+      try {
+        const trimmedFirstName = formValues.firstName.trim();
+        const trimmedLastName = formValues.lastName.trim();
+        await updateUser(me.id, {
+          firstName: trimmedFirstName,
+          lastName: trimmedLastName,
+        });
+        setUserIdentity(trimmedFirstName, trimmedLastName, me.email);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      } catch (err) {
+        setError(extractErrorMessage(err));
+      } finally {
+        setSaving(false);
+      }
+    } else {
+      // Profile not loaded yet — keep local-only feedback.
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
   };
 
   return (
@@ -183,7 +224,7 @@ export default function AdminSettingsPage() {
             </div>
           </div>
 
-          {/* Email */}
+          {/* Email — read-only (login identifier, managed by an admin) */}
           <div className="space-y-1">
             <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
               Email
@@ -193,11 +234,15 @@ export default function AdminSettingsPage() {
               <input
                 type="email"
                 value={formValues.email}
-                onChange={(e) => setFormValues((v) => ({ ...v, email: e.target.value }))}
-                className="w-full rounded-lg border bg-background pl-10 pr-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/30"
-                placeholder="admin@icglma.ma"
+                readOnly
+                tabIndex={-1}
+                className="w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 pl-10 pr-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                placeholder={meLoading ? 'Chargement…' : 'admin@icglma.ma'}
               />
             </div>
+            <p className="text-[11px] text-muted-foreground">
+              Identifiant de connexion — non modifiable ici.
+            </p>
           </div>
 
           {/* Matricule + Département (same row) */}
@@ -309,6 +354,7 @@ export default function AdminSettingsPage() {
       <div className="flex justify-end">
         <Button
           onClick={handleSave}
+          disabled={saving || meLoading}
           className={cn(
             'gap-2 transition-all',
             saved
@@ -317,7 +363,7 @@ export default function AdminSettingsPage() {
           )}
           size="sm"
         >
-          <Save className="h-4 w-4" />
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {saved ? 'Enregistré ✓' : 'Enregistrer les modifications'}
         </Button>
       </div>

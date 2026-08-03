@@ -86,6 +86,25 @@ function formatElapsed(iso: string | null | undefined): string {
   return `${mins} min`;
 }
 
+function formatDuration(diffMs: number): string {
+  const hours = Math.floor(diffMs / 3600000);
+  const mins = Math.floor((diffMs % 3600000) / 60000);
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins} min`;
+}
+
+/**
+ * Column "Temps". Resolved / closed incidents show a fixed processing
+ * duration (declared → resolved) instead of a live timer that keeps running.
+ */
+function formatIncidentTime(inc: IncidentDTO): string {
+  const endTime = inc.resolvedAt ?? inc.closedAt;
+  if (endTime) {
+    return formatDuration(new Date(endTime).getTime() - new Date(inc.declaredAt).getTime());
+  }
+  return formatElapsed(inc.claimedAt ?? inc.declaredAt);
+}
+
 //  Stat Card
 
 interface StatCardProps {
@@ -690,7 +709,7 @@ export default function ChefAtelierIncidentsPage() {
                               <span className="font-mono"> #{inc.user?.matricule ?? ''}</span>
                             </td>
                             <td className="px-5 py-4 text-sm text-muted-foreground">
-                              {formatElapsed(inc.claimedAt ?? inc.declaredAt)}
+                              {formatIncidentTime(inc)}
                             </td>
                             <td className="px-5 py-4 text-right">
                               <button
@@ -765,7 +784,7 @@ export default function ChefAtelierIncidentsPage() {
                         <span className={cn('text-sm font-semibold', cfg.textClass)}>{cfg.labelFr}</span>
                         <span className="text-sm text-muted-foreground">·</span>
                         <span className="text-sm text-muted-foreground">
-                          {formatElapsed(inc.claimedAt ?? inc.declaredAt)}
+                          {formatIncidentTime(inc)}
                         </span>
                       </div>
                     </div>

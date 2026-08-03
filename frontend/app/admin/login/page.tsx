@@ -10,6 +10,7 @@ import { useTheme } from 'next-themes';
 import { Eye, EyeOff, Lock, AlertTriangle, Clock, ArrowLeft, Shield } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { adminLogin } from '@/services/authService';
+import { getMe } from '@/services/userService';
 import { useTranslation } from '@/lib/i18n';
 import { adminLoginSchema, type AdminLoginFormValues } from '@/lib/schemas';
 
@@ -149,7 +150,15 @@ export default function AdminLoginPage() {
       try {
         const response = await adminLogin(data.email, data.password);
         loginSucceeded(response, 'ADMIN');
-        useAuthStore.getState().setUserIdentity(data.email.split('@')[0], '');
+        // Hydrate the real identity (names + canonical email) from /api/me —
+        // never derive the display name from the email prefix.
+        try {
+          const me = await getMe();
+          useAuthStore.getState().setUserIdentity(me.firstName, me.lastName, me.email);
+        } catch {
+          // Offline / slow network fallback — keep the session usable.
+          useAuthStore.getState().setUserIdentity(data.email.split('@')[0], '', data.email);
+        }
         router.replace('/dashboard');
       } catch (err: any) {
         if (err?.code === 'LOCKED') {

@@ -11,7 +11,7 @@ interface AuthActions {
   /** Persist login response into the store */
   loginSucceeded: (res: JwtAuthenticationResponse, lane: UserRole) => void;
   /** Store user identity fields populated after login */
-  setUserIdentity: (firstName: string, lastName: string) => void;
+  setUserIdentity: (firstName: string, lastName: string, email?: string | null) => void;
   /** Set the user's department (from profile fetch or onboarding) */
   setDepartment: (departmentId: string, departmentName: string) => void;
   /** Replace the access token (used by 401 refresh interceptor) */
@@ -37,6 +37,7 @@ const initialState: AuthState = {
   roles: [],
   firstName: null,
   lastName: null,
+  email: null,
   departmentId: null,
   departmentName: null,
   isAuthenticated: false,
@@ -65,8 +66,8 @@ export const useAuthStore = create<AuthStore>()(
         });
       },
 
-      setUserIdentity: (firstName: string, lastName: string) => {
-        set({ firstName, lastName });
+      setUserIdentity: (firstName: string, lastName: string, email?: string | null) => {
+        set({ firstName, lastName, email: email ?? null });
       },
 
       setDepartment: (departmentId: string, departmentName: string) => {
@@ -99,6 +100,7 @@ export const useAuthStore = create<AuthStore>()(
         roles: state.roles,
         firstName: state.firstName,
         lastName: state.lastName,
+        email: state.email,
         departmentId: state.departmentId,
         departmentName: state.departmentName,
         isAuthenticated: state.isAuthenticated,

@@ -283,9 +283,16 @@ export default function AdminDashboardPage() {
     };
   }, [stats]);
 
-  // 4.2 — Critical incidents (real data, filtered client-side)
+  // 4.2 — Critical incidents still OPEN (real data, filtered client-side).
+  // Resolved / non-resolved / closed criticals must leave the "critical now"
+  // hero widget — only DECLARED / CLAIMED / IN_PROGRESS qualify.
   const criticalIncidents = useMemo(
-    () => incidents.filter((i) => i.priority === 'CRITICAL'),
+    () =>
+      incidents.filter(
+        (i) =>
+          i.priority === 'CRITICAL' &&
+          (i.status === 'DECLARED' || i.status === 'CLAIMED' || i.status === 'IN_PROGRESS'),
+      ),
     [incidents],
   );
 

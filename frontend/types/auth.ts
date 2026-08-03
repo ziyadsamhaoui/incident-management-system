@@ -47,6 +47,8 @@ export interface AuthState {
   firstName: string | null;
   /** Human-readable last name */
   lastName: string | null;
+  /** Login email (ADMIN accounts only; null for matricule-authenticated roles) */
+  email: string | null;
   /** Department assigned to the user (null = unassigned) */
   departmentId: string | null;
   /** Human-readable department name */

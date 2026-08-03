@@ -100,54 +100,47 @@ export function ActivityHeatmap({
   const isLoading = externalData === undefined && loading;
 
   // ── Build the 52-week × 5-day grid from real counts ──
-  const grid = useMemo(() => {
-    if (!data) return { weeks: [], total: 0 };
+  // Month labels are derived from the actual week dates so the axis always
+  // matches the data window (e.g. the first column is the month of the week
+  // 51 weeks ago — August, not September).
+  const { grid, monthLabels, total } = useMemo(() => {
+    if (!data) return { grid: [], monthLabels: [], total: 0 };
     const byDate = new Map(data.map((e) => [e.date, e.count]));
-    const weeks: number[][] = [];
     const now = new Date();
-    // Walk back ~51 weeks of business days from today
     const cursor = new Date(now);
     cursor.setHours(0, 0, 0, 0);
-    const daySeries: Date[] = [];
-    let day = new Date(cursor);
-    day.setDate(day.getDate() - 6); // current partial week
-    while (day <= cursor) {
-      daySeries.push(new Date(day));
-      day.setDate(day.getDate() + 1);
-    }
-    const weekCount = 52;
-    const padded: Date[] = [];
-    for (let w = weekCount - 1; w >= 0; w--) {
-      const weekStart = new Date(cursor);
-      weekStart.setDate(cursor.getDate() - (7 * w + (cursor.getDay() || 7) - 1));
+
+    // Monday of the current week (or today itself when today is Monday).
+    const thisMonday = new Date(cursor);
+    thisMonday.setDate(cursor.getDate() - ((cursor.getDay() || 7) - 1));
+
+    // 52 columns, each a Monday-starting week ending with Friday.
+    const weekRows: { start: Date; counts: number[] }[] = [];
+    for (let w = 51; w >= 0; w--) {
+      const weekStart = new Date(thisMonday);
+      weekStart.setDate(thisMonday.getDate() - 7 * w);
+      const counts: number[] = [];
       for (let d = 0; d < 5; d++) {
         const date = new Date(weekStart);
         date.setDate(weekStart.getDate() + d);
-        padded.push(date);
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        counts.push(byDate.get(key) ?? 0);
       }
+      weekRows.push({ start: weekStart, counts });
     }
-    padded.forEach((date) => {
-      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-      daySeries.push(date);
-      if (weeks.length === 0 || weeks[weeks.length - 1].length === 5) weeks.push([]);
-      weeks[weeks.length - 1].push(byDate.get(key) ?? 0);
-    });
-    // Trim leading partial weeks to a max of 52
-    while (weeks.length > 52) weeks.shift();
-    const total = data.reduce((sum, e) => sum + e.count, 0);
-    return { weeks, total };
-  }, [data]);
 
-  // Month labels
-  const monthLabels = useMemo(() => {
+    // Label the first week and every week whose month differs from the previous one.
     const labels: { index: number; label: string }[] = [];
-    const now = new Date();
-    for (let i = 0; i < 12; i++) {
-      const monthIndex = (now.getMonth() - 11 + i + 12) % 12;
-      labels.push({ index: Math.floor(i * 52 / 12), label: MONTH_LABELS[monthIndex] });
-    }
-    return labels;
-  }, []);
+    weekRows.forEach((row, idx) => {
+      const month = row.start.getMonth();
+      if (idx === 0 || weekRows[idx - 1].start.getMonth() !== month) {
+        labels.push({ index: idx, label: MONTH_LABELS[month] });
+      }
+    });
+
+    const totalCount = data.reduce((sum, e) => sum + e.count, 0);
+    return { grid: weekRows.map((r) => r.counts), monthLabels: labels, total: totalCount };
+  }, [data]);
 
   // Tooltip state
   const [tooltip, setTooltip] = useState<{ count: number; x: number; y: number } | null>(null);
@@ -220,7 +213,7 @@ export function ActivityHeatmap({
 
                   {/* Week grid */}
                   <div className="flex gap-[4px]">
-                    {grid.weeks.map((week, wIdx) => (
+                    {grid.map((week, wIdx) => (
                       <div key={wIdx} className="flex flex-col gap-[4px]">
                         {week.map((count, dIdx) => (
                           <div
@@ -259,8 +252,8 @@ export function ActivityHeatmap({
                   <span className="text-[10px] text-muted-foreground">Plus</span>
                 </div>
                 <p className="text-[11px] font-medium text-muted-foreground">
-                  <span className="font-semibold text-foreground">{grid.total}</span>{' '}
-                  {unit}{grid.total > 1 ? 's' : ''}
+                  <span className="font-semibold text-foreground">{total}</span>{' '}
+                  {unit}{total > 1 ? 's' : ''}
                 </p>
               </div>
             </>

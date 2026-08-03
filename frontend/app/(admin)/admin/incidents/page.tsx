@@ -92,6 +92,25 @@ function formatElapsed(iso: string | null | undefined): string {
   return `${mins} min`;
 }
 
+function formatDuration(diffMs: number): string {
+  const hours = Math.floor(diffMs / 3600000);
+  const mins = Math.floor((diffMs % 3600000) / 60000);
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins} min`;
+}
+
+/**
+ * Column "Temps". Resolved / closed incidents show a fixed processing
+ * duration (declared → resolved) instead of a live timer that keeps running.
+ */
+function formatIncidentTime(inc: IncidentDTO): string {
+  const endTime = inc.resolvedAt ?? inc.closedAt;
+  if (endTime) {
+    return formatDuration(new Date(endTime).getTime() - new Date(inc.declaredAt).getTime());
+  }
+  return formatElapsed(inc.claimedAt ?? inc.declaredAt);
+}
+
 // ── Types ─────────────────────────────────────────
 
 interface Filters {
@@ -1016,7 +1035,7 @@ export default function AdminIncidentsPage() {
                                   <span className="font-mono"> #{inc.user?.matricule ?? ''}</span>
                                 </td>
                                 <td className="px-5 py-4 text-sm text-muted-foreground">
-                                  {formatElapsed(inc.claimedAt ?? inc.declaredAt)}
+                                  {formatIncidentTime(inc)}
                                 </td>
                                 <td className="px-5 py-4 text-right">
                                   <button
@@ -1025,7 +1044,7 @@ export default function AdminIncidentsPage() {
                                       startNavigation();
                                       router.push(`/admin/incidents/${inc.id}`);
                                     }}
-                                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground dark:border-slate-700"
+                                    className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                     title="Voir les détails"
                                   >
                                     <Eye className="h-3.5 w-3.5" />

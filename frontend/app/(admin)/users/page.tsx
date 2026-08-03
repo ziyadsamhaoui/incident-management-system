@@ -10,8 +10,6 @@ import {
   UserPlus,
   Loader2,
   AlertTriangle,
-  UserCheck,
-  Trash2,
   Eye,
   SlidersHorizontal,
 } from 'lucide-react';
@@ -39,7 +37,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
 import { useAsync, extractErrorMessage } from '@/lib/use-async';
-import { getUsers, createUser, promoteUser, deactivateUser } from '@/services/userService';
+import { getUsers, createUser } from '@/services/userService';
 import { getDepartments } from '@/services/referenceService';
 import type { UserResponseDTO, CreateUserRequestDTO } from '@/types/user';
 
@@ -269,10 +267,7 @@ export default function UsersPage() {
   const [roleFilter, setRoleFilter] = useState('all');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [filterOpen, setFilterOpen] = useState(false);
-  const [busyId, setBusyId] = useState<number | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const [deactivateTarget, setDeactivateTarget] = useState<UserResponseDTO | null>(null);
 
   const { data, loading, error, refetch } = useAsync(
     () => getUsers({ page: 0, size: 100 }),
@@ -311,47 +306,6 @@ export default function UsersPage() {
   const activeFilterCount =
     (roleFilter !== 'all' ? 1 : 0) + (departmentFilter !== 'all' ? 1 : 0);
 
-  // Admin promotes a SOUS_CHEF directly — no request/approval workflow.
-  const handlePromote = async (id: number) => {
-    setBusyId(id);
-    setActionError(null);
-    try {
-      await promoteUser(id);
-      refetch();
-    } catch (err) {
-      setActionError(extractErrorMessage(err));
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  // Returns true when the deactivation succeeded (used to keep the
-  // confirmation dialog open on failure so the admin can retry).
-  const handleDeactivate = async (id: number): Promise<boolean> => {
-    setBusyId(id);
-    setActionError(null);
-    try {
-      await deactivateUser(id);
-      refetch();
-      return true;
-    } catch (err) {
-      setActionError(extractErrorMessage(err));
-      return false;
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  // Confirmed from the dialog — run the API call, close it only on success.
-  const confirmDeactivate = async () => {
-    if (!deactivateTarget) return;
-    const ok = await handleDeactivate(deactivateTarget.id);
-    if (ok) setDeactivateTarget(null);
-  };
-
-  const canPromote = (u: UserResponseDTO) => u.role === 'SOUS_CHEF' && u.isActive;
-  const canDeactivate = (u: UserResponseDTO) => u.role !== 'ADMIN' && u.isActive;
-
   // En attente = promoted CHEF_ATELIER who has not claimed their account yet.
   const isPending = (u: UserResponseDTO) => u.role === 'CHEF_ATELIER' && !u.claimed;
 
@@ -379,9 +333,6 @@ export default function UsersPage() {
 
         {/* Error banner */}
         {error && <ErrorState message={error} onRetry={refetch} />}
-        {actionError && (
-          <ErrorState message={actionError} compact onRetry={() => setActionError(null)} />
-        )}
 
         {/* Filters */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -477,7 +428,7 @@ export default function UsersPage() {
                         <th className="px-4 py-3">Rôle</th>
                         <th className="px-4 py-3">Département</th>
                         <th className="px-4 py-3">Statut</th>
-                        <th className="px-4 py-3 w-52" />
+                        <th className="px-4 py-3 w-20" />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -532,28 +483,12 @@ export default function UsersPage() {
                             <div className="flex items-center gap-1.5">
                               <Link
                                 href={`/admin/users/${user.id}`}
-                                className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 px-2 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground dark:border-slate-700"
+                                className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                 title="Voir le détail"
                               >
                                 <Eye className="h-3.5 w-3.5" />
                                 Voir
                               </Link>
-                              {canPromote(user) && (
-                                <button
-                                  type="button"
-                                  disabled={busyId === user.id}
-                                  onClick={() => handlePromote(user.id)}
-                                  className="inline-flex h-7 items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 text-[11px] font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-50 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400"
-                                  title="Promouvoir au rôle Chef d'atelier"
-                                >
-                                  {busyId === user.id ? (
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                  ) : (
-                                    <UserCheck className="h-3 w-3" />
-                                  )}
-                                  Promouvoir
-                                </button>
-                              )}
                             </div>
                           </td>
                         </tr>
@@ -587,38 +522,6 @@ export default function UsersPage() {
                         <span className={cn('inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium', ROLE_COLORS[user.role])}>
                           {ROLE_LABELS[user.role]}
                         </span>
-                      </div>
-                      <div className="mt-2 flex items-center gap-1.5">
-                        {canPromote(user) && (
-                          <button
-                            type="button"
-                            disabled={busyId === user.id}
-                            onClick={() => handlePromote(user.id)}
-                            className="inline-flex h-7 items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 text-[11px] font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-50 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400"
-                          >
-                            {busyId === user.id ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <UserCheck className="h-3 w-3" />
-                            )}
-                            Promouvoir
-                          </button>
-                        )}
-                        {canDeactivate(user) && (
-                          <button
-                            type="button"
-                            disabled={busyId === user.id}
-                            onClick={() => setDeactivateTarget(user)}
-                            className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50"
-                          >
-                            {busyId === user.id ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-3 w-3" />
-                            )}
-                            Désactiver
-                          </button>
-                        )}
                       </div>
                     </div>
                   ))}
@@ -689,42 +592,6 @@ export default function UsersPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Deactivate confirmation dialog */}
-        <Dialog open={deactivateTarget !== null} onOpenChange={(open) => { if (!open) setDeactivateTarget(null); }}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Désactiver le compte ?</DialogTitle>
-              <DialogDescription>
-                Le compte de{' '}
-                <span className="font-semibold text-foreground">
-                  {deactivateTarget?.firstName} {deactivateTarget?.lastName}
-                </span>{' '}
-                (<span className="font-mono">#{deactivateTarget?.matricule}</span>) sera désactivé
-                et ne pourra plus se connecter. Cette action peut être annulée par un
-                administrateur.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setDeactivateTarget(null)}
-                disabled={deactivateTarget !== null && busyId === deactivateTarget.id}
-              >
-                Annuler
-              </Button>
-              <Button
-                onClick={confirmDeactivate}
-                disabled={deactivateTarget !== null && busyId === deactivateTarget.id}
-                className="gap-2 bg-red-600 hover:bg-red-700 text-white"
-              >
-                {deactivateTarget !== null && busyId === deactivateTarget.id && (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                )}
-                Désactiver
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
     </div>
   );
