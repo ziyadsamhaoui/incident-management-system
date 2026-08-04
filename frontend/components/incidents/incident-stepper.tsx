@@ -6,13 +6,10 @@ import {
   CheckCircle2,
   Circle,
   CircleDot,
-  Clock,
-  AlertCircle,
   XCircle,
   FileText,
   UserCheck,
   Activity,
-  CheckCheck,
 } from 'lucide-react';
 
 // ── Step definitions ─────────────────────────────
@@ -43,7 +40,6 @@ const STEPS: StepDefinition[] = [
     threshold: ['RESOLVED', 'NON_RESOLVED'],
     isMulti: true,
   },
-  { key: 'CLOSED', label: 'Clôturé', icon: CheckCheck, threshold: ['CLOSED'] },
 ];
 
 // ── Status → progress index mapping ──────────────
@@ -59,8 +55,6 @@ function statusToProgressIndex(status: IncidentStatus): number {
     case 'RESOLVED':
     case 'NON_RESOLVED':
       return 3;
-    case 'CLOSED':
-      return 4;
     default:
       return -1;
   }
@@ -74,7 +68,6 @@ interface IncidentStepperProps {
   claimedAt?: string | null;
   inProgressAt?: string | null;
   resolvedAt?: string | null;
-  closedAt?: string | null;
   /** If true, evaluation was NON_RESOLVED (shows red styling on that step) */
   isNonResolved?: boolean;
 }
@@ -87,7 +80,6 @@ export function IncidentStepper({
   claimedAt,
   inProgressAt,
   resolvedAt,
-  closedAt,
   isNonResolved,
 }: IncidentStepperProps) {
   const currentIndex = statusToProgressIndex(status);
@@ -102,8 +94,6 @@ export function IncidentStepper({
         return inProgressAt ?? null;
       case 'EVALUATED':
         return resolvedAt ?? null;
-      case 'CLOSED':
-        return closedAt ?? null;
       default:
         return null;
     }
@@ -219,24 +209,6 @@ export function IncidentStepper({
             );
           })}
         </div>
-
-        {/* Auto-close hint */}
-        {status === 'RESOLVED' && (
-          <div className="mt-4 flex items-center gap-2 rounded-lg bg-amber-50 px-4 py-3 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
-            <Clock className="h-4 w-4 shrink-0" />
-            <span>
-              Clôture automatique ~10 min après résolution. Aucune action requise.
-            </span>
-          </div>
-        )}
-        {status === 'NON_RESOLVED' && (
-          <div className="mt-4 flex items-center gap-2 rounded-lg bg-red-50 px-4 py-3 text-xs text-red-700 dark:bg-red-950/30 dark:text-red-400">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>
-              Clôture automatique ~10 min après évaluation. L'incident n'a pas été résolu.
-            </span>
-          </div>
-        )}
       </div>
     </div>
   );

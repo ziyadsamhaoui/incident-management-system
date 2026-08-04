@@ -65,7 +65,6 @@ const STATUS_OPTIONS = [
   { value: 'IN_PROGRESS', label: 'En cours' },
   { value: 'RESOLVED', label: 'Résolu' },
   { value: 'NON_RESOLVED', label: 'Non résolu' },
-  { value: 'CLOSED', label: 'Clôturé' },
 ];
 
 const PRIORITY_OPTIONS = [
@@ -100,8 +99,8 @@ function formatDuration(diffMs: number): string {
 }
 
 /**
- * Column "Temps". Resolved / closed incidents show a fixed processing
- * duration (declared → resolved) instead of a live timer that keeps running.
+ * Column "Temps". Terminal incidents (RESOLVED / NON_RESOLVED) show a fixed
+ * processing duration (declared → resolved) instead of a live timer.
  */
 function formatIncidentTime(inc: IncidentDTO): string {
   const endTime = inc.resolvedAt ?? inc.closedAt;
@@ -587,7 +586,6 @@ export default function AdminIncidentsPage() {
       IN_PROGRESS: [],
       RESOLVED: [],
       NON_RESOLVED: [],
-      CLOSED: [],
     };
     filteredIncidents.forEach((i) => { if (groups[i.status]) groups[i.status].push(i); });
     return groups;
@@ -916,12 +914,6 @@ export default function AdminIncidentsPage() {
                 title="Résolu / Non résolu"
                 incidents={[...groupedByStatus.RESOLVED, ...groupedByStatus.NON_RESOLVED]}
                 onDrop={handleDrop('RESOLVED')}
-                onDragStart={handleDragStart}
-              />
-              <KanbanColumn
-                title="Clôturé"
-                incidents={groupedByStatus.CLOSED}
-                onDrop={handleDrop('CLOSED')}
                 onDragStart={handleDragStart}
               />
             </div>

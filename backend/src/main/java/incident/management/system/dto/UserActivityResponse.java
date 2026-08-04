@@ -11,7 +11,7 @@ import java.util.List;
  * @param declaredCount        incidents declared by the user
  * @param openCount            declared incidents currently in an open (non-terminal) state
  * @param resolvedCount        incidents resolved (RESOLVED / NON_RESOLVED) by the user
- * @param closedCount          declared incidents that reached the CLOSED terminal state
+ * @param terminalCount        declared incidents that reached a terminal state (RESOLVED / NON_RESOLVED)
  * @param claimedCount         incidents claimed by the user
  * @param avgTimeToClaimMinutes average time between declaration and claim, in minutes
  * @param avgMttrMinutes       average time between declaration and resolution, in minutes
@@ -22,7 +22,7 @@ public record UserActivityResponse(
         long declaredCount,
         long openCount,
         long resolvedCount,
-        long closedCount,
+        long terminalCount,
         long claimedCount,
         double avgTimeToClaimMinutes,
         double avgMttrMinutes,

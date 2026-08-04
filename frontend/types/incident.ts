@@ -6,8 +6,7 @@ export type IncidentStatus =
   | 'CLAIMED'
   | 'IN_PROGRESS'
   | 'RESOLVED'
-  | 'NON_RESOLVED'
-  | 'CLOSED';
+  | 'NON_RESOLVED';
 
 export type IncidentPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 

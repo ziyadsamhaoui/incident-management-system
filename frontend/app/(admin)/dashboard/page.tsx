@@ -133,7 +133,6 @@ const STATUS_COLORS: Record<string, string> = {
   IN_PROGRESS: '#f59e0b',
   RESOLVED: '#10b981',
   NON_RESOLVED: '#ef4444',
-  CLOSED: '#0f172a',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -142,7 +141,6 @@ const STATUS_LABELS: Record<string, string> = {
   IN_PROGRESS: 'En cours',
   RESOLVED: 'Résolu',
   NON_RESOLVED: 'Non résolu',
-  CLOSED: 'Clôturé',
 };
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -239,7 +237,6 @@ const STATUS_ICONS: Record<string, { icon: React.ElementType; iconClass: string 
   IN_PROGRESS: { icon: Activity, iconClass: 'text-amber-600 bg-amber-100 dark:bg-amber-900/30' },
   RESOLVED: { icon: CheckCircle2, iconClass: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30' },
   NON_RESOLVED: { icon: XCircle, iconClass: 'text-red-600 bg-red-100 dark:bg-red-900/30' },
-  CLOSED: { icon: XCircle, iconClass: 'text-slate-600 bg-slate-200 dark:bg-slate-700' },
 };
 
 function activityText(entry: ActivityLogEntry): string {
@@ -279,12 +276,12 @@ export default function AdminDashboardPage() {
       critiques: byPriority.CRITICAL ?? 0,
       enTraitement: (byStatus.CLAIMED ?? 0) + (byStatus.IN_PROGRESS ?? 0),
       resolus: byStatus.RESOLVED ?? 0,
-      clos: byStatus.CLOSED ?? 0,
+      nonResolus: byStatus.NON_RESOLVED ?? 0,
     };
   }, [stats]);
 
   // 4.2 — Critical incidents still OPEN (real data, filtered client-side).
-  // Resolved / non-resolved / closed criticals must leave the "critical now"
+  // Resolved / non-resolved (terminal) criticals must leave the "critical now"
   // hero widget — only DECLARED / CLAIMED / IN_PROGRESS qualify.
   const criticalIncidents = useMemo(
     () =>
@@ -375,7 +372,7 @@ export default function AdminDashboardPage() {
           <StatCard label="Critiques" value={statCards.critiques} icon={AlertOctagon} accent="red" />
           <StatCard label="En traitement" value={statCards.enTraitement} icon={Activity} accent="blue" />
           <StatCard label="Résolus" value={statCards.resolus} icon={CheckCircle2} accent="green" />
-          <StatCard label="Clôturés" value={statCards.clos} icon={XCircle} accent="slate" />
+          <StatCard label="Non résolus" value={statCards.nonResolus} icon={XCircle} accent="red" />
         </div>
       )}
 

@@ -5,6 +5,5 @@ public enum IncidentStatus {
     CLAIMED,
     IN_PROGRESS,
     RESOLVED,
-    NON_RESOLVED,
-    CLOSED
+    NON_RESOLVED
 }

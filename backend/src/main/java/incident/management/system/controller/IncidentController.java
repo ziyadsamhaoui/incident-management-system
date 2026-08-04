@@ -109,7 +109,4 @@ public class IncidentController {
         IncidentResponse response = incidentService.evaluateIncident(id, request);
         return ResponseEntity.ok(response);
     }
-
-    //  RESOLVED → CLOSED
-    // Actor: CLIENT via scheduler/IncidentAutoClosureJob
 }

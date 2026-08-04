@@ -67,7 +67,6 @@ const STATUS_ACTION_LABELS: Record<string, string> = {
   IN_PROGRESS: 'En cours',
   RESOLVED: 'Résolu',
   NON_RESOLVED: 'Non résolu',
-  CLOSED: 'Clôturé',
 };
 
 // ── Timeline Entry ────────────────────────────────
@@ -79,7 +78,6 @@ function TimelineIcon({ status }: { status: string }) {
     IN_PROGRESS: Activity,
     RESOLVED: CheckCircle2,
     NON_RESOLVED: XCircle,
-    CLOSED: XCircle,
   };
   const Icon = iconMap[status] ?? FileText;
   return <Icon className="h-3.5 w-3.5" />;
@@ -219,7 +217,7 @@ export default function AdminIncidentDetailPage() {
 
   const cfg = getStatusConfig(incident.status);
   const CatIcon = getCategoryIcon(incident.category);
-  const isResolvedOrClosed = incident.status === 'RESOLVED' || incident.status === 'CLOSED' || incident.status === 'NON_RESOLVED';
+  const isTerminal = incident.status === 'RESOLVED' || incident.status === 'NON_RESOLVED';
 
   return (
     <motion.div
@@ -316,7 +314,6 @@ export default function AdminIncidentDetailPage() {
             claimedAt={incident.claimedAt}
             inProgressAt={incident.inProgressAt}
             resolvedAt={incident.resolvedAt ?? incident.closedAt}
-            closedAt={incident.closedAt}
             isNonResolved={incident.status === 'NON_RESOLVED'}
           />
         </CardContent>
@@ -364,8 +361,8 @@ export default function AdminIncidentDetailPage() {
         </Card>
       </div>
 
-      {/* ── Resolution info (if resolved) ─────────── */}
-      {isResolvedOrClosed && incident.resolutionNote && (
+      {/* ── Resolution info (if terminal) ─────────── */}
+      {isTerminal && incident.resolutionNote && (
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-2">

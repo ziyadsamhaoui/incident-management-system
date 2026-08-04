@@ -336,7 +336,6 @@ export function IncidentDetailContent({
             claimedAt={incident.claimedAt}
             inProgressAt={incident.inProgressAt}
             resolvedAt={incident.resolvedAt ?? incident.closedAt}
-            closedAt={incident.closedAt}
             isNonResolved={isNonResolved}
           />
         </CardContent>

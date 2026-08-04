@@ -38,9 +38,9 @@
   - Page header with List/Board view toggle (`localStorage` persisted)
   - Multi-filter bar (Search, Status, Priority, Department, Category, Scope, Sort) + active filter chips
   - List View: desktop table with left-status-border + mobile cards with inline Claim/Evaluate actions
-  - Board View: 5-column Kanban with HTML5 drag-and-drop state machine
+  - Board View: 4-column Kanban with HTML5 drag-and-drop state machine
   - Component states: loading skeletons, system zero, filtered empty, pagination
-  - Incident Detail Page: audit timeline, triage controls, auto-close scheduler hint
+  - Incident Detail Page: audit timeline, triage controls
   - Shared Evaluation Modal (portal-based, responsive full-bleed)
 
 ### Next Milestones
@@ -77,3 +77,16 @@
 - ✅ **Admin-assisted flow:** "Générer un code de réinitialisation" moved under a **Zone de danger** heading on `/admin/users/[id]`; modal now shows a live 15-minute countdown + expired state + regenerate action; **Piste d'audit** card renders `GENERATE_RESET_CODE` entries as "Code de réinitialisation généré par [admin] le [date]" via the new `GET /api/users/{id}/audit-logs` endpoint.
 - ✅ **Security rules:** request endpoints are reachable while locked (escape hatch — reset clears `failedLoginAttempts`/`lockoutEnd`); 5 req/min/IP on `/api/auth/**` with visual `Retry-After` countdowns; all reset screens fully i18n'd (FR/AR).
 - ✅ **Tests:** `AuthServiceTest` (email neutrality + stub token, confirm returns role/login identifier, lockout cleared), `AuthControllerAuthTest` (neutral 200 + no-token-leak for unknown email, confirm payload), `UserServiceImplTest` (audit-log endpoint with actor resolution).
+
+---
+
+## ✅ COMPLETED: Removal of the CLOSED Status (Terminal RESOLVED / NON_RESOLVED)
+
+### Phase 5: State-Machine Simplification
+- ✅ **Enum & transitions:** `CLOSED` removed from `IncidentStatus` (Java + TypeScript). `VALID_TRANSITIONS` now treats `RESOLVED` and `NON_RESOLVED` as terminal states with empty transition sets; same-state transitions remain idempotent.
+- ✅ **Auto-closure removed:** `IncidentAutoClosureJob` and its test deleted; `@EnableScheduling` removed from the application class (no scheduled tasks remain); `IncidentRepository.findByStatusAndResolvedAtBefore` (the 10-minute sweep query) deleted.
+- ✅ **Notification matrix cleaned:** `IncidentRecipientResolver` no longer dispatches any `→ CLOSED` rule; the auto-close actor-null branch and the "system-driven" notification path are gone. `IN_PROGRESS` stays silent; `RESOLVED`/`NON_RESOLVED` notify the department CHEF_ATELIER.
+- ✅ **Analytics merge:** `UserActivityResponse.closedCount` renamed to `terminalCount` and computed as `countByUserAndStatusIn(user, [RESOLVED, NON_RESOLVED])` (declared incidents that reached a terminal state); the `/admin/users/[id]` "Clôturés" mini-stat became "Terminés". `DashboardController.getIncidentsGroupedByStatus` now returns only the 5 live statuses.
+- ✅ **UI:** status filter dropdowns, kanban columns, status badge/dot maps, the dashboard donut (CLOSED segment dropped), the "Clôturés" stat card (→ "Non résolus"), the incident stepper (CLOSED step removed) and the chef-atelier "Closed Incidents" card (→ "Terminés") all purged of `CLOSED`. The "Clôture automatique ~10 min" hints were removed from the incident detail stepper.
+- ✅ **Migration `V6__migrate_closed_incidents.sql`:** idempotent, non-destructive backfill — restores each `CLOSED` incident's `status` from its last `incident_history` predecessor (`RESOLVED` or `NON_RESOLVED`, ordered by `changed_at`), with an explicit `RESOLVED` fallback for history-less rows; normalizes `incident_history` so no `CLOSED` survives in `previous_status`/`current_status` (audit comments preserved). No `UPDATE incidents SET status='RESOLVED' WHERE status='CLOSED'` blunt overwrite.
+- ✅ **Tests:** `IncidentServiceImplTest` terminal-state matrix (RESOLVED/NON_RESOLVED reject all outbound transitions), `IncidentRepositoryTest` analytics buckets, `UserServiceImplTest` `terminalCount` assertions, `IncidentAutoClosureJobTest` deleted.

@@ -288,8 +288,7 @@ class IncidentServiceImplTest {
         @CsvSource({
                 "IN_PROGRESS",
                 "RESOLVED",
-                "NON_RESOLVED",
-                "CLOSED"
+                "NON_RESOLVED"
         })
         @DisplayName("claimIncident rejects invalid source states")
         void claimIncident_fromWrongState_throwsException(IncidentStatus currentStatus) {
@@ -312,8 +311,7 @@ class IncidentServiceImplTest {
         @CsvSource({
                 "DECLARED",
                 "RESOLVED",
-                "NON_RESOLVED",
-                "CLOSED"
+                "NON_RESOLVED"
         })
         @DisplayName("progressIncident rejects invalid source states")
         void progressIncident_fromWrongState_throwsException(IncidentStatus currentStatus) {
@@ -337,11 +335,9 @@ class IncidentServiceImplTest {
                 "RESOLVED,    DECLARED",
                 "RESOLVED,    CLAIMED",
                 "RESOLVED,    NON_RESOLVED",
-                "RESOLVED,    CLOSED",
                 "NON_RESOLVED, DECLARED",
                 "NON_RESOLVED, CLAIMED",
-                "NON_RESOLVED, RESOLVED",
-                "NON_RESOLVED, CLOSED"
+                "NON_RESOLVED, RESOLVED"
         })
         @DisplayName("evaluateIncident rejects invalid source states for both outcomes")
         void evaluateIncident_fromWrongState_throwsException(
@@ -362,49 +358,37 @@ class IncidentServiceImplTest {
             verify(eventPublisher, never()).publishEvent(any());
         }
 
-        //  CLOSED state = no transitions allowed
-        @ParameterizedTest(name = "cannot transition CLOSED → {0}")
-        @ValueSource(strings = {"DECLARED", "CLAIMED", "IN_PROGRESS", "RESOLVED", "NON_RESOLVED", "CLOSED"})
-        @DisplayName("CLOSED (terminal) rejects any outbound transition via all methods")
-        void closedState_rejectsAllTransitions(String targetName) {
-            IncidentStatus target = IncidentStatus.valueOf(targetName);
-            IncidentEntity incident = incidentWithStatus(40L, IncidentStatus.CLOSED);
+        //  RESOLVED / NON_RESOLVED = terminal states with empty transition sets
+        @ParameterizedTest(name = "cannot transition {0} → {1}")
+        @CsvSource({
+                "RESOLVED,     DECLARED",
+                "RESOLVED,     CLAIMED",
+                "RESOLVED,     IN_PROGRESS",
+                "RESOLVED,     NON_RESOLVED",
+                "NON_RESOLVED, DECLARED",
+                "NON_RESOLVED, CLAIMED",
+                "NON_RESOLVED, IN_PROGRESS",
+                "NON_RESOLVED, RESOLVED"
+        })
+        @DisplayName("RESOLVED / NON_RESOLVED (terminal) reject any outbound transition via all methods")
+        void terminalState_rejectsAllTransitions(IncidentStatus currentStatus, IncidentStatus targetStatus) {
+            IncidentEntity incident = incidentWithStatus(40L, currentStatus);
             when(incidentRepository.findById(40L)).thenReturn(Optional.of(incident));
 
-            // All three methods should reject CLOSED as a source
+            // All three methods should reject a terminal state as a source
             assertThatThrownBy(() -> incidentService.claimIncident(40L))
                     .isInstanceOf(InvalidStatusTransitionException.class);
 
             assertThatThrownBy(() -> incidentService.progressIncident(40L))
                     .isInstanceOf(InvalidStatusTransitionException.class);
 
-            // For evaluate, CLOSED → anything is invalid
-            EvaluateIncidentRequest request = new EvaluateIncidentRequest(
-                    target.equals(IncidentStatus.CLOSED) ? IncidentStatus.RESOLVED : target,
-                    "Note");
-            assertThatThrownBy(() -> incidentService.evaluateIncident(40L, request))
+            assertThatThrownBy(() -> incidentService.evaluateIncident(
+                    40L, new EvaluateIncidentRequest(targetStatus, "Note")))
                     .isInstanceOf(InvalidStatusTransitionException.class);
 
             verify(incidentRepository, never()).save(any());
             verify(incidentHistoryRepository, never()).save(any());
-        }
-
-        @Test
-        @DisplayName("disallowed CLOSED-as-target via evaluateIncident throws exception")
-        void evaluateIncident_toClosed_throwsException() {
-            IncidentEntity incident = incidentWithStatus(50L, IncidentStatus.IN_PROGRESS);
-            when(incidentRepository.findById(50L)).thenReturn(Optional.of(incident));
-
-            // CLOSED is not a valid outcome from IN_PROGRESS
-            EvaluateIncidentRequest request = new EvaluateIncidentRequest(
-                    IncidentStatus.CLOSED, "Attempted direct close");
-
-            assertThatThrownBy(() -> incidentService.evaluateIncident(50L, request))
-                    .isInstanceOf(InvalidStatusTransitionException.class)
-                    .hasMessageContaining("IN_PROGRESS")
-                    .hasMessageContaining("CLOSED");
-
-            verify(incidentRepository, never()).save(any());
+            verify(eventPublisher, never()).publishEvent(any());
         }
 
         //  Lifecycle integrity: full path must succeed

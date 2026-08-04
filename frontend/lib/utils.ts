@@ -33,7 +33,6 @@ export function statusLabel(status: string): string {
     IN_PROGRESS: 'In Progress',
     RESOLVED: 'Resolved',
     NON_RESOLVED: 'Not Resolved',
-    CLOSED: 'Closed',
   };
   return labels[status] ?? status;
 }

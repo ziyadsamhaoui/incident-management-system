@@ -115,7 +115,7 @@ public final class TestEntityFactory {
                 .build();
     }
 
-    // Creates a resolved incident with status = RESOLVED to test auto-closure.
+    // Creates a resolved incident with status = RESOLVED and a resolvedAt timestamp.
     public static IncidentEntity createResolvedIncident(final LocalDateTime resolvedAt) {
         long n = counter.incrementAndGet();
         return IncidentEntity.builder()

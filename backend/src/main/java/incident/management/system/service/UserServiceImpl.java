@@ -8,7 +8,6 @@ import incident.management.system.dto.UserActivityResponse;
 import incident.management.system.dto.UserResponse;
 import incident.management.system.enums.UserRole;
 import incident.management.system.exception.ResourceNotFoundException;
-import incident.management.system.enums.IncidentStatus;
 import incident.management.system.model.AdminDepartmentSubscription;
 import incident.management.system.model.DepartmentEntity;
 import incident.management.system.model.UserEntity;
@@ -37,6 +36,8 @@ import java.util.stream.Collectors;
 import static incident.management.system.enums.IncidentStatus.CLAIMED;
 import static incident.management.system.enums.IncidentStatus.DECLARED;
 import static incident.management.system.enums.IncidentStatus.IN_PROGRESS;
+import static incident.management.system.enums.IncidentStatus.NON_RESOLVED;
+import static incident.management.system.enums.IncidentStatus.RESOLVED;
 
 @Service
 @RequiredArgsConstructor
@@ -256,7 +257,8 @@ public class UserServiceImpl implements UserService {
                 incidentRepository.countByUserAndStatusIn(
                         user, List.of(DECLARED, CLAIMED, IN_PROGRESS)),
                 incidentRepository.countByResolvedBy(user),
-                incidentRepository.countByUserAndStatus(user, IncidentStatus.CLOSED),
+                incidentRepository.countByUserAndStatusIn(
+                        user, List.of(RESOLVED, NON_RESOLVED)),
                 incidentRepository.countByClaimedBy(user),
                 avgTimeToClaim != null ? avgTimeToClaim : 0.0,
                 avgMttr != null ? avgMttr : 0.0,

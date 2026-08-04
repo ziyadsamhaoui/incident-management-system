@@ -11,7 +11,6 @@ import {
   UserCheck,
   Activity,
   CheckCircle2,
-  XCircle,
   Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -33,7 +32,6 @@ const NOTIFICATION_ICONS: Record<string, React.ElementType> = {
   CLAIM: UserCheck,
   PROGRESS: Activity,
   RESOLVE: CheckCircle2,
-  CLOSE: XCircle,
   INFO: Bell,
 };
 
@@ -42,7 +40,6 @@ const NOTIFICATION_COLORS: Record<string, string> = {
   CLAIM: 'bg-blue-100 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400',
   PROGRESS: 'bg-amber-100 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400',
   RESOLVE: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400',
-  CLOSE: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
   INFO: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
 };
 
@@ -74,7 +71,6 @@ function notifTitle(n: NotificationDTO): string {
   if (key === 'CLAIM') return 'Incident pris en charge';
   if (key === 'PROGRESS') return 'Incident en cours de traitement';
   if (key === 'RESOLVE') return 'Incident résolu';
-  if (key === 'CLOSE') return 'Incident clôturé';
   return 'Notification';
 }
 

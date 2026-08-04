@@ -119,7 +119,7 @@
 ### 2.2 Multi-Filter Bar & Active Chips
 **Controls (persistent, single-row toolbar):**
 - **Search:** text input (reference code, description, reporter name/matricule).
-- **Status:** multi-select dropdown (`Déclaré`, `Pris en charge`, `En cours`, `Résolu`, `Non résolu`, `Clôturé`).
+- **Status:** multi-select dropdown (`Déclaré`, `Pris en charge`, `En cours`, `Résolu`, `Non résolu`).
 - **Priority:** multi-select dropdown (`Faible`, `Moyenne`, `Élevée`, `Critique`).
 - **Department:** multi-select dropdown (unscoped across all departments).
 - **Category:** multi-select dropdown.
@@ -145,7 +145,7 @@
 - **View:** Direct link to `/admin/incidents/[id]`.
 
 ### 2.4 Board View (Kanban)
-- **Columns:** `Déclaré` → `Pris en charge` → `En cours` → `Résolu / Non résolu` → `Clôturé`.
+- **Columns:** `Déclaré` → `Pris en charge` → `En cours` → `Résolu / Non résolu`.
 - **Breakpoint:** Available on desktop/tablet (≥768px). Hidden on mobile.
 
 **Drag-and-Drop State Machine:**
@@ -164,10 +164,10 @@
 - **Header & Meta:** Reference ID, Priority badge, Category, Department/Station, Status.
 - **Description Card:** Full incident description.
 - **Reporter & Assignee Cards:** Name, matricule, timestamp with formatting.
-- **Resolution Card:** Conditionally rendered for `RESOLVED`/`NON_RESOLVED`/`CLOSED`.
+- **Resolution Card:** Conditionally rendered for the terminal states `RESOLVED`/`NON_RESOLVED`.
 - **Full Timeline:** Reverse-chronological `IncidentHistory` audit entries with TimelineIcon, actor names, timestamps, and optional notes.
 - **Triage Actions:** `"Prendre en charge"` button (DECLARED), `"Évaluer"` button (IN_PROGRESS).
-- **Auto-Close Hint:** Badge for RESOLVED status: `"Clôture automatique ~10 min après résolution"`.
+- **Terminal States:** `RESOLVED` and `NON_RESOLVED` are the terminal states of the incident state machine. There is **no auto-close** — the `CLOSED` status and its 10-minute scheduler were removed (see `V6__migrate_closed_incidents.sql` for the historical backfill).
 
 **Shared Evaluation Modal:** Reuses `components/incidents/evaluation-modal.tsx` (portal-based, centered on large, full-bleed on mobile).
 

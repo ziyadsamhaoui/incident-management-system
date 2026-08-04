@@ -89,7 +89,8 @@ export interface UserActivityDTO {
   declaredCount: number;
   openCount: number;
   resolvedCount: number;
-  closedCount: number;
+  /** Incidents declared by the user that reached a terminal state (RESOLVED / NON_RESOLVED). */
+  terminalCount: number;
   claimedCount: number;
   avgTimeToClaimMinutes: number;
   avgMttrMinutes: number;

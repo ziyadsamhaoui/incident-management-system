@@ -35,17 +35,7 @@ public class IncidentRecipientResolver {
             return Collections.emptyList();
         }
 
-        // RESOLVED → CLOSED via 10m auto-closure scheduler
-        // Notify the admin who resolved the incident only.
-        if (newStatus == IncidentStatus.CLOSED && actor == null) {
-            UserEntity resolvedBy = incident.getResolvedBy();
-            if (resolvedBy != null) {
-                return List.of(resolvedBy);
-            }
-            return Collections.emptyList();
-        }
-
-        // IN_PROGRESS → RESOLVED/NON_RESOLVED:
+        // IN_PROGRESS → RESOLVED/NON_RESOLVED (terminal):
         // Notify CHEF_ATELIER of the department only.
         if (newStatus == IncidentStatus.RESOLVED || newStatus == IncidentStatus.NON_RESOLVED) {
             return findChefAtelier(incident);

@@ -701,7 +701,7 @@ export default function AdminUserDetailPage() {
               <MiniStat label="Total déclarés" value={activity?.declaredCount ?? '…'} icon={FileText} />
               <MiniStat label="Actuellement ouverts" value={activity?.openCount ?? '…'} icon={Activity} />
               <MiniStat label="Résolus" value={activity?.resolvedCount ?? '…'} icon={CheckCircle2} />
-              <MiniStat label="Clôturés" value={activity?.closedCount ?? '…'} icon={ShieldCheck} />
+              <MiniStat label="Terminés" value={activity?.terminalCount ?? '…'} icon={ShieldCheck} />
             </div>
 
             {/* Recent incidents — last 10 declared */}

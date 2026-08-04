@@ -59,7 +59,6 @@ const STATUS_OPTIONS = [
   { value: 'IN_PROGRESS', label: 'En cours' },
   { value: 'RESOLVED', label: 'Résolu' },
   { value: 'NON_RESOLVED', label: 'Non résolu' },
-  { value: 'CLOSED', label: 'Clôturé' },
 ];
 
 const PRIORITY_OPTIONS = [
@@ -94,8 +93,8 @@ function formatDuration(diffMs: number): string {
 }
 
 /**
- * Column "Temps". Resolved / closed incidents show a fixed processing
- * duration (declared → resolved) instead of a live timer that keeps running.
+ * Column "Temps". Terminal incidents (RESOLVED / NON_RESOLVED) show a fixed
+ * processing duration (declared → resolved) instead of a live timer.
  */
 function formatIncidentTime(inc: IncidentDTO): string {
   const endTime = inc.resolvedAt ?? inc.closedAt;
@@ -403,7 +402,10 @@ export default function ChefAtelierIncidentsPage() {
     total: allIncidents.length,
     open: allIncidents.filter((i) => i.status === 'DECLARED').length,
     inProgress: allIncidents.filter((i) => i.status === 'IN_PROGRESS').length,
-    closed: allIncidents.filter((i) => i.status === 'CLOSED').length,
+    // Terminal states (RESOLVED / NON_RESOLVED) — the CLOSED stage no longer exists
+    terminal: allIncidents.filter(
+      (i) => i.status === 'RESOLVED' || i.status === 'NON_RESOLVED',
+    ).length,
   };
 
   const totalPages = Math.max(1, Math.ceil(filteredIncidents.length / PAGE_SIZE));
@@ -502,7 +504,7 @@ export default function ChefAtelierIncidentsPage() {
           <StatCard label="Total Incidents" value={stats.total} icon={FileText} color="text-blue-600 dark:text-blue-400" />
           <StatCard label="Open Incidents" value={stats.open} icon={AlertTriangle} color="text-amber-600 dark:text-amber-400" />
           <StatCard label="In Progress" value={stats.inProgress} icon={Activity} color="text-violet-600 dark:text-violet-400" />
-          <StatCard label="Closed Incidents" value={stats.closed} icon={CheckCircle2} color="text-emerald-600 dark:text-emerald-400" />
+          <StatCard label="Terminés" value={stats.terminal} icon={CheckCircle2} color="text-emerald-600 dark:text-emerald-400" />
         </div>
 
         {/*  Multi-Filter Bar  */}

@@ -52,18 +52,19 @@ public class IncidentServiceImpl implements IncidentService {
     private final IncidentReferenceGenerator referenceGenerator;
 
     //  -------------------------------------------------------------------------
-    //  6-Stage Linear State Machine
+    //  5-Stage Linear State Machine
     //  -------------------------------------------------------------------------
-    //  DECLARED → CLAIMED → IN_PROGRESS → RESOLVED/NON_RESOLVED → CLOSED
+    //  DECLARED → CLAIMED → IN_PROGRESS → RESOLVED / NON_RESOLVED
+    //
+    //  RESOLVED and NON_RESOLVED are terminal states with empty transition sets.
     //  -------------------------------------------------------------------------
 
     private static final Map<IncidentStatus, IncidentStatus[]> VALID_TRANSITIONS = Map.of(
             IncidentStatus.DECLARED,       new IncidentStatus[]{IncidentStatus.CLAIMED},
             IncidentStatus.CLAIMED,        new IncidentStatus[]{IncidentStatus.IN_PROGRESS},
             IncidentStatus.IN_PROGRESS,    new IncidentStatus[]{IncidentStatus.RESOLVED, IncidentStatus.NON_RESOLVED},
-            IncidentStatus.RESOLVED,       new IncidentStatus[]{IncidentStatus.CLOSED},
-            IncidentStatus.NON_RESOLVED,   new IncidentStatus[]{IncidentStatus.CLOSED},
-            IncidentStatus.CLOSED,         new IncidentStatus[]{}
+            IncidentStatus.RESOLVED,       new IncidentStatus[]{},
+            IncidentStatus.NON_RESOLVED,   new IncidentStatus[]{}
     );
 
     //  ========================================================================
@@ -148,7 +149,7 @@ public class IncidentServiceImpl implements IncidentService {
     /**
      * Resolves the actor of a history entry from the incident's own references.
      * DECLARED → declaring user, CLAIMED/IN_PROGRESS → claimedBy,
-     * RESOLVED/NON_RESOLVED → resolvedBy, CLOSED → null (system-driven).
+     * RESOLVED/NON_RESOLVED → resolvedBy, otherwise → null.
      */
     private UserSummaryResponse resolveHistoryActor(IncidentEntity incident, IncidentStatus status) {
         if (status == IncidentStatus.DECLARED) {

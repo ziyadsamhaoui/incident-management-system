@@ -15,8 +15,6 @@ module.exports = {
     'border-l-amber-500',
     'border-l-emerald-500',
     'border-l-red-500',
-    'border-l-slate-900',
-    'dark:border-l-slate-200',
   ],
   theme: {
     container: {
@@ -82,7 +80,6 @@ module.exports = {
           progress: '#8b5cf6',
           resolved: '#10b981',
           nonresolved: '#ef4444',
-          closed: '#6b7280',
         },
       },
       borderRadius: {

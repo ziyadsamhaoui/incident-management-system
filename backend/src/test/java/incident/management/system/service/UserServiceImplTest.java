@@ -272,7 +272,9 @@ class UserServiceImplTest {
                     IncidentStatus.DECLARED, IncidentStatus.CLAIMED, IncidentStatus.IN_PROGRESS)))
                     .thenReturn(2L);
             when(incidentRepository.countByResolvedBy(user)).thenReturn(3L);
-            when(incidentRepository.countByUserAndStatus(user, IncidentStatus.CLOSED)).thenReturn(1L);
+            when(incidentRepository.countByUserAndStatusIn(
+                    user, List.of(IncidentStatus.RESOLVED, IncidentStatus.NON_RESOLVED)))
+                    .thenReturn(1L);
             when(incidentRepository.countByClaimedBy(user)).thenReturn(4L);
             when(incidentRepository.avgTimeToClaimMinutes(20L)).thenReturn(30.5);
             when(incidentRepository.avgMttrMinutes(20L)).thenReturn(120.0);
@@ -285,7 +287,7 @@ class UserServiceImplTest {
             assertThat(response.declaredCount()).isEqualTo(5L);
             assertThat(response.openCount()).isEqualTo(2L);
             assertThat(response.resolvedCount()).isEqualTo(3L);
-            assertThat(response.closedCount()).isEqualTo(1L);
+            assertThat(response.terminalCount()).isEqualTo(1L);
             assertThat(response.claimedCount()).isEqualTo(4L);
             assertThat(response.avgTimeToClaimMinutes()).isEqualTo(30.5);
             assertThat(response.avgMttrMinutes()).isEqualTo(120.0);

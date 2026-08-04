@@ -9,8 +9,7 @@ export type IncidentState =
   | 'CLAIMED'
   | 'IN_PROGRESS'
   | 'RESOLVED'
-  | 'NON_RESOLVED'
-  | 'CLOSED';
+  | 'NON_RESOLVED';
 
 export interface StatusConfig {
   labelFr: string;
@@ -83,17 +82,6 @@ export const INCIDENT_STATUS_MAP: Record<IncidentState, StatusConfig> = {
     barColor: '#ef4444',
     className:
       'bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300',
-  },
-  CLOSED: {
-    labelFr: 'Clôturé',
-    labelEn: 'Closed',
-    variant: 'default',
-    dotClass: 'bg-slate-800 dark:bg-slate-200',
-    textClass: 'text-slate-900 dark:text-slate-100',
-    barClass: 'border-l-slate-900 dark:border-l-slate-200',
-    barColor: '#0f172a',
-    className:
-      'bg-slate-900 text-slate-50 dark:bg-slate-100 dark:text-slate-900',
   },
 };
 

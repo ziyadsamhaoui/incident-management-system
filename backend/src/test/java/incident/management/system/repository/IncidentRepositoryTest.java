@@ -24,7 +24,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 
-// Integration tests for IncidentRepository, focusing on paginated filters and temporal query used by the 10m auto-closure.
+// Integration tests for IncidentRepository, focusing on paginated filters and per-user activity analytics.
 class IncidentRepositoryTest extends BaseRepositoryIntegrationTest {
 
     @Autowired
@@ -102,7 +102,7 @@ class IncidentRepositoryTest extends BaseRepositoryIntegrationTest {
         @Test
         @DisplayName("should return empty page when no incidents match the status")
         void returnsEmptyWhenNoMatch() {
-            persistIncident(userA, departmentA, IncidentStatus.CLOSED);
+            persistIncident(userA, departmentA, IncidentStatus.RESOLVED);
 
             Page<IncidentEntity> page = incidentRepository.findByStatus(
                     IncidentStatus.DECLARED, Pageable.ofSize(10));
@@ -194,87 +194,6 @@ class IncidentRepositoryTest extends BaseRepositoryIntegrationTest {
         }
     }
 
-    //  Temporal query: findByStatusAndResolvedAtBefore
-    //  (used by the 10-minute auto-closure scheduler)
-    @Nested
-    @DisplayName("findByStatusAndResolvedAtBefore")
-    class FindByStatusAndResolvedAtBeforeTest {
-
-        private final LocalDateTime now = LocalDateTime.now();
-        private final LocalDateTime threshold = now.minusMinutes(10);
-
-        @Test
-        @DisplayName("should return RESOLVED incidents where resolvedAt < threshold")
-        void returnsResolvedBeforeThreshold() {
-            IncidentEntity eligible = persistResolvedIncident(
-                    userA, departmentA, threshold.minusSeconds(1));
-
-            List<IncidentEntity> result = incidentRepository
-                    .findByStatusAndResolvedAtBefore(IncidentStatus.RESOLVED, threshold);
-
-            assertThat(result)
-                    .hasSize(1)
-                    .extracting(IncidentEntity::getId)
-                    .containsExactly(eligible.getId());
-        }
-
-        @Test
-        @DisplayName("should NOT return RESOLVED incidents where resolvedAt >= threshold")
-        void excludesResolvedAtOrAfterThreshold() {
-            // resolved exactly at threshold
-            persistResolvedIncident(userA, departmentA, threshold);
-
-            // resolved after threshold
-            persistResolvedIncident(userA, departmentA, threshold.plusMinutes(5));
-
-            List<IncidentEntity> result = incidentRepository
-                    .findByStatusAndResolvedAtBefore(IncidentStatus.RESOLVED, threshold);
-
-            assertThat(result).isEmpty();
-        }
-
-        @Test
-        @DisplayName("should NOT return incidents with non-RESOLVED status")
-        void excludesNonResolvedStatus() {
-            persistIncident(userA, departmentA, IncidentStatus.DECLARED);
-
-            List<IncidentEntity> result = incidentRepository
-                    .findByStatusAndResolvedAtBefore(IncidentStatus.RESOLVED, threshold);
-
-            assertThat(result).isEmpty();
-        }
-
-        @Test
-        @DisplayName("should NOT return RESOLVED incidents with null resolvedAt")
-        void excludesNullResolvedAt() {
-            IncidentEntity incident = TestEntityFactory.createIncident();
-            incident.setUser(userA);
-            incident.setDepartment(departmentA);
-            incident.setStation(station);
-            incident.setCategory(category);
-            incident.setStatus(IncidentStatus.RESOLVED);
-            incident.setResolvedAt(null); // explicitly null
-            incidentRepository.save(incident);
-
-            List<IncidentEntity> result = incidentRepository
-                    .findByStatusAndResolvedAtBefore(IncidentStatus.RESOLVED, threshold);
-
-            assertThat(result).isEmpty();
-        }
-
-        @Test
-        @DisplayName("should return multiple eligible incidents ordered by resolvedAt")
-        void returnsMultipleEligible() {
-            persistResolvedIncident(userA, departmentA, threshold.minusMinutes(20));
-            persistResolvedIncident(userA, departmentA, threshold.minusMinutes(15));
-
-            List<IncidentEntity> result = incidentRepository
-                    .findByStatusAndResolvedAtBefore(IncidentStatus.RESOLVED, threshold);
-
-            assertThat(result).hasSize(2);
-        }
-    }
-
     //  Per-user activity analytics (GET /api/users/{id}/activity)
     @Nested
     @DisplayName("Per-user activity analytics")
@@ -315,8 +234,9 @@ class IncidentRepositoryTest extends BaseRepositoryIntegrationTest {
             assertThat(incidentRepository.countByUserAndStatusIn(
                     userB, List.of(IncidentStatus.DECLARED, IncidentStatus.CLAIMED, IncidentStatus.IN_PROGRESS)))
                     .isEqualTo(2);
-            // CLOSED terminal bucket
-            assertThat(incidentRepository.countByUserAndStatus(userA, IncidentStatus.CLOSED)).isZero();
+            // Terminal bucket — RESOLVED / NON_RESOLVED only
+            assertThat(incidentRepository.countByUserAndStatusIn(
+                    userA, List.of(IncidentStatus.RESOLVED, IncidentStatus.NON_RESOLVED))).isZero();
         }
 
         @Test
@@ -371,14 +291,4 @@ class IncidentRepositoryTest extends BaseRepositoryIntegrationTest {
         return incidentRepository.save(incident);
     }
 
-    private IncidentEntity persistResolvedIncident(final UserEntity user,
-                                                   final DepartmentEntity department,
-                                                   final LocalDateTime resolvedAt) {
-        IncidentEntity incident = TestEntityFactory.createResolvedIncident(resolvedAt);
-        incident.setUser(user);
-        incident.setDepartment(department);
-        incident.setStation(station);
-        incident.setCategory(category);
-        return incidentRepository.save(incident);
-    }
 }

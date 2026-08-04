@@ -11,7 +11,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -27,8 +26,6 @@ public interface IncidentRepository extends JpaRepository<IncidentEntity, Long> 
 
     Optional<IncidentEntity> findByReference(String reference);
 
-    List<IncidentEntity> findByStatusAndResolvedAtBefore(IncidentStatus status, LocalDateTime resolvedAt);
-
     //  ========================================================================
     //  Per-user activity analytics (GET /api/users/{id}/activity)
     //  All metrics are computed on demand — no denormalized counters.
@@ -42,9 +39,6 @@ public interface IncidentRepository extends JpaRepository<IncidentEntity, Long> 
 
     /** Number of the user's incidents currently in an open (non-terminal) state. */
     long countByUserAndStatusIn(UserEntity user, Collection<IncidentStatus> statuses);
-
-    /** Number of the user's incidents that reached the CLOSED terminal state. */
-    long countByUserAndStatus(UserEntity user, IncidentStatus status);
 
     /**
      * Average time-to-claim (minutes) for incidents claimed by the user —

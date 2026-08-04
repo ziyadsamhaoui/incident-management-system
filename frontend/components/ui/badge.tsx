@@ -20,7 +20,6 @@ const badgeVariants = cva(
         in_progress: 'border-transparent status-in_progress',
         resolved: 'border-transparent status-resolved',
         non_resolved: 'border-transparent status-non_resolved',
-        closed: 'border-transparent status-closed',
       },
     },
     defaultVariants: {
