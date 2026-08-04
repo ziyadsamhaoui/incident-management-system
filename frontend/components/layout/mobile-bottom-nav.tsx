@@ -13,12 +13,15 @@ import {
   X,
   Building2,
   BellRing,
+  Bell,
   Settings,
   ChevronDown,
   Circle,
+  Archive,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { NotificationsSheet } from '@/components/layout/notifications-dropdown';
 
 // ── Tab definitions ──────────────────────────────
 
@@ -34,6 +37,7 @@ const BOTTOM_TABS: TabItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Incidents', href: '/admin/incidents', icon: AlertTriangle, dotColor: 'bg-rose-500' },
   { label: 'Users', href: '/users', icon: Users, dotColor: 'bg-amber-500' },
+  { label: 'Notifs', href: '#notifications', icon: Bell },
   { label: 'Plus', href: '#more', icon: MoreHorizontal },
 ];
 
@@ -51,12 +55,13 @@ export function MobileBottomNav({ isVisible = true, onNavigate }: MobileBottomNa
   const router = useRouter();
   const { startNavigation } = useNavigationProgress();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
   const [refDataExpanded, setRefDataExpanded] = useState(false);
 
   const activeTab = useMemo(() => {
     // Find exact or prefix match
     for (const tab of BOTTOM_TABS) {
-      if (tab.href === '#more') continue;
+      if (tab.href === '#more' || tab.href === '#notifications') continue;
       if (pathname === tab.href || pathname.startsWith(tab.href + '/')) {
         return tab.href;
       }
@@ -67,6 +72,10 @@ export function MobileBottomNav({ isVisible = true, onNavigate }: MobileBottomNa
   const handleTabClick = (href: string) => {
     if (href === '#more') {
       setMoreOpen(true);
+      return;
+    }
+    if (href === '#notifications') {
+      setNotifOpen(true);
       return;
     }
     onNavigate?.(href);
@@ -87,6 +96,7 @@ export function MobileBottomNav({ isVisible = true, onNavigate }: MobileBottomNa
         { label: 'Stations', href: '/admin/reference?tab=stations' },
       ],
     },
+    { label: 'Logs', href: '/admin/incidents/logs', icon: Archive },
     { label: 'My Subscriptions', href: '/admin/subscriptions', icon: BellRing },
     { label: 'Settings', href: '/admin/settings', icon: Settings },
   ];
@@ -95,8 +105,8 @@ export function MobileBottomNav({ isVisible = true, onNavigate }: MobileBottomNa
 
   return (
     <>
-      {/* ── Bottom Tab Bar ──────────────────────────── */}
-      <nav className="fixed bottom-0 inset-x-0 z-40 bg-slate-900 border-t border-slate-800 flex items-center justify-around h-16 md:hidden">
+      {/* ── Bottom Tab Bar (visible below lg — small & medium displays) ── */}
+      <nav className="fixed bottom-0 inset-x-0 z-40 bg-slate-900 border-t border-slate-800 flex items-center justify-around h-16 lg:hidden">
         {BOTTOM_TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = tab.href === '#more' ? moreOpen : activeTab === tab.href;
@@ -142,7 +152,7 @@ export function MobileBottomNav({ isVisible = true, onNavigate }: MobileBottomNa
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm md:hidden"
+              className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm lg:hidden"
               onClick={() => setMoreOpen(false)}
             />
 
@@ -153,7 +163,7 @@ export function MobileBottomNav({ isVisible = true, onNavigate }: MobileBottomNa
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              className="fixed bottom-0 inset-x-0 z-[70] bg-slate-900 border-t border-slate-800 rounded-t-2xl max-h-[70vh] overflow-y-auto md:hidden"
+              className="fixed bottom-0 inset-x-0 z-[70] bg-slate-900 border-t border-slate-800 rounded-t-2xl max-h-[70vh] overflow-y-auto lg:hidden"
             >
               {/* Handle */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 sticky top-0 bg-slate-900 z-10">
@@ -259,6 +269,9 @@ export function MobileBottomNav({ isVisible = true, onNavigate }: MobileBottomNa
           </>
         )}
       </AnimatePresence>
+
+      {/* ── Notifications sheet (small & medium displays) ── */}
+      <NotificationsSheet open={notifOpen} onClose={() => setNotifOpen(false)} />
     </>
   );
 }

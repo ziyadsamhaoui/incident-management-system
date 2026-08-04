@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { getStatusConfig } from '@/lib/constants/incidentStatus';
 import { IncidentStepper } from '@/components/incidents/incident-stepper';
+import { AttachmentSection } from '@/components/incidents/attachment-section';
 import { EvaluationModal } from '@/components/incidents/evaluation-modal';
 import { ErrorState } from '@/components/ui/error-state';
 import { useAsync, extractErrorMessage } from '@/lib/use-async';
@@ -385,6 +386,12 @@ export default function AdminIncidentDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* ── Attachments ───────────────────────────── */}
+      <AttachmentSection
+        incidentId={incident.id}
+        isTerminal={isTerminal}
+      />
 
       {/* ── Timeline ──────────────────────────────── */}
       <Card>

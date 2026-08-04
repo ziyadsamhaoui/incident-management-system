@@ -46,6 +46,11 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/dashboard/**").authenticated()
+                        // Media bytes served by ResourceHttpRequestHandler — authorization is
+                        // enforced INSIDE the resolver (signed read token OR JWT session with
+                        // department/ownership scoping), because <img>/<video> tags cannot send
+                        // an Authorization header. Never permit other /api/** paths.
+                        .requestMatchers(HttpMethod.GET, "/api/incidents/*/attachments/*").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
                 .userDetailsService(customUserDetailsService)

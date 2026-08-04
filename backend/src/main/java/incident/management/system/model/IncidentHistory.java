@@ -2,6 +2,8 @@ package incident.management.system.model;
 
 import incident.management.system.enums.IncidentStatus;
 import jakarta.persistence.Column;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -32,9 +34,11 @@ public class IncidentHistory {
     private IncidentEntity incident;
 
     @Column(nullable = false)
+    @Enumerated(EnumType.STRING)
     private IncidentStatus previousStatus;
 
     @Column
+    @Enumerated(EnumType.STRING)
     private IncidentStatus currentStatus;
 
     @Column

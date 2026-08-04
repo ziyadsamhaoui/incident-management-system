@@ -4,12 +4,14 @@ import incident.management.system.dto.CreateIncidentRequest;
 import incident.management.system.dto.EvaluateIncidentRequest;
 import incident.management.system.dto.IncidentHistoryResponse;
 import incident.management.system.dto.IncidentResponse;
+import incident.management.system.enums.IncidentStatus;
 import incident.management.system.service.IncidentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -22,6 +24,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 @RestController
@@ -31,27 +35,50 @@ public class IncidentController {
 
     private final IncidentService incidentService;
 
-    //  Get all incidents, optionally filtered by status, department, or user.
+    //  Get incidents, with combinable filters. The `status` param accepts either
+    //  a single value or a comma-separated group, e.g.
+    //  `status=DECLARED,CLAIMED,IN_PROGRESS` (Actifs) or
+    //  `status=RESOLVED,NON_RESOLVED` (Logs).
     @GetMapping
     public ResponseEntity<Page<IncidentResponse>> getIncidents(
-            @RequestParam(required = false) String status,
+            @RequestParam(required = false) List<String> status,
+            @RequestParam(required = false) String search,
             @RequestParam(required = false) Long departmentId,
             @RequestParam(required = false) Long userId,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(defaultValue = "declaredAt") String dateField,
             @PageableDefault(size = 20) Pageable pageable) {
 
-        Page<IncidentResponse> incidents;
+        List<IncidentStatus> statuses = parseStatuses(status);
 
-        if (status != null) {
-            incidents = incidentService.getIncidentsByStatus(status, pageable);
-        } else if (departmentId != null) {
-            incidents = incidentService.getIncidentsByDepartment(departmentId, pageable);
-        } else if (userId != null) {
-            incidents = incidentService.getIncidentsByUser(userId, pageable);
-        } else {
-            incidents = incidentService.getAllIncidents(pageable);
-        }
+        Page<IncidentResponse> incidents = incidentService.getFilteredIncidents(
+                statuses, search, departmentId, userId, startDate, endDate, dateField, pageable);
 
         return ResponseEntity.ok(incidents);
+    }
+
+    //  Parses the comma-separated / repeated `status` query param into enum values.
+    private List<IncidentStatus> parseStatuses(List<String> raw) {
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+        List<IncidentStatus> statuses = new ArrayList<>();
+        for (String value : raw) {
+            for (String token : value.split(",")) {
+                if (token.isBlank()) {
+                    continue;
+                }
+                try {
+                    statuses.add(IncidentStatus.valueOf(token.trim().toUpperCase()));
+                } catch (IllegalArgumentException e) {
+                    throw new IllegalArgumentException("Invalid status: " + token);
+                }
+            }
+        }
+        return statuses;
     }
 
 

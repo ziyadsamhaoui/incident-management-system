@@ -312,8 +312,8 @@ export default function UsersPage() {
   return (
     <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8">
       <div className="max-w-5xl mx-auto space-y-6">
-        {/* Header with actions */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
+        {/* Header with actions — on non-large displays the create button sits on the very left (top), on lg+ it moves to the right */}
+        <div className="flex flex-col-reverse gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Utilisateurs</h1>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -323,7 +323,7 @@ export default function UsersPage() {
           <button
             type="button"
             onClick={() => setCreateOpen(true)}
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-sm font-medium transition-all active:scale-[0.97]"
+            className="inline-flex self-start items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-sm font-medium transition-all active:scale-[0.97]"
           >
             <UserPlus className="h-4 w-4" />
             Nouvel Utilisateur

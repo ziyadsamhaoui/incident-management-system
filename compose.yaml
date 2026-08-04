@@ -10,5 +10,26 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Self-hosted media pipeline (local disk, no S3/R2)
+# ─────────────────────────────────────────────────────────────────────────────
+# The backend writes incident media to `app.media.storage-path` (default
+# /data/incident-media). That path MUST be a named volume / bind-mount mapped
+# to a HOST directory — a container-local path is wiped on every redeploy.
+#
+# When the backend is containerized, attach the volume to its service, e.g.:
+#
+#   backend:
+#     build: ./backend
+#     environment:
+#       - MEDIA_STORAGE_PATH=/data/incident-media
+#     volumes:
+#       - media-data:/data/incident-media
+#
+# Keep media outside the deployment directory so rolling deploys never wipe
+# evidence photos/videos. Host-level backups (rsync / nightly snapshots) are
+# the only redundancy — local disk has NO cloud multi-region replication.
+# See docs/WORKFLOW.md for the full mount & redundancy notes.
 volumes:
   postgres-data:
+  media-data:

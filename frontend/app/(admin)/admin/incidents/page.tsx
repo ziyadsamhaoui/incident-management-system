@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useNavigationProgress } from '@/components/ui/navigation-progress';
 import { motion } from 'framer-motion';
@@ -52,6 +52,8 @@ import { useAsync, extractErrorMessage } from '@/lib/use-async';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
 import { TableSkeleton } from '@/components/ui/skeleton';
+import { MultiSelectDropdown } from '@/components/incidents/multi-select-dropdown';
+import { FilterCheckGroup } from '@/components/incidents/filter-check-group';
 
 // ── Helpers ───────────────────────────────────────
 
@@ -59,12 +61,11 @@ const PRIORITY_LABELS: Record<string, string> = { LOW: 'Faible', MEDIUM: 'Moyenn
 const PRIORITY_CLASSES: Record<string, string> = { LOW: 'text-slate-500 bg-slate-100 dark:bg-slate-800', MEDIUM: 'text-amber-600 bg-amber-50 dark:bg-amber-900/20', HIGH: 'text-orange-600 bg-orange-50 dark:bg-orange-900/20', CRITICAL: 'text-red-600 bg-red-50 dark:bg-red-900/20' };
 const PRIORITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
+// Actifs page — terminal (resolved) incidents live in the Logs page.
 const STATUS_OPTIONS = [
   { value: 'DECLARED', label: 'Déclaré' },
   { value: 'CLAIMED', label: 'Pris en charge' },
   { value: 'IN_PROGRESS', label: 'En cours' },
-  { value: 'RESOLVED', label: 'Résolu' },
-  { value: 'NON_RESOLVED', label: 'Non résolu' },
 ];
 
 const PRIORITY_OPTIONS = [
@@ -138,124 +139,8 @@ const DEFAULT_FILTERS: Filters = {
 
 type ViewMode = 'list' | 'board';
 
-// ── Multi-Select Dropdown ─────────────────────────
-
-function MultiSelectDropdown({
-  label,
-  options,
-  selected,
-  onChange,
-}: {
-  label: string;
-  options: { value: string; label: string }[];
-  selected: string[];
-  onChange: (vals: string[]) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
-
-  const toggle = (val: string) => {
-    if (selected.includes(val)) {
-      onChange(selected.filter((s) => s !== val));
-    } else {
-      onChange([...selected, val]);
-    }
-  };
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className={cn(
-          'flex h-9 items-center gap-1.5 rounded-lg border bg-background px-3 text-xs font-medium transition-colors whitespace-nowrap',
-          selected.length > 0
-            ? 'border-primary text-primary'
-            : 'border-input text-muted-foreground hover:border-muted-foreground/30',
-        )}
-      >
-        {label}
-        {selected.length > 0 && (
-          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">
-            {selected.length}
-          </span>
-        )}
-      </button>
-      {open && (
-        <div className="absolute left-0 top-full z-30 mt-1 w-48 rounded-lg border bg-popover p-1.5 shadow-xl">
-          {options.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => toggle(opt.value)}
-              className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs font-medium hover:bg-accent"
-            >
-              <div
-                className={cn(
-                  'flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors',
-                  selected.includes(opt.value)
-                    ? 'border-primary bg-primary text-primary-foreground'
-                    : 'border-muted-foreground/30',
-                )}
-              >
-                {selected.includes(opt.value) && (
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                    <path d="M2 5L4 7L8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )}
-              </div>
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Chip-style multi-select (mobile filter dialog) ─
-
-function FilterCheckGroup({
-  options,
-  selected,
-  onToggle,
-}: {
-  options: { value: string; label: string }[];
-  selected: string[];
-  onToggle: (value: string) => void;
-}) {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {options.map((opt) => {
-        const isSel = selected.includes(opt.value);
-        return (
-          <button
-            key={opt.value}
-            type="button"
-            onClick={() => onToggle(opt.value)}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors',
-              isSel
-                ? 'border-primary bg-primary/5 text-primary'
-                : 'border-input text-muted-foreground hover:border-muted-foreground/30',
-            )}
-          >
-            {isSel && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
-            {opt.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+// MultiSelectDropdown & FilterCheckGroup are shared —
+// see components/incidents/multi-select-dropdown.tsx and filter-check-group.tsx
 
 // ── Active Filter Chips ───────────────────────────
 
@@ -499,7 +384,12 @@ export default function AdminIncidentsPage() {
   const [filterOpen, setFilterOpen] = useState(false);
 
   // ── Real data ─────────────────────────────────────
-  const incidentsFetch = useAsync(() => getIncidents({ size: 200 }), []);
+  // Active states only (server-scoped via the `status` group) — resolved
+  // incidents are archived on the dedicated Logs page (/admin/incidents/logs).
+  const incidentsFetch = useAsync(
+    () => getIncidents({ statuses: ['DECLARED', 'CLAIMED', 'IN_PROGRESS'], size: 200 }),
+    [],
+  );
   const deptsFetch = useAsync(() => getDepartments(), []);
   const catsFetch = useAsync(() => getCategories(), []);
 
@@ -580,12 +470,11 @@ export default function AdminIncidentsPage() {
   }, [allIncidents, filters, currentMatricule]);
 
   const groupedByStatus = useMemo(() => {
+    // Kanban shows the 3 active columns only — resolved incidents live in Logs.
     const groups: Record<string, IncidentDTO[]> = {
       DECLARED: [],
       CLAIMED: [],
       IN_PROGRESS: [],
-      RESOLVED: [],
-      NON_RESOLVED: [],
     };
     filteredIncidents.forEach((i) => { if (groups[i.status]) groups[i.status].push(i); });
     return groups;
@@ -634,11 +523,8 @@ export default function AdminIncidentsPage() {
       await handleClaim(id);
       return;
     }
-    if ((incident.status === 'IN_PROGRESS') && (targetStatus === 'RESOLVED' || targetStatus === 'NON_RESOLVED')) {
-      const target = allIncidents.find((i) => i.id === id);
-      if (target) setEvaluateTarget(target);
-      return;
-    }
+    // Terminal transitions (→ RESOLVED / NON_RESOLVED) live in the Logs tab,
+    // never on the board — the kanban only hosts the 3 active columns.
   };
 
   const updateFilter = (key: keyof Filters, value: any) => {
@@ -727,36 +613,37 @@ export default function AdminIncidentsPage() {
       <div className="max-w-7xl mx-auto space-y-6">
 
         {/* ── 2.1 — Page Header ─────────────────────── */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        {/* On non-large displays the actions (view mode + declare) sit on the very left (top), on lg+ they move to the right */}
+        <div className="flex flex-col-reverse gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Incidents</h1>
             <p className="mt-1 text-sm text-muted-foreground">Vue globale, tous départements</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 self-start">
             <div className="flex rounded-lg border bg-muted p-0.5">
-              <button
-                type="button"
-                onClick={() => setViewMode('list')}
-                className={cn(
-                  'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all',
-                  viewMode === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                <LayoutList className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Liste</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('board')}
-                className={cn(
-                  'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all',
-                  viewMode === 'board' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                <Columns3 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Tableau</span>
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('list')}
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all',
+                    viewMode === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  <LayoutList className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Liste</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('board')}
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all',
+                    viewMode === 'board' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  <Columns3 className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Tableau</span>
+                </button>
+              </div>
             <Button size="sm" className="h-9 gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white" onClick={() => router.push('/admin/incidents/declare')}>
               <Plus className="h-3.5 w-3.5" />
               Déclarer
@@ -779,11 +666,11 @@ export default function AdminIncidentsPage() {
                   className="h-10 w-full pl-9"
                 />
               </div>
-              {/* Mobile-only filter tab (opens the filter dialog) */}
+              {/* Mobile-only filter tab (opens the filter dialog) — small & medium displays */}
               <button
                 type="button"
                 onClick={() => setFilterOpen(true)}
-                className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-input bg-background text-muted-foreground transition-colors hover:bg-muted sm:hidden"
+                className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-input bg-background text-muted-foreground transition-colors hover:bg-muted lg:hidden"
                 aria-label="Filtrer les incidents"
               >
                 <SlidersHorizontal className="h-4 w-4" />
@@ -795,8 +682,8 @@ export default function AdminIncidentsPage() {
               </button>
             </div>
 
-            {/* Desktop filters (hidden on mobile — replaced by the filter dialog) */}
-            <div className="hidden sm:flex flex-wrap items-center gap-2">
+            {/* Desktop filters (hidden below lg — replaced by the filter dialog) */}
+            <div className="hidden lg:flex flex-wrap items-center gap-2">
             <MultiSelectDropdown
               label="Statut"
               options={STATUS_OPTIONS}
@@ -890,7 +777,7 @@ export default function AdminIncidentsPage() {
 
         {/* ── Board View (Kanban) ───────────────────── */}
         {!incidentsFetch.loading && !incidentsFetch.error && !systemZero && viewMode === 'board' && (
-          <div className="hidden md:block">
+          <div className="hidden lg:block">
             <div className="flex gap-4 overflow-x-auto pb-4">
               <KanbanColumn
                 title="Déclaré"
@@ -908,12 +795,6 @@ export default function AdminIncidentsPage() {
                 title="En cours"
                 incidents={groupedByStatus.IN_PROGRESS}
                 onDrop={handleDrop('IN_PROGRESS')}
-                onDragStart={handleDragStart}
-              />
-              <KanbanColumn
-                title="Résolu / Non résolu"
-                incidents={[...groupedByStatus.RESOLVED, ...groupedByStatus.NON_RESOLVED]}
-                onDrop={handleDrop('RESOLVED')}
                 onDragStart={handleDragStart}
               />
             </div>
@@ -967,9 +848,9 @@ export default function AdminIncidentsPage() {
               </Card>
             )}
 
-            {/* Desktop table */}
+            {/* Desktop table (lg+) — smaller displays use the card layout */}
             {!incidentsFetch.loading && !incidentsFetch.error && !systemZero && !filteredEmpty && (
-              <div className="hidden md:block">
+              <div className="hidden lg:block">
                 <Card>
                   <CardContent className="p-0">
                     <div className="overflow-x-auto">
@@ -1072,9 +953,9 @@ export default function AdminIncidentsPage() {
               </div>
             )}
 
-            {/* Mobile cards */}
+            {/* Small & medium display cards — table is lg+ */}
             {!incidentsFetch.loading && !incidentsFetch.error && !systemZero && !filteredEmpty && (
-              <div className="md:hidden space-y-3">
+              <div className="lg:hidden space-y-3">
                 {paginated.map((inc) => {
                   const cfg = getStatusConfig(inc.status);
                   const CatIcon = CATEGORY_ICONS[inc.category] ?? AlertTriangle;
@@ -1161,9 +1042,9 @@ export default function AdminIncidentsPage() {
           </>
         )}
 
-        {/* ── Board view mobile fallback ─────────────── */}
+        {/* ── Board view fallback (below lg) ────────── */}
         {!incidentsFetch.loading && !incidentsFetch.error && viewMode === 'board' && (
-          <div className="md:hidden rounded-lg border bg-muted/30 p-6 text-center">
+          <div className="lg:hidden rounded-lg border bg-muted/30 p-6 text-center">
             <Columns3 className="mx-auto h-8 w-8 text-muted-foreground/30 mb-2" />
             <p className="text-sm text-muted-foreground">Le mode tableau est disponible sur les écrans plus larges.</p>
             <Button variant="outline" size="sm" onClick={() => setViewMode('list')} className="mt-3">

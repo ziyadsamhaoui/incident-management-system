@@ -27,6 +27,7 @@ import {
   Grid3x3,
   Cable,
   Cpu,
+  Archive,
 } from 'lucide-react';
 
 // ── Badge hook for attention counts (real API data, ADMIN only) ──
@@ -60,6 +61,8 @@ interface NavItem {
   badge?: number | null;
   /** Optional badge color class */
   badgeClass?: string;
+  /** Child path prefixes that must NOT highlight this item (e.g. Incidents vs its Logs child). */
+  exclude?: string[];
 }
 
 interface NavGroup {
@@ -91,8 +94,15 @@ function buildAdminItems(criticalIncidents: number): NavEntry[] {
       href: '/admin/incidents',
       icon: Flame,
       roles: ['ADMIN'],
+      exclude: ['/admin/incidents/logs'],
       badge: criticalIncidents > 0 ? criticalIncidents : null,
       badgeClass: 'bg-rose-600 text-white',
+    },
+    {
+      label: 'Logs',
+      href: '/admin/incidents/logs',
+      icon: Archive,
+      roles: ['ADMIN'],
     },
     {
       label: 'Utilisateurs',
@@ -197,16 +207,16 @@ export function Sidebar({ open, onOpenChange, variant = 'chef-atelier' }: Sideba
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}
 
       <aside
         className={cn(
-          'fixed left-0 top-0 z-50 flex h-full flex-col border-r bg-background transition-all duration-300 md:static md:z-auto',
+          'fixed left-0 top-0 z-50 flex h-full flex-col border-r bg-background transition-all duration-300 lg:static lg:z-auto',
           collapsed ? 'w-16' : 'w-64',
-          mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+          mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
         )}
       >
         {/* Brand header */}
@@ -236,7 +246,7 @@ export function Sidebar({ open, onOpenChange, variant = 'chef-atelier' }: Sideba
             }}
             className={cn(
               'rounded-md hover:bg-muted items-center justify-center',
-              collapsed ? 'hidden md:flex h-6 w-6' : 'hidden md:flex h-6 w-6',
+              collapsed ? 'hidden lg:flex h-6 w-6' : 'hidden lg:flex h-6 w-6',
             )}
           >
             {collapsed ? (
@@ -245,10 +255,10 @@ export function Sidebar({ open, onOpenChange, variant = 'chef-atelier' }: Sideba
               <ChevronLeft className="h-3.5 w-3.5 text-muted-foreground" />
             )}
           </button>
-          {/* Close button — mobile only (<768px) */}
+          {/* Close button — mobile/tablet only (<lg) */}
           <button
             onClick={() => setMobileOpen(false)}
-            className="md:hidden rounded-md p-1 hover:bg-muted"
+            className="lg:hidden rounded-md p-1 hover:bg-muted"
           >
             <X className="h-4 w-4" />
           </button>
@@ -320,10 +330,13 @@ export function Sidebar({ open, onOpenChange, variant = 'chef-atelier' }: Sideba
               );
             }
 
-            // Plain nav item
+            // Plain nav item — prefix match, minus any excluded child prefixes
+            // (e.g. the Logs route under /admin/incidents).
             const Icon = entry.icon;
             const isActive =
-              pathname === entry.href || pathname.startsWith(entry.href + '/');
+              pathname === entry.href ||
+              (pathname.startsWith(entry.href + '/') &&
+                !(entry.exclude?.some((p) => pathname.startsWith(p)) ?? false));
 
             return (
               <Link

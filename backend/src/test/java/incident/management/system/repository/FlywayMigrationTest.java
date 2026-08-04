@@ -46,11 +46,11 @@ class FlywayMigrationTest {
                 .as("Flyway migrate() should report success = true")
                 .isTrue();
         assertThat(result.migrationsExecuted)
-                .as("Expected exactly 5 migrations (V1 baseline + V2 refactor + V3 widen date_key + V4 analytics indexes + V5 password-reset hardening)")
-                .isEqualTo(5);
+                .as("Expected exactly 9 migrations (V1 baseline + V2 refactor + V3 widen date_key + V4 analytics indexes + V5 password-reset hardening + V6 CLOSED removal + V7 terminal indexes + V8 history status normalization + V9 incident attachments)")
+                .isEqualTo(9);
         assertThat(result.migrations)
                 .extracting(m -> m.version)
-                .containsExactly("1", "2", "3", "4", "5");
+                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9");
     }
 
     @Test
@@ -59,8 +59,8 @@ class FlywayMigrationTest {
 
         MigrationInfo[] applied = flyway.info().applied();
         assertThat(applied)
-                .as("Flyway schema_history should have 5 applied migrations")
-                .hasSize(5);
+                .as("Flyway schema_history should have 9 applied migrations")
+                .hasSize(9);
 
         assertThat(applied[0].getVersion().toString())
                 .as("First migration should be version 1")

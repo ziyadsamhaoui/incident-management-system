@@ -25,13 +25,17 @@ import incident.management.system.repository.IncidentRepository;
 import incident.management.system.repository.StationRepository;
 import incident.management.system.repository.UserRepository;
 import incident.management.system.security.CurrentUserResolver;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -208,36 +212,76 @@ public class IncidentServiceImpl implements IncidentService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<IncidentResponse> getAllIncidents(Pageable pageable) {
-        return incidentRepository.findAll(pageable).map(this::toResponse);
+    public Page<IncidentResponse> getFilteredIncidents(List<IncidentStatus> statuses,
+                                                      String search,
+                                                      Long departmentId,
+                                                      Long userId,
+                                                      LocalDate startDate,
+                                                      LocalDate endDate,
+                                                      String dateField,
+                                                      Pageable pageable) {
+        Specification<IncidentEntity> spec = buildFilterSpec(
+                statuses, search, departmentId, userId, startDate, endDate, dateField);
+        return incidentRepository.findAll(spec, pageable).map(this::toResponse);
     }
 
-    @Override
-    @Transactional(readOnly = true)
-    public Page<IncidentResponse> getIncidentsByUser(Long userId, Pageable pageable) {
-        UserEntity user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
-        return incidentRepository.findByUser(user, pageable).map(this::toResponse);
-    }
+    /**
+     * Builds the combined {@link Specification} behind {@code GET /api/incidents}.
+     * <p>
+     * All criteria are optional and AND-ed together:
+     * <ul>
+     *   <li>{@code statuses} — active group (DECLARED/CLAIMED/IN_PROGRESS) or
+     *       terminal group (RESOLVED/NON_RESOLVED) for the Logs tab;</li>
+     *   <li>{@code search} — case-insensitive pattern over reference, description
+     *       and resolutionNote (resolutionNote matters for the Logs tab);</li>
+     *   <li>{@code departmentId} / {@code userId} — scoping filters;</li>
+     *   <li>{@code startDate}/{@code endDate} — inclusive range on the
+     *       {@code dateField} column (declaredAt or resolvedAt).</li>
+     * </ul>
+     */
+    private Specification<IncidentEntity> buildFilterSpec(List<IncidentStatus> statuses,
+                                                          String search,
+                                                          Long departmentId,
+                                                          Long userId,
+                                                          LocalDate startDate,
+                                                          LocalDate endDate,
+                                                          String dateField) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
 
-    @Override
-    @Transactional(readOnly = true)
-    public Page<IncidentResponse> getIncidentsByDepartment(Long departmentId, Pageable pageable) {
-        DepartmentEntity department = departmentRepository.findById(departmentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Department", "id", departmentId));
-        return incidentRepository.findByDepartment(department, pageable).map(this::toResponse);
-    }
+            if (statuses != null && !statuses.isEmpty()) {
+                predicates.add(root.get("status").in(statuses));
+            }
 
-    @Override
-    @Transactional(readOnly = true)
-    public Page<IncidentResponse> getIncidentsByStatus(String status, Pageable pageable) {
-        IncidentStatus incidentStatus;
-        try {
-            incidentStatus = IncidentStatus.valueOf(status.toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Invalid status: " + status);
-        }
-        return incidentRepository.findByStatus(incidentStatus, pageable).map(this::toResponse);
+            if (search != null && !search.isBlank()) {
+                String like = "%" + search.trim().toLowerCase() + "%";
+                predicates.add(cb.or(
+                        cb.like(cb.lower(root.get("reference")), like),
+                        cb.like(cb.lower(root.get("description")), like),
+                        cb.like(cb.lower(root.get("resolutionNote")), like)
+                ));
+            }
+
+            if (departmentId != null) {
+                predicates.add(cb.equal(root.get("department").get("id"), departmentId));
+            }
+            if (userId != null) {
+                predicates.add(cb.equal(root.get("user").get("id"), userId));
+            }
+
+            if (startDate != null || endDate != null) {
+                String field = "resolvedAt".equalsIgnoreCase(dateField) ? "resolvedAt" : "declaredAt";
+                Path<LocalDateTime> timestamp = root.get(field);
+                if (startDate != null) {
+                    predicates.add(cb.greaterThanOrEqualTo(timestamp, startDate.atStartOfDay()));
+                }
+                if (endDate != null) {
+                    predicates.add(cb.lessThanOrEqualTo(timestamp, endDate.plusDays(1).atStartOfDay()));
+                }
+            }
+
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
     }
 
     //  ========================================================================

@@ -5,12 +5,14 @@ import incident.management.system.config.StandaloneWebMvcTestBase;
 import incident.management.system.controller.IncidentController;
 import incident.management.system.dto.CreateIncidentRequest;
 import incident.management.system.dto.EvaluateIncidentRequest;
+import incident.management.system.enums.IncidentStatus;
 import incident.management.system.service.IncidentService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
@@ -20,9 +22,14 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
 import java.lang.reflect.Method;
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -83,7 +90,8 @@ class IncidentControllerWebTest extends StandaloneWebMvcTestBase {
         @DisplayName("getIncidents(), getIncidentById(), progressIncident() have no @PreAuthorize")
         void listAndGetEndpoints_haveNoAnnotation() throws Exception {
             Method listMethod = IncidentController.class.getMethod("getIncidents",
-                    String.class, Long.class, Long.class, Pageable.class);
+                    List.class, String.class, Long.class, Long.class, LocalDate.class,
+                    LocalDate.class, String.class, Pageable.class);
             Method getMethod = IncidentController.class.getMethod("getIncidentById", Long.class);
             Method progressMethod = IncidentController.class.getMethod("progressIncident", Long.class);
 
@@ -212,6 +220,59 @@ class IncidentControllerWebTest extends StandaloneWebMvcTestBase {
         void getIncidents_returnsOk() throws Exception {
             mockMvc.perform(MockMvcRequestBuilders.get("/api/incidents"))
                     .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("GET /api/incidents?status=RESOLVED,NON_RESOLVED parses the terminal group and forwards filters")
+        void getIncidents_logsTab_forwardsTerminalStatuses() throws Exception {
+            mockMvc.perform(MockMvcRequestBuilders.get("/api/incidents")
+                            .param("status", "RESOLVED,NON_RESOLVED")
+                            .param("search", "broken takt")
+                            .param("startDate", "2026-05-01")
+                            .param("endDate", "2026-07-31")
+                            .param("dateField", "resolvedAt")
+                            .param("sort", "resolvedAt,desc"))
+                    .andExpect(status().isOk());
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<IncidentStatus>> statusesCaptor = ArgumentCaptor.forClass(List.class);
+            verify(incidentService).getFilteredIncidents(
+                    statusesCaptor.capture(),
+                    eq("broken takt"),
+                    isNull(),
+                    isNull(),
+                    eq(LocalDate.of(2026, 5, 1)),
+                    eq(LocalDate.of(2026, 7, 31)),
+                    eq("resolvedAt"),
+                    any(Pageable.class));
+
+            assertThat(statusesCaptor.getValue())
+                    .containsExactly(IncidentStatus.RESOLVED, IncidentStatus.NON_RESOLVED);
+        }
+
+        @Test
+        @DisplayName("GET /api/incidents?status=DECLARED,CLAIMED,IN_PROGRESS parses the active group")
+        void getIncidents_actifsTab_parsesActiveGroup() throws Exception {
+            mockMvc.perform(MockMvcRequestBuilders.get("/api/incidents")
+                            .param("status", "DECLARED")
+                            .param("status", "CLAIMED")
+                            .param("status", "IN_PROGRESS"))
+                    .andExpect(status().isOk());
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<IncidentStatus>> statusesCaptor = ArgumentCaptor.forClass(List.class);
+            verify(incidentService).getFilteredIncidents(
+                    statusesCaptor.capture(),
+                    isNull(),
+                    isNull(),
+                    isNull(),
+                    isNull(),
+                    isNull(),
+                    eq("declaredAt"),
+                    any(Pageable.class));
+
+            assertThat(statusesCaptor.getValue())
+                    .containsExactly(IncidentStatus.DECLARED, IncidentStatus.CLAIMED, IncidentStatus.IN_PROGRESS);
         }
 
         @Test

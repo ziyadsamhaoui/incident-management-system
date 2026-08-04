@@ -270,15 +270,21 @@ export default function AdminDashboardPage() {
     const byStatus = stats?.byStatus ?? {};
     const byPriority = stats?.byPriority ?? {};
     const total = Object.values(byStatus).reduce((a, b) => a + b, 0);
+    // The "Critiques" counter counts critical incidents still OPEN — resolved /
+    // non-resolved (terminal) criticals must not inflate it. Falls back to the
+    // priority stat while the incidents list is still loading.
+    const openCriticals = incidents.filter(
+      (i) => i.priority === 'CRITICAL' && i.status !== 'RESOLVED' && i.status !== 'NON_RESOLVED',
+    ).length;
     return {
       total,
       nonTraites: byStatus.DECLARED ?? 0,
-      critiques: byPriority.CRITICAL ?? 0,
+      critiques: incidentsFetch.data ? openCriticals : (byPriority.CRITICAL ?? 0),
       enTraitement: (byStatus.CLAIMED ?? 0) + (byStatus.IN_PROGRESS ?? 0),
       resolus: byStatus.RESOLVED ?? 0,
       nonResolus: byStatus.NON_RESOLVED ?? 0,
     };
-  }, [stats]);
+  }, [stats, incidents, incidentsFetch.data]);
 
   // 4.2 — Critical incidents still OPEN (real data, filtered client-side).
   // Resolved / non-resolved (terminal) criticals must leave the "critical now"

@@ -147,7 +147,7 @@ export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: H
             <Button
               variant="ghost"
               size="icon"
-              className="md:hidden text-slate-400 hover:text-slate-100 hover:bg-slate-800"
+              className="lg:hidden text-slate-400 hover:text-slate-100 hover:bg-slate-800"
               onClick={onToggleSidebar}
             >
               <Menu className="h-5 w-5" />
@@ -155,12 +155,12 @@ export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: H
             </Button>
           )}
 
-          {/* Admin search trigger — far left, wider (hidden on mobile, < 768px) */}
+          {/* Admin search trigger — far left, wider (hidden below lg) */}
           {isAdmin && (
             <Button
               variant="outline"
               size="sm"
-              className="hidden md:flex h-9 gap-2 text-slate-400 border-slate-700 hover:text-slate-100 hover:border-slate-600 md:min-w-[280px] lg:min-w-[400px] xl:min-w-[480px] justify-between"
+              className="hidden lg:flex h-9 gap-2 text-slate-400 border-slate-700 hover:text-slate-100 hover:border-slate-600 lg:min-w-[280px] xl:min-w-[400px] 2xl:min-w-[480px] justify-between"
               onClick={() => setSearchOpen(true)}
             >
               <span className="flex items-center gap-2 min-w-0">
@@ -177,12 +177,12 @@ export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: H
 
         {/* ── Right side: actions + user ───────────── */}
         <div className="flex items-center gap-2">
-          {/* Mobile search icon — visible below md breakpoint */}
+          {/* Mobile search icon — visible below lg */}
           {isAdmin && (
             <Button
               variant="ghost"
               size="icon"
-              className="md:hidden text-slate-400 hover:text-slate-100 hover:bg-slate-800 min-w-[44px] min-h-[44px]"
+              className="lg:hidden text-slate-400 hover:text-slate-100 hover:bg-slate-800 min-w-[44px] min-h-[44px]"
               onClick={() => setSearchOpen(true)}
             >
               <Search className="h-5 w-5" />
@@ -190,8 +190,13 @@ export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: H
             </Button>
           )}
 
-          {/* Notification bell — admin only, opens the dropdown panel */}
-          {isAdmin && <NotificationsDropdown />}
+          {/* Notification bell — admin only, header version is hidden below lg (the
+              mobile bottom bar hosts the notifications sheet on non-large displays) */}
+          {isAdmin && (
+            <div className="hidden lg:block">
+              <NotificationsDropdown />
+            </div>
+          )}
 
           {/* ── User Profile Dropdown ────────────────── */}
           <DropdownMenu>
@@ -212,11 +217,11 @@ export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: H
                     {initials || 'U'}
                   </AvatarFallback>
                 </Avatar>
-                {/* Full name — restored on md+ */}
-                <span className="hidden md:inline text-sm font-medium">
+                {/* Full name — restored on lg+ */}
+                <span className="hidden lg:inline text-sm font-medium">
                   {displayName}
                 </span>
-                <ChevronDown className="hidden h-3.5 w-3.5 text-slate-500 md:inline-block" />
+                <ChevronDown className="hidden h-3.5 w-3.5 text-slate-500 lg:inline-block" />
               </Button>
             </DropdownMenuTrigger>
 

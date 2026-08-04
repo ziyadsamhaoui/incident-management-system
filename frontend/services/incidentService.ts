@@ -9,12 +9,23 @@ import type {
 } from '@/types/incident';
 
 export interface IncidentListParams {
+  /** Legacy single-status filter (e.g. 'DECLARED'). */
   status?: string;
+  /** Multi-status group sent as comma-separated `status` (e.g. ['RESOLVED','NON_RESOLVED']). */
+  statuses?: string[];
+  /** Case-insensitive term matched against reference, description and resolutionNote. */
+  search?: string;
   departmentId?: number;
   userId?: number;
+  /** Inclusive lower bound (yyyy-MM-dd) on the `dateField` column. */
+  startDate?: string;
+  /** Inclusive upper bound (yyyy-MM-dd) on the `dateField` column. */
+  endDate?: string;
+  /** Timestamp column used by the date range: 'declaredAt' (default) or 'resolvedAt' (Logs). */
+  dateField?: string;
   page?: number;
   size?: number;
-  /** Spring Data sort, e.g. 'declaredAt,desc'. */
+  /** Spring Data sort, e.g. 'resolvedAt,desc'. */
   sort?: string;
 }
 
@@ -68,13 +79,21 @@ function mapIncident(raw: RawIncident): IncidentDTO {
 export async function getIncidents(
   params: IncidentListParams = {},
 ): Promise<Page<IncidentDTO>> {
+  const statusParam = params.statuses?.length
+    ? params.statuses.join(',')
+    : params.status;
+
   const { data } = await apiClient.get<Page<RawIncident>>('/api/incidents', {
     params: {
       page: params.page ?? 0,
       size: params.size ?? 20,
-      ...(params.status ? { status: params.status } : {}),
+      ...(statusParam ? { status: statusParam } : {}),
+      ...(params.search ? { search: params.search } : {}),
       ...(params.departmentId ? { departmentId: params.departmentId } : {}),
       ...(params.userId ? { userId: params.userId } : {}),
+      ...(params.startDate ? { startDate: params.startDate } : {}),
+      ...(params.endDate ? { endDate: params.endDate } : {}),
+      ...(params.dateField ? { dateField: params.dateField } : {}),
       ...(params.sort ? { sort: params.sort } : {}),
     },
   });

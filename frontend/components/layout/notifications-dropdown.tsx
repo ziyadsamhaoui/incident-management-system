@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useNavigationProgress } from '@/components/ui/navigation-progress';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bell,
   BellRing,
@@ -11,6 +12,7 @@ import {
   CheckCheck,
   Loader2,
   ChevronRight,
+  X,
   AlertTriangle,
   UserCheck,
   Activity,
@@ -21,8 +23,6 @@ import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -80,22 +80,19 @@ function notifTitle(n: NotificationDTO): string {
   return 'Notification';
 }
 
-// ── Component ─────────────────────────────────────
+// ── Shared data hook ──────────────────────────────
 
-export function NotificationsDropdown() {
-  const router = useRouter();
-  const { startNavigation } = useNavigationProgress();
-  const [open, setOpen] = useState(false);
+function useNotificationsData(active = true) {
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [localReadIds, setLocalReadIds] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
 
-  const { data: me } = useAsync(getMe, []);
+  const { data: me } = useAsync(active ? getMe : () => Promise.resolve(null), [active]);
   const meId = me?.id;
 
   const { data: page, loading, error, refetch } = useAsync(
-    () => (meId != null ? getAllNotifications(meId, { page: 0, size: 30 }) : Promise.resolve(null)),
-    [meId],
+    () => (active && meId != null ? getAllNotifications(meId, { page: 0, size: 30 }) : Promise.resolve(null)),
+    [meId, active],
   );
 
   const notifications = useMemo(
@@ -132,14 +129,206 @@ export function NotificationsDropdown() {
 
   const filtered = filter === 'unread' ? notifications.filter((n) => !n.isRead) : notifications;
 
+  return {
+    notifications,
+    unreadCount,
+    filtered,
+    filter,
+    setFilter,
+    loading,
+    error,
+    refetch,
+    markOneRead,
+    markAllRead,
+    busy,
+  };
+}
+
+type NotificationsData = ReturnType<typeof useNotificationsData>;
+
+// ── Panel content (shared by the header dropdown and the mobile bottom sheet) ──
+
+function NotificationsPanelContent({
+  data,
+  onItemClick,
+}: {
+  data: NotificationsData;
+  /** Called after an item navigates so the hosting surface (menu / sheet) can close. */
+  onItemClick?: () => void;
+}) {
+  const router = useRouter();
+  const { startNavigation } = useNavigationProgress();
+  const { filter, setFilter } = data;
+
   return (
-    <DropdownMenu
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (next) refetch();
-      }}
-    >
+    <div className="w-full">
+      {/* Header — title left, mark-all-as-read right */}
+      <div className="flex items-center justify-between gap-2 px-4 pb-2 pt-3.5">
+        <span className="text-sm font-semibold">Notifications</span>
+        {data.unreadCount > 0 && (
+          <button
+            type="button"
+            onClick={data.markAllRead}
+            disabled={data.busy}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-slate-100 disabled:opacity-50"
+          >
+            {data.busy ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <CheckCheck className="h-3 w-3" />
+            )}
+            Tout marquer comme lu
+          </button>
+        )}
+      </div>
+
+      {/* Read / unread tabs — left aligned */}
+      <div className="flex items-center gap-1.5 px-4 pb-2">
+        <button
+          type="button"
+          onClick={() => setFilter('all')}
+          className={cn(
+            'rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
+            filter === 'all'
+              ? 'bg-blue-600/15 text-blue-400'
+              : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200',
+          )}
+        >
+          <span className="flex items-center gap-1.5">
+            <BellRing className="h-3.5 w-3.5" />
+            Toutes
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilter('unread')}
+          className={cn(
+            'rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
+            filter === 'unread'
+              ? 'bg-blue-600/15 text-blue-400'
+              : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200',
+          )}
+        >
+          <span className="flex items-center gap-1.5">
+            <Bell className="h-3.5 w-3.5" />
+            Non lues
+            {data.unreadCount > 0 && (
+              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[9px] font-bold text-white">
+                {data.unreadCount}
+              </span>
+            )}
+          </span>
+        </button>
+      </div>
+
+      <div className="border-t border-slate-800" />
+
+      {/* List */}
+      <div className="max-h-[320px] overflow-y-auto">
+        {data.loading ? (
+          <div className="space-y-2 p-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <Skeleton className="h-8 w-8 rounded-lg" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-3 w-2/3" />
+                  <Skeleton className="h-2.5 w-5/6" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : data.error ? (
+          <div className="px-4 py-8 text-center text-xs text-slate-400">
+            Impossible de charger les notifications.
+          </div>
+        ) : data.filtered.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+            <BellOff className="h-6 w-6 text-slate-600" />
+            <p className="text-xs text-slate-400">
+              {filter === 'unread'
+                ? 'Aucune notification non lue'
+                : 'Aucune notification'}
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-800">
+            {data.filtered.map((notif) => {
+              const { icon: Icon, color } = notifStyle(notif.type);
+              return (
+                <button
+                  key={notif.id}
+                  type="button"
+                  onClick={() => {
+                    // Always mark as read when clicked
+                    if (!notif.isRead) data.markOneRead(notif.id);
+                    // Navigate to the linked incident detail when available
+                    if (notif.incidentId != null) {
+                      onItemClick?.();
+                      startNavigation();
+                      router.push(`/admin/incidents/${notif.incidentId}`);
+                    }
+                  }}
+                  className={cn(
+                    'flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-800/60',
+                    !notif.isRead && 'bg-blue-950/20',
+                  )}
+                >
+                  <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', color)}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className={cn(
+                        'truncate text-xs',
+                        !notif.isRead ? 'font-semibold text-slate-100' : 'font-medium text-slate-400',
+                      )}>
+                        {notifTitle(notif)}
+                      </p>
+                      <span className="shrink-0 text-[10px] text-slate-500">
+                        {formatRelativeTime(notif.createdAt)}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-400/80">
+                      {notif.message}
+                    </p>
+                    {notif.incidentReference && (
+                      <p className="mt-0.5 font-mono text-[10px] text-slate-500">
+                        {notif.incidentReference}
+                      </p>
+                    )}
+                  </div>
+                  {!notif.isRead && (
+                    <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-blue-500" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-slate-800" />
+
+      {/* Footer — full notifications page */}
+      <Link
+        href="/admin/notifications"
+        onClick={onItemClick}
+        className="flex items-center justify-between px-4 py-2.5 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-800/60 hover:text-slate-100"
+      >
+        Voir toutes les notifications
+        <ChevronRight className="h-3.5 w-3.5" />
+      </Link>
+    </div>
+  );
+}
+
+// ── Header bell dropdown (admin, lg+) ─────────────
+
+export function NotificationsDropdown() {
+  const data = useNotificationsData();
+
+  return (
+    <DropdownMenu onOpenChange={(next) => { if (next) data.refetch(); }}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
@@ -148,9 +337,9 @@ export function NotificationsDropdown() {
           aria-label="Notifications"
         >
           <Bell className="h-5 w-5" />
-          {unreadCount > 0 && (
+          {data.unreadCount > 0 && (
             <span className="absolute right-0.5 top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
-              {unreadCount > 9 ? '9+' : unreadCount}
+              {data.unreadCount > 9 ? '9+' : data.unreadCount}
             </span>
           )}
         </Button>
@@ -161,164 +350,74 @@ export function NotificationsDropdown() {
         forceMount
         className="w-[min(92vw,380px)] border-slate-800 bg-slate-900 p-0 text-slate-100 shadow-2xl shadow-black/50"
       >
-        {/* Header — title left, mark-all-as-read right */}
-        <div className="flex items-center justify-between gap-2 px-4 pb-2 pt-3.5">
-          <span className="text-sm font-semibold">Notifications</span>
-          {unreadCount > 0 && (
-            <button
-              type="button"
-              onClick={markAllRead}
-              disabled={busy}
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-slate-100 disabled:opacity-50"
-            >
-              {busy ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <CheckCheck className="h-3 w-3" />
-              )}
-              Tout marquer comme lu
-            </button>
-          )}
-        </div>
-
-        {/* Read / unread tabs — left aligned */}
-        <div className="flex items-center gap-1.5 px-4 pb-2">
-          <button
-            type="button"
-            onClick={() => setFilter('all')}
-            className={cn(
-              'rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
-              filter === 'all'
-                ? 'bg-blue-600/15 text-blue-400'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200',
-            )}
-          >
-            <span className="flex items-center gap-1.5">
-              <BellRing className="h-3.5 w-3.5" />
-              Toutes
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilter('unread')}
-            className={cn(
-              'rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
-              filter === 'unread'
-                ? 'bg-blue-600/15 text-blue-400'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200',
-            )}
-          >
-            <span className="flex items-center gap-1.5">
-              <Bell className="h-3.5 w-3.5" />
-              Non lues
-              {unreadCount > 0 && (
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[9px] font-bold text-white">
-                  {unreadCount}
-                </span>
-              )}
-            </span>
-          </button>
-        </div>
-
-        <DropdownMenuSeparator className="bg-slate-800" />
-
-        {/* List */}
-        <div className="max-h-[320px] overflow-y-auto">
-          {loading ? (
-            <div className="space-y-2 p-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <Skeleton className="h-8 w-8 rounded-lg" />
-                  <div className="flex-1 space-y-1.5">
-                    <Skeleton className="h-3 w-2/3" />
-                    <Skeleton className="h-2.5 w-5/6" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : error ? (
-            <div className="px-4 py-8 text-center text-xs text-slate-400">
-              Impossible de charger les notifications.
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
-              <BellOff className="h-6 w-6 text-slate-600" />
-              <p className="text-xs text-slate-400">
-                {filter === 'unread'
-                  ? 'Aucune notification non lue'
-                  : 'Aucune notification'}
-              </p>
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-800">
-              {filtered.map((notif) => {
-                const { icon: Icon, color } = notifStyle(notif.type);
-                return (
-                  <button
-                    key={notif.id}
-                    type="button"
-                    onClick={() => {
-                      // Always mark as read when clicked
-                      if (!notif.isRead) markOneRead(notif.id);
-                      // Navigate to the linked incident detail when available
-                      if (notif.incidentId != null) {
-                        setOpen(false);
-                        startNavigation();
-                        router.push(`/admin/incidents/${notif.incidentId}`);
-                      }
-                    }}
-                    className={cn(
-                      'flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-800/60',
-                      !notif.isRead && 'bg-blue-950/20',
-                    )}
-                  >
-                    <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', color)}>
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className={cn(
-                          'truncate text-xs',
-                          !notif.isRead ? 'font-semibold text-slate-100' : 'font-medium text-slate-400',
-                        )}>
-                          {notifTitle(notif)}
-                        </p>
-                        <span className="shrink-0 text-[10px] text-slate-500">
-                          {formatRelativeTime(notif.createdAt)}
-                        </span>
-                      </div>
-                      <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-400/80">
-                        {notif.message}
-                      </p>
-                      {notif.incidentReference && (
-                        <p className="mt-0.5 font-mono text-[10px] text-slate-500">
-                          {notif.incidentReference}
-                        </p>
-                      )}
-                    </div>
-                    {!notif.isRead && (
-                      <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-blue-500" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        <DropdownMenuSeparator className="bg-slate-800" />
-
-        {/* Footer — full page (DropdownMenuItem auto-closes the menu on click) */}
-        <DropdownMenuItem asChild className="focus:bg-slate-800 focus:text-slate-100">
-          <Link
-            href="/admin/notifications"
-            className="flex items-center justify-between px-2 py-2 text-xs font-medium text-slate-300 hover:text-slate-100"
-          >
-            Voir toutes les notifications
-            <ChevronRight className="h-3.5 w-3.5" />
-          </Link>
-        </DropdownMenuItem>
+        <NotificationsPanelContent data={data} />
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+// ── Mobile bottom-bar notifications sheet (below lg) ──
+
+export function NotificationsSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  // Only fetch below lg (where the bottom bar is visible) so desktop sessions
+  // don't duplicate the header dropdown's notification requests.
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1023px)');
+    const update = () => setNarrow(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+
+  const data = useNotificationsData(narrow);
+
+  // Refresh whenever the sheet is opened.
+  useEffect(() => {
+    if (open) data.refetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            key="notif-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm lg:hidden"
+            onClick={onClose}
+          />
+
+          {/* Sheet */}
+          <motion.div
+            key="notif-sheet"
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+            className="fixed bottom-0 inset-x-0 z-[70] bg-slate-900 border-t border-slate-800 rounded-t-2xl max-h-[75vh] overflow-y-auto lg:hidden"
+          >
+            {/* Handle */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 sticky top-0 bg-slate-900 z-10">
+              <span className="text-sm font-semibold text-slate-200">Notifications</span>
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <NotificationsPanelContent data={data} onItemClick={onClose} />
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
   );
 }

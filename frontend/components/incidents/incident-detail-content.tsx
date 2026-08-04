@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { IncidentStepper } from '@/components/incidents/incident-stepper';
 import { EvaluationModal } from '@/components/incidents/evaluation-modal';
+import { AttachmentSection } from '@/components/incidents/attachment-section';
 import { StatusDotLabel } from '@/lib/constants/incidentStatus';
 import {
   claimIncident,
@@ -377,6 +378,13 @@ export function IncidentDetailContent({
             </CardContent>
           </Card>
         )}
+
+      {/* ── Attachments (read-only when terminal) ── */}
+      <AttachmentSection
+        incidentId={incident.id}
+        isTerminal={incident.status === 'RESOLVED' || incident.status === 'NON_RESOLVED'}
+        compact={compact}
+      />
 
       {/* ── Action Controls (ADMIN only) ──────────── */}
       {isAdmin && (

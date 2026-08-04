@@ -21,6 +21,7 @@ import {
   FileText,
   Activity,
   CheckCircle2,
+  Archive,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -53,12 +54,11 @@ const PRIORITY_LABELS: Record<string, string> = { LOW: 'Faible', MEDIUM: 'Moyenn
 const PRIORITY_CLASSES: Record<string, string> = { LOW: 'text-slate-500 bg-slate-100 dark:bg-slate-800', MEDIUM: 'text-amber-600 bg-amber-50 dark:bg-amber-900/20', HIGH: 'text-orange-600 bg-orange-50 dark:bg-orange-900/20', CRITICAL: 'text-red-600 bg-red-50 dark:bg-red-900/20' };
 const PRIORITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
+// Actifs page — resolved incidents live on the Logs page (/chef-atelier/logs).
 const STATUS_OPTIONS = [
   { value: 'DECLARED', label: 'Déclaré' },
   { value: 'CLAIMED', label: 'Pris en charge' },
   { value: 'IN_PROGRESS', label: 'En cours' },
-  { value: 'RESOLVED', label: 'Résolu' },
-  { value: 'NON_RESOLVED', label: 'Non résolu' },
 ];
 
 const PRIORITY_OPTIONS = [
@@ -339,7 +339,16 @@ export default function ChefAtelierIncidentsPage() {
   const PAGE_SIZE = 10;
 
   //  Real data
-  const incidentsFetch = useAsync(() => getIncidents({ size: 200 }), []);
+  // Active states only — resolved incidents live on the Logs page (/chef-atelier/logs).
+  const incidentsFetch = useAsync(
+    () => getIncidents({ statuses: ['DECLARED', 'CLAIMED', 'IN_PROGRESS'], size: 200 }),
+    [],
+  );
+  // Cheap count of resolved incidents for the "Terminés" stat card.
+  const resolvedCountFetch = useAsync(
+    () => getIncidents({ statuses: ['RESOLVED'], page: 0, size: 1 }),
+    [],
+  );
   const deptsFetch = useAsync(() => getDepartments(), []);
   const catsFetch = useAsync(() => getCategories(), []);
 
@@ -399,13 +408,11 @@ export default function ChefAtelierIncidentsPage() {
 
   // Stats — system-wide, unaffected by filters
   const stats = {
-    total: allIncidents.length,
+    total: allIncidents.length + (resolvedCountFetch.data?.totalElements ?? 0),
     open: allIncidents.filter((i) => i.status === 'DECLARED').length,
     inProgress: allIncidents.filter((i) => i.status === 'IN_PROGRESS').length,
-    // Terminal states (RESOLVED / NON_RESOLVED) — the CLOSED stage no longer exists
-    terminal: allIncidents.filter(
-      (i) => i.status === 'RESOLVED' || i.status === 'NON_RESOLVED',
-    ).length,
+    // Resolved incidents archive (Logs page).
+    terminal: resolvedCountFetch.data?.totalElements ?? 0,
   };
 
   const totalPages = Math.max(1, Math.ceil(filteredIncidents.length / PAGE_SIZE));
@@ -489,14 +496,25 @@ export default function ChefAtelierIncidentsPage() {
               Consultez et gérez les incidents du système
             </p>
           </div>
-          <Button
-            size="sm"
-            className="h-9 gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white"
-            onClick={() => router.push('/sous-chef/incidents/declare')}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Déclarer
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5 text-xs"
+              onClick={() => router.push('/chef-atelier/logs')}
+            >
+              <Archive className="h-3.5 w-3.5" />
+              Logs
+            </Button>
+            <Button
+              size="sm"
+              className="h-9 gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={() => router.push('/sous-chef/incidents/declare')}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Déclarer
+            </Button>
+          </div>
         </div>
 
         {/*  Statistics Grid  */}
@@ -522,11 +540,11 @@ export default function ChefAtelierIncidentsPage() {
                   className="h-10 w-full pl-9"
                 />
               </div>
-              {/* Mobile-only filter tab (opens the filter dialog) */}
+              {/* Mobile-only filter tab (opens the filter dialog) — small & medium displays */}
               <button
                 type="button"
                 onClick={() => setFilterOpen(true)}
-                className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-input bg-background text-muted-foreground transition-colors hover:bg-muted sm:hidden"
+                className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-input bg-background text-muted-foreground transition-colors hover:bg-muted lg:hidden"
                 aria-label="Filtrer les incidents"
               >
                 <SlidersHorizontal className="h-4 w-4" />
@@ -538,8 +556,8 @@ export default function ChefAtelierIncidentsPage() {
               </button>
             </div>
 
-            {/* Desktop filters (hidden on mobile — replaced by the filter dialog) */}
-            <div className="hidden sm:flex flex-wrap items-center gap-2">
+            {/* Desktop filters (hidden below lg — replaced by the filter dialog) */}
+            <div className="hidden lg:flex flex-wrap items-center gap-2">
               <MultiSelectDropdown
                 label="Statut"
                 options={STATUS_OPTIONS}
@@ -656,7 +674,7 @@ export default function ChefAtelierIncidentsPage() {
 
         {/* Desktop table */}
         {!incidentsFetch.loading && !incidentsFetch.error && !systemZero && !filteredEmpty && (
-          <div className="hidden md:block">
+          <div className="hidden lg:block">
             <Card>
               <CardContent className="p-0">
                 <div className="overflow-x-auto">
@@ -755,7 +773,7 @@ export default function ChefAtelierIncidentsPage() {
 
         {/* Mobile cards */}
         {!incidentsFetch.loading && !incidentsFetch.error && !systemZero && !filteredEmpty && (
-          <div className="md:hidden space-y-3">
+          <div className="lg:hidden space-y-3">
             {paginated.map((inc) => {
               const cfg = getStatusConfig(inc.status);
               const CatIcon = CATEGORY_ICONS[inc.category] ?? AlertTriangle;

@@ -29,7 +29,7 @@
 - **Admin Heatmap:** `"Aucune évaluation enregistrée sur cette période."`
 
 ### 0.5 Service Layer (`frontend/services/`)
-- `incidentService.ts` — `getIncidents`, `getIncidentById`, `getIncidentHistory`, `getIncidentDetail`, `getStaleIncidents`, `createIncident`, `claimIncident`, `progressIncident`, `evaluateIncident` (+ raw→DTO mapper).
+- `incidentService.ts` — `getIncidents` (extended params: comma-joined `statuses`, `search`, `departmentId`, `userId`, `startDate`/`endDate` + `dateField`, `sort`), `getIncidentById`, `getIncidentHistory`, `getIncidentDetail`, `getStaleIncidents`, `createIncident`, `claimIncident`, `progressIncident`, `evaluateIncident` (+ raw→DTO mapper).
 - `dashboardService.ts` — `getDashboardStats`, `getActivityLog`, `getRecentActivities`, `getAdminActivity`.
 - `userService.ts` — `getMe`, `getUsers`, `createUser`, `promoteUser`, `deactivateUser`, `setMyDepartment`.
 - `referenceService.ts` — read `getCategories/Departments/Sections/ProductionLines/Stations` + admin writes.
@@ -44,6 +44,7 @@
 - `GET /api/me` + `PATCH /api/users/me/department` — current user session context + one-shot onboarding.
 - `GET /api/reference-data/{categories|departments|sections|production-lines|stations}` — any authenticated role.
 - `GET /api/notifications/all` — full notification history (read + unread).
+- `GET /api/incidents` — extended query params: comma-joined multi-`status` group (Actifs: `DECLARED,CLAIMED,IN_PROGRESS` / Logs: `RESOLVED,NON_RESOLVED`), `search` (case-insensitive over `reference`/`description`/**`resolutionNote`**), `departmentId`, `userId`, inclusive `startDate`/`endDate` bounds on a `dateField` column (`declaredAt` default, `resolvedAt` for Logs), plus Spring `page`/`size`/`sort`.
 
 ### 0.7 Mutation Conventions
 - Mutations call the real API then `refetch()` the affected query (no optimistic-in-place hacks).
@@ -106,20 +107,25 @@
 - GitHub-style contribution grid tracking `evaluateIncident()` actions over 12 months.
 - 52-week grid with 5 intensity levels (`bg-green-200` through `bg-green-800`).
 - Legend, total action count, month/day labels.
-- Mock data — replace with `GET /api/dashboard/admin-activity?adminId=X`.
+- **Real data:** feeds from `GET /api/dashboard/admin-activity` (evaluations per calendar day over the last 12 months).
 - **NOT built** for SOUS_CHEF or CHEF_ATELIER dashboards (prevents gamification hazards).
+
+### 1.12 Critical Counter & Heatmap Fixes (Dashboard)
+- **Critiques stat card** counts **open** critical incidents only — `RESOLVED` / `NON_RESOLVED` (terminal) criticals are excluded from the counter (falls back to the by-priority stat while the incidents list loads). The "critical-now" hero widget already used the same predicate.
+- **Heatmap 500 fix (`V8__normalize_incident_history_status_values.sql`):** `incident_history.previous_status/current_status` are `VARCHAR(20)` columns but the entity lacked `@Enumerated(EnumType.STRING)`, so JPA's default ORDINAL strategy wrote numbers (`'0'-'4'`) into them. The derived query `findByCurrentStatusInAndChangedAtAfter` then bound *integers* against the string column → Postgres `operator does not exist: character varying = integer` → HTTP 500 on the heatmap. Fix: the entity now maps both columns as `@Enumerated(EnumType.STRING)` and the migration backfills legacy ordinal values to their enum names (`'RESOLVED'`, `'NON_RESOLVED'`, …); the audit activity feed (`/api/dashboard/activity`) also benefits (proper status names).
 
 ## Section 2: ADMIN Incidents Workspace (`/admin/incidents/`)
 
 ### 2.1 Page Header & View Toggle
 - Title: `"Incidents"` + subtitle: `"Vue globale, tous départements"`.
-- Segmented control: **Liste** (`LayoutList`) / **Tableau** (`Columns3`). Persisted in `localStorage` key `admin_incidents_view_mode`.
+- **Actifs page only** — resolved (terminal) incidents live on the dedicated **Logs page**, reachable from the sidebar `Logs` entry (`/admin/incidents/logs`). The Actifs page sends the `status=DECLARED,CLAIMED,IN_PROGRESS` group to the API.
+- **Liste / Tableau view toggle** (`LayoutList` / `Columns3`, persisted in `localStorage` key `admin_incidents_view_mode`). The kanban board hosts the 3 active columns only — Kanban is strictly forbidden for terminal states (see §2.7).
 - Secondary `"+ Déclarer"` button.
 
 ### 2.2 Multi-Filter Bar & Active Chips
 **Controls (persistent, single-row toolbar):**
 - **Search:** text input (reference code, description, reporter name/matricule).
-- **Status:** multi-select dropdown (`Déclaré`, `Pris en charge`, `En cours`, `Résolu`, `Non résolu`).
+- **Status:** multi-select dropdown restricted to the Actifs group (`Déclaré`, `Pris en charge`, `En cours`) — terminal statuses are managed via the Logs outcome segmented control (§2.7).
 - **Priority:** multi-select dropdown (`Faible`, `Moyenne`, `Élevée`, `Critique`).
 - **Department:** multi-select dropdown (unscoped across all departments).
 - **Category:** multi-select dropdown.
@@ -144,8 +150,8 @@
 - **Evaluate** (`status === IN_PROGRESS`): Opens Evaluate modal with outcome radio + mandatory note.
 - **View:** Direct link to `/admin/incidents/[id]`.
 
-### 2.4 Board View (Kanban)
-- **Columns:** `Déclaré` → `Pris en charge` → `En cours` → `Résolu / Non résolu`.
+### 2.4 Board View (Kanban — Actifs only)
+- **Columns:** `Déclaré` → `Pris en charge` → `En cours` (3 active columns — terminal states never appear on the board; they are archived in the Logs tab).
 - **Breakpoint:** Available on desktop/tablet (≥768px). Hidden on mobile.
 
 **Drag-and-Drop State Machine:**
@@ -170,6 +176,20 @@
 - **Terminal States:** `RESOLVED` and `NON_RESOLVED` are the terminal states of the incident state machine. There is **no auto-close** — the `CLOSED` status and its 10-minute scheduler were removed (see `V6__migrate_closed_incidents.sql` for the historical backfill).
 
 **Shared Evaluation Modal:** Reuses `components/incidents/evaluation-modal.tsx` (portal-based, centered on large, full-bleed on mobile).
+
+### 2.7 Logs Page — Resolved Incidents Archive (Sidebar)
+- **Navigation:** the Logs archive is a dedicated page reached from the sidebar — `Logs` (`/admin/incidents/logs`, ADMIN) and a `Logs` header button on the chef-atelier page (`/chef-atelier/logs`, CHEF_ATELIER). The Actifs page no longer hosts tabs. The sidebar `Incidents` entry uses exact pathname matching so the `Logs` child route highlights independently.
+- **Resolved only:** the Logs pages send `status=RESOLVED` (resolved incidents **only** — no `NON_RESOLVED`, no outcome filter) plus `dateField=resolvedAt` and `sort=resolvedAt,desc` on the same `GET /api/incidents` endpoint (no parallel route).
+- **No implicit date window:** resolved incidents are **not** hidden behind a default window — `startDate`/`endDate` are sent only when the user explicitly picks them (this fixes resolved incidents silently disappearing). `page`/`size` are honored by the API for scale-out.
+- **Logs filter row (`components/incidents/logs-filter-bar.tsx`):** mirrors the Incidents page filter UX — on small & medium displays (`< lg`) a search input plus a filter-dialog button (badge with active count) opens a chip-based dialog (Département ADMIN-only, Catégorie, Priorité, resolvedAt date range); on `lg+` the full inline row renders (Département select ADMIN-only — sent as `departmentId`; CHEF_ATELIER stays server-side department-scoped — Catégorie + Priorité multi-selects, resolvedAt date range, `Réinitialiser` ghost button).
+- **Desktop table (lg+):** Reference | Catégorie | Département (ADMIN only) | Outcome badge (green `Résolu`) | Résolu par | Date de résolution (relative) | Note de résolution (single-line truncated).
+- **Mobile/medium cards (below lg):** green left spine, line 1 = reference + category badge + relative resolved time, line 2 = `Résolu` badge + "Résolu par [nom]" accountability subtitle, line 3 = truncated resolution-note excerpt.
+- **Read-only rows:** no Claim/Evaluate/Reopen actions anywhere — the entire row deep-links to the read-only detail view (`/admin/incidents/[id]`, or the drawer for CHEF_ATELIER), which renders no mutation controls for terminal states.
+- **Export dropdown (PDF / Excel / CSV):** "Exporter" opens a menu — CSV (`lib/csv.ts`, UTF-8 BOM + `;` separator), Excel `.xlsx` (SheetJS `xlsx`) and PDF (jsPDF + `jspdf-autotable`) all download the filtered resolved set as `incidents-logs-<date>.<ext>`, respecting the active department/category/date filters (shared `lib/export.ts`).
+- **Empty states:** system zero → "Aucun incident archivé"; filter mismatch → "Aucun résultat pour ces filtres" + "Réinitialiser les filtres" CTA.
+- **i18n:** every string in the Logs UI goes through `useTranslation()` (FR/AR in `lib/i18n.ts`) — no hardcoded copy.
+- **Pagination:** client-side within the bounded fetch (10/page), "Affichage de X à Y sur Z" + Précédent/Suivant.
+- **Responsive breakpoints (`lg` shell):** on the incidents pages the desktop table + kanban render at **`lg+`** only; small **and medium** displays (phones, iPad mini…) use the card layout. The whole navigation shell follows the same `lg` split: the sidebar collapses and the bottom tab bar (Dashboard / Incidents / Users / Notifs / Plus) appears below `lg`; the header hides the notification bell below `lg` (the bottom-bar **Notifs** tab opens a notifications bottom sheet), and page-header actions (users "Nouvel Utilisateur", incidents view-mode + "Déclarer") sit on the very left below `lg` and move right on `lg+`.
 
 ## Routes Covered
 - `/admin/incidents/` — Unscoped incident management
@@ -242,6 +262,64 @@
 - **NO auto-login.** On success the API returns `role` + `loginIdentifier`; the UI shows "Mot de passe mis à jour, connectez-vous." then redirects to the correct lane with the identifier pre-filled (`/login?lane=CHEF_ATELIER&matricule=…` or `/admin/login?email=…`).
 - **Expired/invalid token:** explicit copy *"Ce code a expiré, veuillez en demander un nouveau."* with direct links back to both request screens (§4.2 / §4.3).
 - **Lockout clearance:** completing a reset calls `user.resetFailedAttempts()` — `failedLoginAttempts` is zeroed and `lockoutEnd` cleared, so the post-reset login lane shows no residual lockout timer.
+
+## Section 5: Self-Hosted Local Media Pipeline (Photos / Video / Voice Clips)
+
+### 5.1 Architecture Directive
+- **Cloud object storage was REMOVED.** Media bytes live on the application host's **local filesystem**; PostgreSQL stores **metadata only** (`incident_attachments`). There is no S3/R2 dependency (AWS SDK v2 deps, `StorageConfig`, `S3StorageService`, `StorageProperties`, the presigned DTOs and the `upload-url`/`confirm` endpoints were all deleted in the session-resume cleanup).
+- **Layout & traversal safety:** `{app.media.storage-path}/{incidentId}/{uuid}.{ext}`. Physical file names are **server-generated UUIDs**; the user's original filename is stored in the DB for display only and is NEVER used to build a filesystem path. Every resolved path is normalized and verified to stay under the storage root (`LocalFileStorageService`).
+- **Memory safety:** `POST /api/incidents/{id}/attachments` (multipart) streams bytes straight to disk via `MultipartFile.transferTo(Path)` — **`file.getBytes()` is FORBIDDEN** (JVM heap exhaustion). `spring.servlet.multipart.max-file-size=30MB` / `max-request-size=35MB` plus a dedicated `location` temp dir.
+- **Authenticated serving & video seeking:** `GET /api/incidents/{id}/attachments/{attId}` is served by `ResourceHttpRequestHandler` (via `SimpleUrlHandlerMapping`) with native `Accept-Ranges: bytes` / 206 partial content, so video players scrub without full downloads. Authorization is enforced **inside** `MediaFileResourceResolver`: either a short-lived HMAC signed read token (for `<img>`/`<video>`/`<audio>` tags, which cannot send `Authorization` headers) or the normal JWT session with full department/ownership scoping (shared `MediaAccessPolicy` — ADMIN / CHEF_ATELIER department / SOUS_CHEF own; deactivated accounts rejected). The path is `permitAll()` at the security layer but is unreachable without a valid token or session.
+- **Known trade-off:** the signed read token travels in the URL query string (`?token=…`) because media tags cannot send headers — it is short-lived (15 min) and bound to one incident + attachment, but it will appear in proxy/access logs. Not a credential; treat logs accordingly.
+- **Retention:** daily `@Scheduled` job (`MediaRetentionJob`, 03:15) deletes local files via `Files.deleteIfExists()` and their rows for terminal incidents (`RESOLVED`/`NON_RESOLVED`) older than `app.media.retention-days` (default 90).
+
+### 5.2 Endpoint Surface (single multipart request, no presigning)
+1. **`POST /api/incidents/{id}/attachments`** — `multipart/form-data` with `file` (+ optional `fileType`). Backend: access check → terminal-state lock (`409`) → count/size/MIME guardrails → `LocalFileStorageService.store()` (streams via `transferTo`) → **16-byte magic-byte sniff** (delete + `400` on mismatch) → persist metadata row → `201`.
+2. **`GET /api/incidents/{id}/attachments`** — gallery with fresh signed read URLs.
+3. **`GET /api/incidents/{id}/attachments/{attId}?token=…`** — streamed file bytes with Range support (HMAC token or JWT session).
+4. **`GET /api/incidents/attachments/storage-status`** — Admin metrics: `SELECT SUM(file_size_bytes)` from the DB + real host headroom via `Files.getFileStore().getUsableSpace()`.
+
+### 5.3 Server-Side Guardrails (`IncidentAttachmentService`)
+- **Terminal-state lock:** uploads rejected with `409` when the parent incident is `RESOLVED` or `NON_RESOLVED` (attachments become read-only).
+- **Hard limits:** max **5 attachments/incident** (`409`); image ≤ **5 Mo**, video ≤ **25 Mo**, audio ≤ **5 Mo** (`400`); per-type MIME allow-list (`400`).
+- **Access scoping** mirrors incident list rules: ADMIN everything, CHEF_ATELIER own department, SOUS_CHEF own declared incidents (`403` otherwise).
+- **Magic-byte validation (`MagicByteValidator`):** MIME-aware — JPEG `FF D8 FF`, PNG `89 50 4E 47`, GIF `GIF8`, WebP `RIFF…WEBP`, HEIC/HEIF/AVIF `ftyp`, MP4/MOV `ftyp`, WebM EBML, MP3 frame header, WAV `RIFF…WAVE`, etc.
+
+### 5.4 Client-Side Capture & Optimization
+- **Photos:** `browser-image-compression` — long edge ≤ **1280 px**, JPEG re-encode at **70–80 %** quality before the upload request.
+- **Video:** HTML5/MediaRecorder capture capped at **30 s / 720p** in-browser.
+- **Voice clips:** integrated MediaRecorder component, max **60 s**, `audio/webm` (Opus) or `audio/mp4` (AAC); treated as `fileType = AUDIO`.
+- **UI (`components/incidents/attachment-section.tsx`):** gallery (image lightbox, native `<video>`/`<audio>` players, uploader + per-file progress bars), Photo/Vidéo/Note vocale capture buttons, slot counter (`x / 5`), read-only mode on terminal incidents. The upload is now a **single multipart POST** (`services/attachmentService.ts → uploadAttachment`) with `onUploadProgress` — the presigned `upload-url`/`confirm` steps were removed. Integrated into `IncidentDetailContent` (chef drawer, sous-chef detail, chef logs drawer) and the admin `/admin/incidents/[id]` page.
+
+### 5.5 Configuration, Host Mount & Degradation
+- **`application.properties` (env-overridable):**
+  - `app.media.storage-path` (`MEDIA_STORAGE_PATH`, default `/data/incident-media`) — **MUST be outside the deployment directory** so redeploys never wipe media.
+  - `app.media.retention-days` (`MEDIA_RETENTION_DAYS`, default 90).
+  - `app.media.signing-secret` (`MEDIA_SIGNING_SECRET`) — HMAC secret for signed read URLs; falls back to a dev default with a loud warning (always set in production).
+  - `app.media.read-token-ttl-minutes` (`MEDIA_READ_TOKEN_TTL_MINUTES`, default 15).
+  - `spring.servlet.multipart.max-file-size=30MB`, `max-request-size=35MB`, `location=${java.io.tmpdir}/icglma-media-uploads` (dedicated temp dir).
+- **Docker:** `compose.yaml` declares a `media-data` named volume to mount `/data/incident-media` (comment block shows the backend service attachment). Never let media live in a container-local path.
+- **Native systemd:** create `/data/incident-media` on the host and grant read/write to the application process user (`chown appuser:appuser`).
+- **Nginx production option (X-Accel-Redirect — zero-copy `sendfile` + Range):** the Spring resolver performs the authorization check only; on success it may answer with `X-Accel-Redirect: /protected-media/{incidentId}/{uuid}.{ext}` and Nginx streams the file from disk. Sample block (the storage dir must NEVER be exposed as a public static location):
+  ```nginx
+  # /etc/nginx/conf.d/media.conf
+  location /protected-media/ {
+      alias /data/incident-media/;   # same root as app.media.storage-path
+      internal;                      # 404 for any direct external access
+      add_header Accept-Ranges bytes;
+  }
+  ```
+  The built-in Spring `ResourceHttpRequestHandler` path (Option A) is active by default and already supports byte ranges; Option B is an Nginx-level optimization for production.
+- **Disk redundancy acknowledgment:** local disk has **no cloud multi-region replication** — durability depends on host-level backup routines (nightly host snapshots or `rsync` to an off-box target). This trade-off is accepted in exchange for zero egress costs and full data locality.
+
+### 5.6 Anti-Patterns (enforced)
+1. No `file.getBytes()` / heap buffering — multipart streams via `transferTo`.
+2. No user-controlled filenames on disk — server-generated UUIDs only (originals are display-only DB columns).
+3. No unauthenticated public static serving of the storage directory.
+4. No hardcoded paths — injected via `@ConfigurationProperties(prefix = "app.media")` (env-driven).
+5. No unbounded scans — retention is bounded by terminal status + cutoff; list reads are paginated.
+
+---
 
 ### 4.5 Cross-Cutting Rules
 - **Lockout escape hatch:** the public request endpoints are NOT gated behind `isLocked()` — a locked account can still request a reset (then reset clears the lock via §4.4).

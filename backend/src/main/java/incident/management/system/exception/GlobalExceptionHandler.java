@@ -8,6 +8,8 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MultipartException;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -139,6 +141,58 @@ public class GlobalExceptionHandler {
                         HttpStatus.BAD_REQUEST.value(),
                         HttpStatus.BAD_REQUEST.getReasonPhrase(),
                         ex.getMessage()));
+    }
+
+    // ──────────────────────────────────────────────
+    //  D2. Attachment Policy Violation → 4xx (status carried by the exception)
+    // ──────────────────────────────────────────────
+
+    /**
+     * Handles {@link AttachmentPolicyException} (terminal-state lock, attachment
+     * count/size/MIME limits, storage access denied…). The HTTP status is carried
+     * by the exception itself (400 / 403 / 404 / 409).
+     */
+    @ExceptionHandler(AttachmentPolicyException.class)
+    public ResponseEntity<ErrorResponse> handleAttachmentPolicy(AttachmentPolicyException ex) {
+        log.warn("Attachment policy violation ({}): {}", ex.getStatus(), ex.getMessage());
+        return ResponseEntity
+                .status(ex.getStatus())
+                .body(ErrorResponse.of(
+                        ex.getStatus().value(),
+                        ex.getStatus().getReasonPhrase(),
+                        ex.getMessage()));
+    }
+
+    // ──────────────────────────────────────────────
+    //  D3. Type-Mismatch / Multipart Errors → 400
+    // ──────────────────────────────────────────────
+
+    /**
+     * Handles {@link MethodArgumentTypeMismatchException} (e.g. an invalid
+     * {@code fileType} enum value on the media upload endpoint) as a 400
+     * instead of falling into the generic 500 catch-all.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        log.warn("Bad request (type mismatch on '{}'): {}", ex.getName(), ex.getMessage());
+        return ResponseEntity.badRequest().body(ErrorResponse.of(
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                "Paramètre invalide : " + ex.getName()));
+    }
+
+    /**
+     * Handles {@link MultipartException} (malformed multipart body, missing
+     * part, or a file exceeding {@code spring.servlet.multipart.max-file-size})
+     * as a 400 — client input problem, never a server failure.
+     */
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<ErrorResponse> handleMultipart(MultipartException ex) {
+        log.warn("Multipart upload rejected: {}", ex.getMessage());
+        return ResponseEntity.badRequest().body(ErrorResponse.of(
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                "Requête multipart invalide ou fichier trop volumineux."));
     }
 
     // ──────────────────────────────────────────────
