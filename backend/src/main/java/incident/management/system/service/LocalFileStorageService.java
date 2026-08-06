@@ -111,6 +111,23 @@ public class LocalFileStorageService {
         }
     }
 
+    /**
+     * Deletes the physical file for a stored relative key (path-traversal
+     * guarded, like {@link #resolve(String)}).
+     *
+     * @return {@code true} when a file was actually present on disk and removed
+     *         — used by the admin media surface to report exact freed bytes;
+     *         {@code false} when the file was already gone or deletion failed
+     */
+    public boolean deleteIfExistsReported(String objectKey) {
+        try {
+            return Files.deleteIfExists(resolve(objectKey));
+        } catch (IOException e) {
+            log.warn("Failed to delete media file {}: {}", objectKey, e.getMessage());
+            return false;
+        }
+    }
+
     /** Copies bytes between paths using streaming (used only by the retention job tests / fallbacks). */
     public void moveTo(Path source, Path target) {
         try {

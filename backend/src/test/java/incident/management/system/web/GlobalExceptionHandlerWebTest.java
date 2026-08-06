@@ -45,7 +45,7 @@ class GlobalExceptionHandlerWebTest extends StandaloneWebMvcTestBase {
     class CreateIncidentValidation {
 
         @Test
-        @DisplayName("all null fields → 400 Bad Request with 6 field errors")
+        @DisplayName("all null required fields → 400 Bad Request with 5 field errors (description optional)")
         void allNullFields_returns400WithFieldErrors() throws Exception {
             var request = new CreateIncidentRequest(null, null, null, null, null, null);
 
@@ -60,22 +60,19 @@ class GlobalExceptionHandlerWebTest extends StandaloneWebMvcTestBase {
                     .andExpect(jsonPath("$.errors.departmentId").exists())
                     .andExpect(jsonPath("$.errors.stationId").exists())
                     .andExpect(jsonPath("$.errors.categoryId").exists())
-                    .andExpect(jsonPath("$.errors.priority").exists())
-                    .andExpect(jsonPath("$.errors.description").exists());
+                    .andExpect(jsonPath("$.errors.priority").exists());
         }
 
         @Test
-        @DisplayName("blank description → 400 with single field error")
-        void blankDescription_returns400WithFieldError() throws Exception {
+        @DisplayName("blank description → accepted (description is optional)")
+        void blankDescription_isAccepted() throws Exception {
             var request = new CreateIncidentRequest(
                     1L, 1L, 1L, 1L, IncidentPriority.HIGH, "   ");
 
             mockMvc.perform(post("/api/incidents")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.status").value(400))
-                    .andExpect(jsonPath("$.errors.description").exists());
+                    .andExpect(status().isCreated());
         }
 
         @Test

@@ -42,7 +42,12 @@ public class IncidentAttachmentEntity {
     @JoinColumn(name = "incident_id", nullable = false)
     private IncidentEntity incident;
 
-    @Column(nullable = false, unique = true, length = 512)
+    /**
+     * Server-generated relative file path ({@code {incidentId}/{uuid}.{ext}}).
+     * NULL once the admin surface has soft-deleted this record (the physical
+     * file was removed from disk; the row survives as an audit stub).
+     */
+    @Column(unique = true, length = 512)
     private String objectKey;
 
     /** Original (sanitized) file name, for display only. */
@@ -66,4 +71,20 @@ public class IncidentAttachmentEntity {
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime uploadedAt;
+
+    /** True once an ADMIN has deleted the file via the media management surface. */
+    @Column(name = "is_deleted", nullable = false)
+    @Builder.Default
+    private boolean deleted = false;
+
+    /** When the admin deletion happened (audit). */
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
+    /**
+     * Legal audit trail, e.g. {@code "Photo supprimée par Jane_Doe_1001 le 05/08/2026 14:30"}.
+     * Populated when {@link #deleted} is set — never cleared.
+     */
+    @Column(name = "deletion_audit", length = 255)
+    private String deletionAudit;
 }

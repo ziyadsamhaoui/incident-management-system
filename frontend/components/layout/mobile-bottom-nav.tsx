@@ -96,7 +96,7 @@ export function MobileBottomNav({ isVisible = true, onNavigate }: MobileBottomNa
         { label: 'Stations', href: '/admin/reference?tab=stations' },
       ],
     },
-    { label: 'Logs', href: '/admin/incidents/logs', icon: Archive },
+    { label: 'Archives', href: '/admin/incidents/logs', icon: Archive },
     { label: 'My Subscriptions', href: '/admin/subscriptions', icon: BellRing },
     { label: 'Settings', href: '/admin/settings', icon: Settings },
   ];

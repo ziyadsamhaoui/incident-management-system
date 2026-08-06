@@ -10,7 +10,7 @@ Full-stack incident management for factory floor teams: **Next.js (App Router) +
 | Backend   | Spring Boot, Spring Security (JWT), Spring Data JPA, Flyway |
 | Database  | PostgreSQL 15 |
 | Storage   | **Self-hosted local disk** (`app.media.storage-path`, default `/data/incident-media`) — streamed multipart uploads, Range-capable serving |
-| Deployment| Railway (frontend + backend + Postgres) + Nginx (optional `X-Accel-Redirect` media delivery) |
+| Deployment| Docker Compose (self-hosted VPS, multi-stage Dockerfiles + Nginx) or Railway; optional `X-Accel-Redirect` media delivery |
 
 ## Quick start (dev)
 
@@ -29,7 +29,7 @@ cd frontend && npm install && npm run dev   # http://localhost:3000
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5432/icglma_local` | PostgreSQL connection |
-| `JWT_SECRET` *(not env-wired yet)* | committed dev secret | change in prod |
+| `JWT_SECRET` | committed dev secret — override via env in prod | JWT signing |
 | `MAIL_USERNAME` / `MAIL_PASSWORD` | committed Gmail app password | password-reset emails (Track B) |
 | `MEDIA_STORAGE_PATH` | `/data/incident-media` | root dir for media files — **must be outside the deployment directory** (mount a host volume in Docker, see below) |
 | `MEDIA_RETENTION_DAYS` | `90` | terminal-incident media older than this is purged by the daily retention job |
@@ -39,6 +39,7 @@ cd frontend && npm install && npm run dev   # http://localhost:3000
 | `MULTIPART_MAX_REQUEST_SIZE` | `35MB` | `spring.servlet.multipart.max-request-size` |
 | `MULTIPART_LOCATION` | `${java.io.tmpdir}/icglma-media-uploads` | dedicated temp dir for multipart buffering |
 | `APP_FRONTEND_URL` | `http://localhost:3000` | reset-email deep-link origin |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:3000,http://localhost:4200,http://localhost:8080` | comma-separated browser origins allowed to call the API |
 
 > **Media storage is self-hosted.** Without a writable `MEDIA_STORAGE_PATH` the app still boots; uploads answer `503` and the UI degrades gracefully. The directory must be writable by the app process user.
 
@@ -84,6 +85,7 @@ Set `MEDIA_STORAGE_PATH` on the backend service to a persistent volume path (Rai
 
 ## Project docs
 
+- `docs/DEPLOYMENT.md` — production deployment: VPS + Docker Compose + Nginx + TLS.
 - `docs/WORKFLOW.md` — implementation workflow & conventions (incidents workspace, logs archive, auth hardening, reset flows, media pipeline).
 - `docs/PROJECT_STATUS.md` — completed phases & status.
 - `docs/HR_ROSTER_IMPL.md` — HR roster seeding.

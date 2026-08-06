@@ -36,10 +36,12 @@ build/
 
 ### Misc ###
 misc.txt
-/docs/AGENT_SUMMARY.md
 /docs/EMPTY.md
 cp.txt
 test.log
 /frontend/nul
 /docs/applicationlogs.txt
 /docs/cicd_logs.txt
+/docs/AGENT_SUMMARY.md
+/docs/DEPLOYMENT.md
+/docs/text

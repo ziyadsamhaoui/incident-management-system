@@ -4,6 +4,8 @@ import incident.management.system.enums.IncidentPriority;
 import incident.management.system.enums.IncidentStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -50,10 +52,16 @@ public class IncidentEntity {
     @JoinColumn(name = "category_id")
     private CategoryEntity category;
 
-    @Column(nullable = false)
+    // EnumType.STRING: incidents.priority / status are VARCHAR(20) in the schema.
+    // Without @Enumerated(STRING) Hibernate defaults to ORDINAL (smallint) and
+    // ddl-auto=validate fails with "wrong column type … found varchar, but
+    // expecting smallint" (same class of bug V8 fixed for incident_history).
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
     private IncidentPriority priority;
 
-    @Column(nullable = false)
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
     private IncidentStatus status;
 
     @Column(length = 2000)

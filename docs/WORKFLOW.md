@@ -321,6 +321,50 @@
 
 ---
 
+# Media Administration & Quota Management Surface (`/admin/media`)
+
+## Section 6: Media Management & Quota Surface
+
+### 6.1 Scope & Content Exclusion Rules
+- **Included types:** `IMAGE` (Photos) and `VIDEO` only.
+- **Explicit exclusion:** `AUDIO` / voice clips are strictly **EXCLUDED** from this administrative surface — they remain accessible only on their respective Incident Detail pages. Every backend query on this surface hard-codes `file_type IN ('IMAGE', 'VIDEO')` in the `AdminMediaService` filter specification, and the controller rejects `fileType=AUDIO` with a 400.
+- **Route & guard:** `frontend/app/(admin)/admin/media/page.tsx` under the ADMIN layout; backend `AdminMediaController` carries class-level `@PreAuthorize("hasRole('ADMIN')")`.
+
+### 6.2 Backend Endpoint Surface (`/api/admin/media`)
+1. **`GET /api/admin/media`** — paginated inventory. Filters: `search` (case-insensitive on incident reference), `departmentId`, `fileType` (`IMAGE`|`VIDEO` only), inclusive `startDate`/`endDate` on `uploadedAt`, and `sort` tokens `newest` (default) / `oldest` / `largest` (`fileSizeBytes,desc` — critical for finding storage hogs). Every item carries a fresh signed read URL plus `retentionDaysRemaining` (days until the daily retention job would purge it — only computed for terminal `RESOLVED`/`NON_RESOLVED` incidents; `null` otherwise).
+2. **`GET /api/admin/media/stats`** — storage summary strip payload: `SELECT SUM(file_size_bytes)` over **non-deleted** rows (total + per-type), photo/video counts, and real host disk headroom via `Files.getFileStore().getUsableSpace()`.
+3. **`DELETE /api/admin/media/{id}`** — single deletion.
+4. **`POST /api/admin/media/bulk-delete`** — body `{ "ids": [Long…] }` (the codebase uses BIGSERIAL attachment ids, not UUIDs). Returns `{ deletedCount, freedBytes, skippedIds }`; `skippedIds` reports unknown/already-deleted ids without failing the batch.
+
+### 6.3 Deletion Strategy — Physical Removal + DB Audit Stub (ANTI-PATTERN: NO hard DB deletes)
+- **Ordering:** the DB audit stub is persisted FIRST, then the physical file is removed. If the persist fails, the transaction rolls back cleanly and the file is untouched — a live row can never be left pointing at a deleted file.
+- **DB:** the metadata row is **soft-deleted** — `object_key = NULL` (the `file_url` equivalent: the row can no longer be served), `is_deleted = TRUE`, `deleted_at` set, and an immutable audit string: `"Photo supprimée par [First Last] le dd/MM/yyyy HH:mm"` (Vidéo for videos).
+- **Disk:** the physical file is hard-deleted via `LocalFileStorageService.deleteIfExistsReported(...)` — returns whether the file actually existed, so the bulk summary reports **exact** freed bytes (a file already purged by retention counts as 0).
+- **Type guard on delete paths too:** `AUDIO` ids are rejected on `DELETE /api/admin/media/{id}` (400) and skipped in `POST /api/admin/media/bulk-delete` — voice clips can never be removed through this surface.
+- The unique constraint on `object_key` stays — Postgres allows multiple NULLs, so audit stubs accumulate freely.
+- **Audit-stub isolation:** soft-deleted rows are excluded everywhere else — `MediaFileResourceResolver` answers 404 (never serves a stub), `GET /api/incidents/{id}/attachments` filters them out, the retention job's `findExpiredTerminal` skips them, and `SUM(file_size_bytes)` metrics exclude them.
+- The retention job (`MediaRetentionJob`, terminal incidents > `app.media.retention-days`) still **hard-deletes** rows — that is the scheduled lifecycle purge, distinct from admin-initiated deletions.
+
+### 6.4 Frontend (`/admin/media`)
+- **Storage Summary Strip** (`components/media/storage-summary-strip.tsx`): total stored bytes, Photos vs Vidéos segmented bar + legend, disk headroom (usable/total) and a usage badge that turns amber ≥ 80 % and red ≥ 90 % — answers *"Are we running out of disk?"* at a glance. Amber banner when storage is not configured.
+- **View toggle:** Grid (thumbnail-forward, default) vs List/table (metadata-rich), persisted in `localStorage` key `admin_media_view_mode`.
+- **Filters:** search (reference), department dropdown (ADMIN scope), `Du`/`Au` date range, type segmented control (`Tous` | `Photos` | `Vidéos`), sort dropdown incl. **`Taille de fichier (Décroissant)`**, active-filter reset. Search is debounced (350 ms); server-side pagination (24/page).
+- **Item data points:** thumbnail / file-type icon, hyperlinked incident reference → `/admin/incidents/[id]`, department & category, type badge, formatted size, upload timestamp + uploader full name.
+- **Inspector modal** (`components/media/media-preview-modal.tsx`, remounted via `key` per item): full image preview with zoom toggle OR inline HTML5 video player with controls; live technical spec read from the element (image dimensions WxH / video duration); metadata panel (incident link, uploader, department, category, size, upload date); **retention countdown badge** ("Suppression automatique dans X jours", red ≤ 7 j / amber ≤ 30 j / green otherwise; muted "Conservé — incident en cours" for open incidents); `[Supprimer le fichier]` CTA with inline confirmation.
+- **Bulk management:** checkbox per item + header checkbox (page scope, indeterminate state) + **"Tout sélectionner selon les filtres"** (fetches the full filtered set, capped at 500 ids). Contextual action bar shows count + cumulative size. `[Supprimer les fichiers sélectionnés]` opens the **calculated confirmation modal** (`components/media/bulk-delete-modal.tsx`): "Voulez-vous supprimer X fichiers ? Espace libéré : Y" — explicit admin validation is mandatory before anything is removed. Success banner reports freed space; skipped/already-deleted ids are surfaced.
+- **Service:** `services/mediaService.ts` — `getAdminMedia` (absolutizes signed media URLs against `API_BASE_URL`), `getAdminMediaStats`, `deleteMediaItem`, `bulkDeleteMedia`, `formatFileSize` / `formatMediaDate`. Types in `types/media.ts`.
+- **Navigation:** sidebar entry **`Médias`** (`/admin/media`) under the ADMIN nav.
+
+### 6.5 i18n
+- The app's i18n lives in `lib/i18n.ts` (no `fr.json`/`ar.json` files — the project has no `public/locales` directory). French + Arabic keys for this surface are registered under the `mediaAdmin*` namespace in both dictionaries.
+
+### 6.6 Anti-Patterns (enforced)
+1. No AUDIO / voice-clip items anywhere on this surface — list queries hard-code `IN ('IMAGE','VIDEO')`, `fileType=AUDIO` is rejected with 400, and the delete paths refuse/skip AUDIO ids.
+2. No silent hard DB deletions — every admin deletion leaves an audit stub (`is_deleted = TRUE` + `deletion_audit`).
+3. No unconfirmed bulk deletes — the bulk endpoint returns exact freed bytes and the UI always shows the calculated confirmation modal first.
+
+---
+
 ### 4.5 Cross-Cutting Rules
 - **Lockout escape hatch:** the public request endpoints are NOT gated behind `isLocked()` — a locked account can still request a reset (then reset clears the lock via §4.4).
 - **Rate limiting:** `POST /api/auth/**` is limited to **5 req/min/IP** (`RateLimitRule.AUTH`); `request-manual` gets a stricter dedicated **3 req/15 min/IP** (`PASSWORD_RESET_MANUAL`). All three screens render the `Retry-After` seconds as a visual countdown on 429.

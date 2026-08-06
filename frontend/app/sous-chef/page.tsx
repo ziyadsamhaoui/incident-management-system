@@ -368,22 +368,12 @@ export default function SousChefIncidentsPage() {
         </div>
       </div>
 
-      {/* Mobile fixed CTA — right-aligned with periodic attention wiggle */}
+      {/* Mobile fixed CTA — right-aligned */}
       <div className="md:hidden fixed bottom-6 right-6 z-50">
         <motion.button
           type="button"
           onClick={goToDeclare}
           whileTap={{ scale: 0.92 }}
-          animate={{
-            scale: [1, 1.1, 1],
-            rotate: [0, 4, 4, 0],
-          }}
-          transition={{
-            duration: 1.2,
-            repeat: Infinity,
-            repeatDelay: 5,
-            ease: 'easeInOut',
-          }}
           className={cn(
             'flex items-center justify-center gap-2 rounded-xl px-5 py-3',
             'bg-blue-600 hover:bg-blue-700 active:bg-blue-800',

@@ -113,8 +113,8 @@ export default function AdminIncidentsLogsPage() {
               <ArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5" />
               Retour aux incidents
             </button>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight">Logs</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Incidents résolus — historique archivé</p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight">Archives</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Incidents résolus, historique archivé</p>
           </div>
         </div>
 

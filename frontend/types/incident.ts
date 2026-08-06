@@ -86,7 +86,8 @@ export interface CreateIncidentRequest {
   stationId: number;
   categoryId: number;
   priority: IncidentPriority;
-  description: string;
+  /** Optional free-text note — the backend accepts null (photo-only declarations). */
+  description: string | null;
 }
 
 /** Payload for PUT /api/incidents/{id}/evaluate */

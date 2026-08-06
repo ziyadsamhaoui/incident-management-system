@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerMapping;
 import org.springframework.web.servlet.resource.ResourceResolver;
 import org.springframework.web.servlet.resource.ResourceResolverChain;
@@ -34,6 +35,7 @@ import java.util.Map;
  * department/ownership scoping). The token binds to a specific incident +
  * attachment and was only issued to an authorized caller by the list endpoint.
  */
+@Component
 @RequiredArgsConstructor
 @Slf4j
 public class MediaFileResourceResolver implements ResourceResolver {
@@ -75,29 +77,37 @@ public class MediaFileResourceResolver implements ResourceResolver {
     }
 
     private Resource resolveForUser(long incidentId, long attachmentId, UserEntity user) {
-        IncidentAttachmentEntity attachment = attachmentRepository.findById(attachmentId)
-                .orElseThrow(() -> new AttachmentPolicyException(HttpStatus.NOT_FOUND, "Pièce jointe introuvable."));
-        if (attachment.getIncident() == null
-                || attachment.getIncident().getId() == null
-                || attachment.getIncident().getId() != incidentId) {
-            throw new AttachmentPolicyException(HttpStatus.NOT_FOUND, "Pièce jointe introuvable.");
-        }
+        IncidentAttachmentEntity attachment = loadLiveAttachment(incidentId, attachmentId);
         MediaAccessPolicy.assertCanAccess(attachment.getIncident(), user);
         return fileResource(attachment);
     }
 
     private Resource resolveFile(long incidentId, long attachmentId) {
+        return fileResource(loadLiveAttachment(incidentId, attachmentId));
+    }
+
+    /**
+     * Loads the attachment and verifies it is still live — matching incident
+     * AND not soft-deleted by the admin media surface. Soft-deleted audit stubs
+     * keep their row but lost their file pointer ({@code object_key = NULL}), so
+     * they must answer 404 rather than crash.
+     */
+    private IncidentAttachmentEntity loadLiveAttachment(long incidentId, long attachmentId) {
         IncidentAttachmentEntity attachment = attachmentRepository.findById(attachmentId)
                 .orElseThrow(() -> new AttachmentPolicyException(HttpStatus.NOT_FOUND, "Pièce jointe introuvable."));
         if (attachment.getIncident() == null
                 || attachment.getIncident().getId() == null
-                || attachment.getIncident().getId() != incidentId) {
+                || attachment.getIncident().getId() != incidentId
+                || attachment.isDeleted()) {
             throw new AttachmentPolicyException(HttpStatus.NOT_FOUND, "Pièce jointe introuvable.");
         }
-        return fileResource(attachment);
+        return attachment;
     }
 
     private Resource fileResource(IncidentAttachmentEntity attachment) {
+        if (attachment.getObjectKey() == null) {
+            throw new AttachmentPolicyException(HttpStatus.NOT_FOUND, "Pièce jointe introuvable.");
+        }
         Path path = fileStorage.resolve(attachment.getObjectKey());
         if (!Files.exists(path) || !Files.isRegularFile(path)) {
             throw new AttachmentPolicyException(HttpStatus.NOT_FOUND,

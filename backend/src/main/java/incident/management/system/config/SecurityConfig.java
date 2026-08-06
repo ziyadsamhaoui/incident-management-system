@@ -5,6 +5,7 @@ import incident.management.system.security.JwtAuthenticationFilter;
 import incident.management.system.security.MultiChannelAuthenticationProvider;
 import incident.management.system.security.RateLimitingFilter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -33,6 +34,16 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final MultiChannelAuthenticationProvider multiChannelAuthenticationProvider;
     private final RateLimitingFilter rateLimitingFilter;
+
+    /**
+     * Browser origins allowed to call the API (CORS). Comma-separated,
+     * overridable at deploy time via {@code CORS_ALLOWED_ORIGINS} (relaxed
+     * binding) — e.g. {@code https://app.example.com} in production.
+     * Never set to {@code *}: credentials are enabled, and browsers reject a
+     * wildcard origin together with {@code Access-Control-Allow-Credentials}.
+     */
+    @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:4200,http://localhost:8080}")
+    private List<String> allowedOrigins;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -69,10 +80,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of(
-                "http://localhost:3000",
-                "http://localhost:4200",
-                "http://localhost:8080"));
+        configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);

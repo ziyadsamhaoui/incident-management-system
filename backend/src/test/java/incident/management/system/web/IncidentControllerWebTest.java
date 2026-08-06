@@ -204,7 +204,7 @@ class IncidentControllerWebTest extends StandaloneWebMvcTestBase {
         }
 
         @Test
-        @DisplayName("POST /api/incidents with null fields → 400 with field errors")
+        @DisplayName("POST /api/incidents with null required fields → 400 with field errors")
         void createIncident_nullFields_returns400() throws Exception {
             mockMvc.perform(post("/api/incidents")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -212,7 +212,11 @@ class IncidentControllerWebTest extends StandaloneWebMvcTestBase {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.error").value("Validation Failure"))
                     .andExpect(jsonPath("$.errors.userId").exists())
-                    .andExpect(jsonPath("$.errors.description").exists());
+                    .andExpect(jsonPath("$.errors.departmentId").exists())
+                    .andExpect(jsonPath("$.errors.stationId").exists())
+                    .andExpect(jsonPath("$.errors.categoryId").exists())
+                    .andExpect(jsonPath("$.errors.priority").exists());
+            // description is optional (nullable) — it must NOT produce a validation error.
         }
 
         @Test

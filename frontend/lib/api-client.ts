@@ -11,7 +11,7 @@ import type { ApiError } from '@/types/auth';
 //  Client-side API client
 // ──────────────────────────────────────────────────
 
-const API_BASE_URL =
+export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 const apiClient = axios.create({

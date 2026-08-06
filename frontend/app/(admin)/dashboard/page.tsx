@@ -456,7 +456,7 @@ export default function AdminDashboardPage() {
               ) : (
                 <>
                   <ResponsiveContainer width="100%" height={180}>
-                    <PieChart>
+                    <PieChart margin={{ top: 12, right: 12, bottom: 8, left: 8 }}>
                       <Pie
                         data={statusChartData}
                         cx="50%"
@@ -502,7 +502,7 @@ export default function AdminDashboardPage() {
                 />
               ) : (
                 <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={deptChartData}>
+                  <BarChart data={deptChartData} margin={{ top: 16, right: 16, bottom: 4, left: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                     <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} />
@@ -534,7 +534,7 @@ export default function AdminDashboardPage() {
                 />
               ) : (
                 <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={priorityChartData}>
+                  <BarChart data={priorityChartData} margin={{ top: 16, right: 16, bottom: 4, left: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                     <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} />

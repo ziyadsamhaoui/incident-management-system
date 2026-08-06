@@ -46,11 +46,11 @@ class FlywayMigrationTest {
                 .as("Flyway migrate() should report success = true")
                 .isTrue();
         assertThat(result.migrationsExecuted)
-                .as("Expected exactly 9 migrations (V1 baseline + V2 refactor + V3 widen date_key + V4 analytics indexes + V5 password-reset hardening + V6 CLOSED removal + V7 terminal indexes + V8 history status normalization + V9 incident attachments)")
-                .isEqualTo(9);
+                .as("Expected exactly 10 migrations (V1 baseline + V2 refactor + V3 widen date_key + V4 analytics indexes + V5 password-reset hardening + V6 CLOSED removal + V7 terminal indexes + V8 history status normalization + V9 incident attachments + V10 admin media soft-delete)")
+                .isEqualTo(10);
         assertThat(result.migrations)
                 .extracting(m -> m.version)
-                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9");
+                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10");
     }
 
     @Test
@@ -59,8 +59,8 @@ class FlywayMigrationTest {
 
         MigrationInfo[] applied = flyway.info().applied();
         assertThat(applied)
-                .as("Flyway schema_history should have 9 applied migrations")
-                .hasSize(9);
+                .as("Flyway schema_history should have 10 applied migrations")
+                .hasSize(10);
 
         assertThat(applied[0].getVersion().toString())
                 .as("First migration should be version 1")
@@ -178,6 +178,15 @@ class FlywayMigrationTest {
         assertColumnExists("users", "role");
         assertColumnExists("incidents", "reference");
         assertColumnExists("incidents", "status");
+
+        // V10 admin media management — soft-delete audit stub columns
+        assertColumnExists("incident_attachments", "is_deleted");
+        assertColumnExists("incident_attachments", "deleted_at");
+        assertColumnExists("incident_attachments", "deletion_audit");
+        // object_key lost its NOT NULL constraint (NULLed on soft-delete)
+        assertColumnNullable("incident_attachments", "object_key");
+        assertIndexExists("idx_attachment_admin_list");
+        assertIndexExists("idx_attachment_stats");
     }
 
     @Test
@@ -247,6 +256,22 @@ class FlywayMigrationTest {
                     .isFalse();
         } catch (Exception e) {
             throw new RuntimeException("Failed to verify column absence: " + columnName, e);
+        }
+    }
+
+    private void assertColumnNullable(String tableName, String columnName) {
+        try (Connection conn = getConnection();
+             var stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(
+                     "SELECT is_nullable FROM information_schema.columns " +
+                     "WHERE table_schema = 'public' AND table_name = '" + tableName + "' " +
+                     "AND column_name = '" + columnName + "'")) {
+            rs.next();
+            assertThat(rs.getString("is_nullable"))
+                    .as("Column '%s' on table '%s' should be nullable", columnName, tableName)
+                    .isEqualTo("YES");
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to verify nullable column: " + columnName, e);
         }
     }
 

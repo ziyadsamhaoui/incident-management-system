@@ -1,4 +1,4 @@
-import apiClient from '@/lib/api-client';
+import apiClient, { API_BASE_URL } from '@/lib/api-client';
 import type { AttachmentType, IncidentAttachment } from '@/types/attachment';
 
 export interface UploadProgress {
@@ -7,6 +7,20 @@ export interface UploadProgress {
   /** bytes transferred */
   loaded: number;
   total: number;
+}
+
+// ── Media URL helpers ───────────────────────────────
+
+/**
+ * The backend returns RELATIVE media paths ({@code /api/incidents/...}); the
+ * Next.js server does not proxy {@code /api}, so browsers must request the
+ * media straight from the API origin ({@code NEXT_PUBLIC_API_URL}), otherwise
+ * <img>/<video>/<audio> tags hit the frontend origin and render a broken/gray
+ * thumbnail.
+ */
+function absolutizeFileUrl(fileUrl: string | null): string | null {
+  if (!fileUrl) return null;
+  return /^https?:\/\//.test(fileUrl) ? fileUrl : `${API_BASE_URL}${fileUrl}`;
 }
 
 // ── Reads ───────────────────────────────────────────
@@ -18,7 +32,7 @@ export async function getAttachments(
   const { data } = await apiClient.get<IncidentAttachment[]>(
     `/api/incidents/${incidentId}/attachments`,
   );
-  return data;
+  return data.map((att) => ({ ...att, fileUrl: absolutizeFileUrl(att.fileUrl) }));
 }
 
 // ── Multipart upload (self-hosted local pipeline) ───
@@ -40,6 +54,11 @@ export async function uploadAttachment(
     `/api/incidents/${incidentId}/attachments`,
     form,
     {
+      // The shared apiClient defaults to 'Content-Type: application/json', which
+      // makes axios JSON.stringify() the FormData — the backend then rejects the
+      // request with 415 (multipart-only endpoint). Override the header so the
+      // browser sends a proper multipart/form-data body with a boundary.
+      headers: { 'Content-Type': 'multipart/form-data' },
       // Up to 25 Mo per video can exceed the default 15 s client timeout.
       timeout: 0,
       onUploadProgress: (e) => {
@@ -49,5 +68,5 @@ export async function uploadAttachment(
       },
     },
   );
-  return data;
+  return { ...data, fileUrl: absolutizeFileUrl(data.fileUrl) };
 }

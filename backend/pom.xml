@@ -88,14 +88,16 @@
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
-
-        <!-- Runtime Infrastructure & Utilities -->
+        <!-- Spring Boot 4 moved auto-configuration into per-technology modules:
+             without spring-boot-flyway on the classpath, FlywayAutoConfiguration
+             never runs and no migration is ever applied (the schema stayed empty
+             and Hibernate ddl-auto=validate reported missing tables). -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-docker-compose</artifactId>
-            <scope>runtime</scope>
-            <optional>true</optional>
+            <artifactId>spring-boot-flyway</artifactId>
         </dependency>
+
+        <!-- Runtime Infrastructure & Utilities -->
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-prometheus</artifactId>

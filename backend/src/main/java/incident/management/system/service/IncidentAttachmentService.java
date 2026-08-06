@@ -176,7 +176,9 @@ public class IncidentAttachmentService {
         IncidentEntity incident = getIncident(incidentId);
         UserEntity user = CurrentUserResolver.resolve(userRepository);
         MediaAccessPolicy.assertCanAccess(incident, user);
+        // Soft-deleted audit stubs (admin media surface) never surface here.
         return attachmentRepository.findByIncidentIdOrderByUploadedAtDesc(incidentId).stream()
+                .filter(a -> !a.isDeleted())
                 .map(this::toResponse)
                 .toList();
     }
@@ -293,7 +295,7 @@ public class IncidentAttachmentService {
                         entity.getUploadedBy().getMatricule())
                 : null;
         Long incidentId = entity.getIncident() != null ? entity.getIncident().getId() : null;
-        String fileUrl = incidentId != null
+        String fileUrl = incidentId != null && !entity.isDeleted()
                 ? "/api/incidents/" + incidentId + "/attachments/" + entity.getId()
                 + "?token=" + urlSigner.sign(incidentId, entity.getId())
                 : null;

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
 import {
   ChevronLeft,
   Mic,
@@ -13,15 +12,27 @@ import {
   Zap,
   MessageSquare,
   Factory,
+  Camera,
+  AlertCircle,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useAsync } from '@/lib/use-async';
 import { getCategories, getStations, getDepartments } from '@/services/referenceService';
 import { createIncident } from '@/services/incidentService';
+import { uploadAttachment } from '@/services/attachmentService';
+import { compressImage, MAX_ATTACHMENTS_PER_INCIDENT, validateMedia } from '@/lib/media';
 import { getMe } from '@/services/userService';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 
 // ── Constants ─────────────────────────────────────
@@ -52,15 +63,15 @@ const CATEGORY_PRESETS: Record<string, string[]> = {
 };
 
 // Category label → icon mapping (visual only, derived from real data).
-function categoryIcon(label: string): React.ReactNode {
+function categoryIcon(label: string, className = 'h-8 w-8'): React.ReactNode {
   const key = label.toLowerCase();
-  if (key.includes('sécur') || key.includes('secur')) return <Shield className="h-8 w-8" />;
-  if (key.includes('accident')) return <Wrench className="h-8 w-8" />;
-  if (key.includes('réclam') || key.includes('reclam')) return <MessageSquare className="h-8 w-8" />;
-  if (key.includes('électr') || key.includes('electr')) return <Zap className="h-8 w-8" />;
-  if (key.includes('mécan') || key.includes('mecan')) return <Wrench className="h-8 w-8" />;
-  if (key.includes('panne')) return <Zap className="h-8 w-8" />;
-  return <Factory className="h-8 w-8" />;
+  if (key.includes('sécur') || key.includes('secur')) return <Shield className={className} />;
+  if (key.includes('accident')) return <Wrench className={className} />;
+  if (key.includes('réclam') || key.includes('reclam')) return <MessageSquare className={className} />;
+  if (key.includes('électr') || key.includes('electr')) return <Zap className={className} />;
+  if (key.includes('mécan') || key.includes('mecan')) return <Wrench className={className} />;
+  if (key.includes('panne')) return <Zap className={className} />;
+  return <Factory className={className} />;
 }
 
 const PRIORITIES = [
@@ -69,6 +80,15 @@ const PRIORITIES = [
   { value: 'HIGH', label: 'Élevée' },
   { value: 'CRITICAL', label: 'Critique' },
 ] as const;
+
+// Per-priority colors matching the app-wide badge palette (PRIORITY_CLASSES in
+// the incidents pages): LOW → slate, MEDIUM → amber, HIGH → orange, CRITICAL → red.
+const PRIORITY_ACTIVE_CLASSES: Record<string, string> = {
+  LOW: 'bg-slate-200 dark:bg-slate-600 text-slate-900 dark:text-slate-100 shadow-sm',
+  MEDIUM: 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 shadow-sm',
+  HIGH: 'bg-orange-100 dark:bg-orange-900/40 text-orange-800 dark:text-orange-200 shadow-sm',
+  CRITICAL: 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200 shadow-sm',
+};
 
 // ── Types ─────────────────────────────────────────
 
@@ -80,6 +100,11 @@ interface DraftState {
   description: string;
 }
 
+interface StationOption {
+  id: number;
+  label: string;
+}
+
 interface CategoryTileDef {
   id: number;
   label: string;
@@ -88,9 +113,10 @@ interface CategoryTileDef {
   presets: string[];
 }
 
-interface StationOption {
-  id: number;
-  label: string;
+interface PendingPhoto {
+  id: string;
+  file: File;
+  previewUrl: string;
 }
 
 // ── Voice Dictation Hook ──────────────────────────
@@ -143,37 +169,6 @@ function useSpeechRecognition() {
   }, []);
 
   return { isListening, transcript, startListening, stopListening };
-}
-
-// ── Station Chip ──────────────────────────────────
-
-function StationChip({
-  label,
-  selected,
-  onSelect,
-}: {
-  label: string;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={cn(
-        'flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-150',
-        'border-2',
-        selected
-          ? 'border-blue-600 bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-bold'
-          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600',
-        'active:scale-[0.97] cursor-pointer select-none',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400',
-      )}
-    >
-      {selected && <Check className="h-4 w-4 shrink-0" />}
-      {label}
-    </button>
-  );
 }
 
 // ── Category Tile ─────────────────────────────────
@@ -237,8 +232,8 @@ function PriorityControl({
             className={cn(
               'rounded-lg px-2 py-2 text-xs font-semibold transition-all duration-150',
               active
-                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300',
+                ? PRIORITY_ACTIVE_CLASSES[p.value]
+                : 'text-slate-500 dark:text-slate-400 hover:bg-white/70 dark:hover:bg-slate-700/60 hover:text-slate-700 dark:hover:text-slate-300',
               'active:scale-[0.95] cursor-pointer select-none',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400',
             )}
@@ -307,11 +302,69 @@ export function DeclareIncidentForm({
   const [priority, setPriority] = useState('MEDIUM');
   const [description, setDescription] = useState('');
 
-  const effectiveDepartmentId = departmentId ? Number(departmentId) : departmentChoice;
-
   // ── Submit / toast ──────────────────────────────
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((kind: 'success' | 'error', message: string) => {
+    setToast({ kind, message });
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), 4000);
+  }, []);
+
+  // ── Photos captured during declaration ──────────
+  const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([]);
+  const pendingPhotosRef = useRef<PendingPhoto[]>([]);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    pendingPhotosRef.current = pendingPhotos;
+  }, [pendingPhotos]);
+
+  useEffect(() => {
+    // Revoke object URLs + clear the toast timer on unmount.
+    return () => {
+      pendingPhotosRef.current.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
+
+  const handlePhotoFile = useCallback(async (file: File | undefined) => {
+    if (!file) return;
+    const validated = validateMedia(file);
+    if (!validated.ok) {
+      showToast('error', validated.reason);
+      return;
+    }
+    if (validated.media.fileType !== 'IMAGE') {
+      showToast('error', 'Seule une photo peut être capturée ici.');
+      return;
+    }
+    // compressImage never rejects — it falls back to the original file on failure.
+    const uploadFile = await compressImage(validated.media.file);
+    setPendingPhotos((prev) => {
+      if (prev.length >= MAX_ATTACHMENTS_PER_INCIDENT) return prev;
+      return [
+        ...prev,
+        {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          file: uploadFile,
+          previewUrl: URL.createObjectURL(uploadFile),
+        },
+      ];
+    });
+  }, [showToast]);
+
+  const removePhoto = useCallback((id: string) => {
+    setPendingPhotos((prev) => {
+      const target = prev.find((p) => p.id === id);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((p) => p.id !== id);
+    });
+  }, []);
+
+  const effectiveDepartmentId = departmentId ? Number(departmentId) : departmentChoice;
 
   const isValid = stationId != null && categoryId != null && effectiveDepartmentId != null;
 
@@ -378,19 +431,38 @@ export function DeclareIncidentForm({
         stationId,
         categoryId,
         priority: priority as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
-        description: description.trim(),
+        // Description is optional — send null when empty.
+        description: description.trim() || null,
       });
 
       // Clear draft
       localStorage.removeItem(draftKey);
 
-      // Show success toast and redirect
-      setToastMessage(`Incident ${created.reference} créé avec succès`);
+      // Attach the photos captured during declaration to the new incident.
+      let failedPhotos = 0;
+      for (const photo of pendingPhotos) {
+        try {
+          await uploadAttachment(created.id, photo.file, 'IMAGE');
+        } catch (err) {
+          failedPhotos += 1;
+          console.warn('Failed to attach captured photo:', err);
+        }
+      }
+      pendingPhotos.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+      setPendingPhotos([]);
+
+      const baseMessage = `Incident ${created.reference} créé avec succès`;
+      showToast(
+        'success',
+        failedPhotos > 0
+          ? `${baseMessage} — ${failedPhotos} photo(s) non jointes.`
+          : baseMessage,
+      );
       setTimeout(() => {
         router.push(homePath);
-      }, 200);
+      }, 1500);
     } catch {
-      setToastMessage("Échec de la déclaration. Réessayez.");
+      showToast('error', 'Échec de la déclaration. Réessayez.');
     } finally {
       setIsSubmitting(false);
     }
@@ -398,9 +470,10 @@ export function DeclareIncidentForm({
 
   return (
     <>
-      {/* ── Page Header ──────────────────────────── */}
-      <div className="max-w-2xl mx-auto">
-        <div className="space-y-5 pb-4">
+      {/* ── Form shell: content scrolls, action bar pinned to the bottom ── */}
+      <div className="mx-auto flex h-full max-w-2xl flex-col">
+        {/* Scrollable content (min-h-0 keeps the action bar pinned at the bottom) */}
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto pb-4">
           {/* Back button */}
           <button
             type="button"
@@ -431,11 +504,7 @@ export function DeclareIncidentForm({
                 Département
               </label>
               {loadingDepartments ? (
-                <div className="grid grid-cols-2 gap-2.5">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <Skeleton key={i} className="h-12 w-full rounded-xl" />
-                  ))}
-                </div>
+                <Skeleton className="h-10 w-full rounded-lg" />
               ) : departmentsError ? (
                 <ErrorState compact message={departmentsError} onRetry={refetchDepartments} />
               ) : departments.length === 0 ? (
@@ -443,16 +512,21 @@ export function DeclareIncidentForm({
                   Aucun département enregistré. Contactez un administrateur.
                 </p>
               ) : (
-                <div className="grid grid-cols-2 gap-2.5">
-                  {departments.map((d) => (
-                    <StationChip
-                      key={d.id}
-                      label={d.label}
-                      selected={departmentChoice === d.id}
-                      onSelect={() => setDepartmentChoice(d.id)}
-                    />
-                  ))}
-                </div>
+                <Select
+                  value={departmentChoice != null ? String(departmentChoice) : ''}
+                  onValueChange={(v) => setDepartmentChoice(Number(v))}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Sélectionner un département" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departments.map((d) => (
+                      <SelectItem key={d.id} value={String(d.id)}>
+                        {d.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               )}
             </section>
           )}
@@ -463,11 +537,7 @@ export function DeclareIncidentForm({
               Poste de travail
             </label>
             {loadingStations ? (
-              <div className="grid grid-cols-2 gap-2.5">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <Skeleton key={i} className="h-12 w-full rounded-xl" />
-                ))}
-              </div>
+              <Skeleton className="h-10 w-full rounded-lg" />
             ) : stationsError ? (
               <ErrorState compact message={stationsError} onRetry={refetchStations} />
             ) : stations.length === 0 ? (
@@ -475,16 +545,21 @@ export function DeclareIncidentForm({
                 Aucune station enregistrée. Contactez un administrateur.
               </p>
             ) : (
-              <div className="grid grid-cols-2 gap-2.5">
-                {stations.map((s) => (
-                  <StationChip
-                    key={s.id}
-                    label={s.label}
-                    selected={stationId === s.id}
-                    onSelect={() => setStationId(s.id)}
-                  />
-                ))}
-              </div>
+              <Select
+                value={stationId != null ? String(stationId) : ''}
+                onValueChange={(v) => setStationId(Number(v))}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Sélectionner un poste de travail" />
+                </SelectTrigger>
+                <SelectContent>
+                  {stations.map((s) => (
+                    <SelectItem key={s.id} value={String(s.id)}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
           </section>
 
@@ -532,10 +607,13 @@ export function DeclareIncidentForm({
             )}
           </section>
 
-          {/* ── E. Description + Voice + Presets ──── */}
+          {/* ── E. Description + Voice + Camera ───── */}
           <section>
             <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Description
+              Description{' '}
+              <span className="normal-case font-normal text-slate-400 dark:text-slate-500">
+                (optionnelle)
+              </span>
             </label>
 
             {/* Category-scoped preset chips */}
@@ -558,7 +636,21 @@ export function DeclareIncidentForm({
               </div>
             )}
 
-            {/* Textarea + Mic button */}
+            {/* Hidden native camera/file picker (capture="environment" opens the
+                camera app on mobile) */}
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                void handlePhotoFile(e.target.files?.[0]);
+                e.target.value = '';
+              }}
+            />
+
+            {/* Textarea + Camera + Mic buttons */}
             <div className="relative">
               <textarea
                 value={description}
@@ -567,11 +659,35 @@ export function DeclareIncidentForm({
                 rows={3}
                 className={cn(
                   'w-full resize-none rounded-xl border border-slate-200 dark:border-slate-700',
-                  'bg-white dark:bg-slate-900 p-3 pr-12 text-sm',
+                  'bg-white dark:bg-slate-900 p-3 pr-20 text-sm',
                   'placeholder:text-slate-400 dark:placeholder:text-slate-500',
                   'focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent',
                 )}
               />
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={isSubmitting || pendingPhotos.length >= MAX_ATTACHMENTS_PER_INCIDENT}
+                title={
+                  pendingPhotos.length >= MAX_ATTACHMENTS_PER_INCIDENT
+                    ? `Maximum ${MAX_ATTACHMENTS_PER_INCIDENT} photos`
+                    : 'Prendre une photo'
+                }
+                className={cn(
+                  'absolute bottom-3 right-12 flex h-8 w-8 items-center justify-center rounded-lg transition-all',
+                  'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700',
+                  'active:scale-[0.9]',
+                  (isSubmitting || pendingPhotos.length >= MAX_ATTACHMENTS_PER_INCIDENT) &&
+                    'opacity-50 cursor-not-allowed',
+                )}
+              >
+                <Camera className="h-4 w-4" />
+                {pendingPhotos.length > 0 && (
+                  <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[9px] font-bold text-white">
+                    {pendingPhotos.length}
+                  </span>
+                )}
+              </button>
               <button
                 type="button"
                 onClick={isListening ? stopListening : startListening}
@@ -587,61 +703,103 @@ export function DeclareIncidentForm({
                 {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
               </button>
             </div>
-          </section>
 
-          {/* Spacer for sticky bar */}
-          <div className="h-4" />
+            {/* Captured photos — attached automatically after declaration */}
+            {pendingPhotos.length > 0 && (
+              <div className="mt-3">
+                <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                  <Camera className="h-3.5 w-3.5" />
+                  {pendingPhotos.length} photo{pendingPhotos.length > 1 ? 's' : ''} à joindre à
+                  l&apos;incident
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {pendingPhotos.map((p) => (
+                    <div key={p.id} className="relative h-20 w-20">
+                      {/* overflow-hidden lives on the inner wrapper so the remove
+                          button straddles the corner without being clipped */}
+                      <div className="h-full w-full overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={p.previewUrl}
+                          alt="Photo capturée"
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removePhoto(p.id)}
+                        aria-label="Retirer la photo"
+                        title="Retirer la photo"
+                        className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-white shadow-md ring-2 ring-white dark:ring-slate-900 transition-all hover:scale-110 hover:bg-red-700 active:scale-95"
+                      >
+                        <X className="h-3 w-3" strokeWidth={3} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
+
+        {/* ── F. Action Bar — pinned at the bottom of the form ── */}
+        <div className="shrink-0 border-t border-slate-200 dark:border-slate-800 bg-white/95 p-4 backdrop-blur dark:bg-slate-900/95 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => {
+              localStorage.removeItem(draftKey);
+              router.back();
+            }}
+            className="rounded-xl px-4 py-3 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          >
+            Annuler
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={!isValid || isSubmitting}
+            className={cn(
+              'rounded-lg px-5 py-2.5 text-sm font-medium transition-colors',
+              isValid && !isSubmitting
+                ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400',
+            )}
+          >
+            <span className="inline-flex items-center justify-center gap-1.5 min-w-[80px]">
+              {isSubmitting ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Envoi…
+                </>
+              ) : (
+                <>Confirmer</>
+              )}
+            </span>
+          </button>
         </div>
       </div>
 
-      {/* ── F. Sticky Action Bar ─────────────────── */}
-      {/* Sticky (not fixed) so it stays inside the scroll container and never
-          overlaps the admin sidebar or the mobile bottom nav. */}
-      <div className="sticky bottom-0 z-50 border-t border-slate-200 dark:border-slate-800 bg-white/95 p-4 backdrop-blur dark:bg-slate-900/95 flex items-center justify-between">
-        <button
-          type="button"
-          onClick={() => {
-            localStorage.removeItem(draftKey);
-            router.back();
-          }}
-          className="rounded-xl px-4 py-3 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-        >
-          Annuler
-        </button>
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={!isValid || isSubmitting}
-          className={cn(
-            'rounded-lg px-5 py-2.5 text-sm font-medium transition-colors',
-            isValid && !isSubmitting
-              ? 'bg-blue-600 hover:bg-blue-700 text-white'
-              : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400',
-          )}
-        >
-          <span className="inline-flex items-center justify-center gap-1.5 min-w-[80px]">
-            {isSubmitting ? (
-              <>
-                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                Envoi…
-              </>
-            ) : (
-              <>Confirmer</>
+      {/* ── Success / Error Toast ─────────────────── */}
+      {/* inset-x-4 keeps the toast inside the viewport on mobile; max-w-md caps
+          its width on larger screens so long messages wrap into compact lines. */}
+      {toast && (
+        <div className="fixed inset-x-4 top-4 z-[100] flex justify-center animate-in slide-in-from-top-2 fade-in">
+          <div
+            className={cn(
+              'flex max-w-md items-center gap-2.5 rounded-xl px-4 py-3 text-white shadow-2xl',
+              toast.kind === 'success' ? 'bg-emerald-600' : 'bg-red-600',
             )}
-          </span>
-        </button>
-      </div>
-
-      {/* ── Success Toast ────────────────────────── */}
-      {toastMessage && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top-2 fade-in">
-          <div className="rounded-xl bg-emerald-600 text-white px-5 py-3 shadow-2xl flex items-center gap-3">
-            <Check className="h-5 w-5 shrink-0" />
-            <span className="text-sm font-semibold">{toastMessage}</span>
+          >
+            {toast.kind === 'success' ? (
+              <Check className="h-5 w-5 shrink-0" />
+            ) : (
+              <AlertCircle className="h-5 w-5 shrink-0" />
+            )}
+            <span className="text-sm font-semibold leading-snug">{toast.message}</span>
           </div>
         </div>
       )}

@@ -28,6 +28,7 @@ import {
   Cable,
   Cpu,
   Archive,
+  Image,
 } from 'lucide-react';
 
 // ── Badge hook for attention counts (real API data, ADMIN only) ──
@@ -61,7 +62,7 @@ interface NavItem {
   badge?: number | null;
   /** Optional badge color class */
   badgeClass?: string;
-  /** Child path prefixes that must NOT highlight this item (e.g. Incidents vs its Logs child). */
+  /** Child path prefixes that must NOT highlight this item (e.g. Incidents vs its Archives child). */
   exclude?: string[];
 }
 
@@ -99,15 +100,21 @@ function buildAdminItems(criticalIncidents: number): NavEntry[] {
       badgeClass: 'bg-rose-600 text-white',
     },
     {
-      label: 'Logs',
+      label: 'Utilisateurs',
+      href: '/users',
+      icon: Users,
+      roles: ['ADMIN'],
+    },
+    {
+      label: 'Archives',
       href: '/admin/incidents/logs',
       icon: Archive,
       roles: ['ADMIN'],
     },
     {
-      label: 'Utilisateurs',
-      href: '/users',
-      icon: Users,
+      label: 'Médias',
+      href: '/admin/media',
+      icon: Image,
       roles: ['ADMIN'],
     },
     {
@@ -331,7 +338,7 @@ export function Sidebar({ open, onOpenChange, variant = 'chef-atelier' }: Sideba
             }
 
             // Plain nav item — prefix match, minus any excluded child prefixes
-            // (e.g. the Logs route under /admin/incidents).
+            // (e.g. the Archives route under /admin/incidents).
             const Icon = entry.icon;
             const isActive =
               pathname === entry.href ||

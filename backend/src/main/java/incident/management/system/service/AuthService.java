@@ -26,21 +26,6 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * Encapsulates the dual-track password reset logic (Track A, Track B, Track C)
- * plus the supervisor-mediated reset-code flow introduced by the
- * authentication hardening:
- * <ul>
- *   <li><b>Track A (public manual):</b> {@code matricule + firstName + lastName}
- *       identity bar — exact, case-insensitive match against an active
- *       CHEF_ATELIER account. Any mismatch yields the generic
- *       {@code "Identifiants invalides"} to prevent identity enumeration.</li>
- *   <li><b>Supervisor-mediated (ADMIN):</b> an admin generates a 6-character
- *       code for in-person handoff. Only the SHA-256 hash of the code is
- *       persisted on the user with a strict 15-minute TTL, and the action is
- *       recorded in the system audit log ({@code GENERATE_RESET_CODE}).</li>
- * </ul>
- */
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -60,20 +45,14 @@ public class AuthService {
 
     private static final String ALPHANUMERIC = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // avoid ambiguous chars (0/O, 1/I)
 
-    /** Generic failure message — never reveals whether the identity matched. */
     private static final String INVALID_IDENTIFIERS = "Identifiants invalides";
 
     private static final String GENERATE_RESET_CODE_ACTION = "GENERATE_RESET_CODE";
 
-    /** Neutral Track B notice — identical regardless of whether the email exists. */
     public static final String EMAIL_NEUTRAL_MESSAGE =
             "Si cette adresse est enregistrée, un lien de réinitialisation a été envoyé.";
 
-    /**
-     * Outcome of a unified reset confirmation — carries the user's role and
-     * preferred login identifier so the UI can route to the correct login lane
-     * with the field pre-filled (matricule for CHEF_ATELIER, email for ADMIN).
-     */
+
     public record ResetConfirmation(UserRole role, String loginIdentifier) {}
 
     //  Track A: No-Email, Manual Token Loop (CHEF_ATELIER)
@@ -107,11 +86,6 @@ public class AuthService {
     }
 
     //  Track B: Email Loop (ADMIN)
-    //
-    //  Anti-enumeration contract: this method NEVER throws and NEVER returns a
-    //  distinguishing value when the address is unknown — an SMTP failure is
-    //  also swallowed (the link is logged server-side as a fallback) so the
-    //  HTTP layer can always answer with the same non-committal notice.
     public void requestPasswordResetEmail(String email) {
         Optional<UserEntity> userOpt = userRepository.findByEmailIgnoreCase(email);
 
@@ -149,13 +123,7 @@ public class AuthService {
         log.info("Email password reset token generated for user {} (email: {})", user.getId(), email);
     }
 
-    /**
-     * Supervisor-mediated reset-code generation (ADMIN only — enforced at the
-     * controller). Generates a secure 6-character alphanumeric code, persists
-     * only its SHA-256 hash on the target user with a strict 15-minute TTL,
-     * records a {@code GENERATE_RESET_CODE} audit entry, and returns the
-     * plaintext code for in-person handoff to the employee.
-     */
+
     public GenerateResetCodeResponse generateAdminResetCode(Long targetUserId) {
         UserEntity user = userRepository.findById(targetUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", targetUserId));
