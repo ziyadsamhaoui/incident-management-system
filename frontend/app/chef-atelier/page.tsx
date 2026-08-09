@@ -41,6 +41,7 @@ import type { IncidentStatus, IncidentPriority } from '@/types/incident';
 import type { IncidentDTO } from '@/types/incident';
 import { getIncidents } from '@/services/incidentService';
 import { getCategories, getDepartments } from '@/services/referenceService';
+import { useAuthStore } from '@/store/useAuthStore';
 import { useAsync } from '@/lib/use-async';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
@@ -328,8 +329,10 @@ function ActiveFilterChips({
 export default function ChefAtelierIncidentsPage() {
   const router = useRouter();
 
-  // Welcome overlay
-  const [showWelcome, setShowWelcome] = useState(true);
+  // Welcome overlay — appears exactly once per login (store flag, in-memory),
+  // not on every visit back to the home page.
+  const welcomeSeen = useAuthStore((s) => s.welcomeSeen);
+  const markWelcomeSeen = useAuthStore((s) => s.markWelcomeSeen);
 
   // Filters + list state
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
@@ -482,8 +485,8 @@ export default function ChefAtelierIncidentsPage() {
     <>
       {/*  Welcome Overlay  */}
       <WelcomeOverlay
-        isVisible={showWelcome}
-        onDismiss={() => setShowWelcome(false)}
+        isVisible={!welcomeSeen}
+        onDismiss={markWelcomeSeen}
         autoDismissMs={2100}
       />
 

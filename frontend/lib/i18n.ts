@@ -1,6 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
+import { create } from 'zustand';
+import { useAuthStore } from '@/store/useAuthStore';
+import {
+  getLanguagePreference,
+  setLanguagePreference,
+} from '@/services/preferencesService';
 
 // Types
 
@@ -16,6 +22,7 @@ const T: Record<Lang, Record<string, string>> = {
     forgotPassword: 'Mot de passe oublié ?',
     submit: 'Se connecter',
     submitting: 'Connexion...',
+    redirecting: 'Connexion réussie — redirection en cours...',
     locked: 'Compte verrouillé',
     rateLimited: 'Trop de requêtes',
     registerQuestion: 'Pas encore de compte ?',
@@ -49,6 +56,10 @@ const T: Record<Lang, Record<string, string>> = {
     errorRateLimitedDetail:
       'Trop de tentatives de connexion. Veuillez patienter avant de réessayer.',
     errorInvalidCredentials: 'Identifiants invalides. Veuillez réessayer.',
+    errorServer:
+      'Le serveur rencontre une erreur. Veuillez réessayer dans un instant.',
+    errorNetwork:
+      'Impossible de contacter le serveur. Vérifiez votre connexion puis réessayez.',
     // SOUS_CHEF helper copy (replaces register link)
     sousChefHelp:
       "Problème de connexion ? Demandez à votre chef d'équipe de vérifier vos informations.",
@@ -286,6 +297,7 @@ const T: Record<Lang, Record<string, string>> = {
     forgotPassword: 'نسيت كلمة المرور؟',
     submit: 'تسجيل الدخول',
     submitting: 'جارٍ تسجيل الدخول...',
+    redirecting: 'تم تسجيل الدخول بنجاح — جارٍ التحويل...',
     locked: 'الحساب مقفل',
     rateLimited: 'طلبات كثيرة جداً',
     registerQuestion: 'ليس لديك حساب؟',
@@ -319,6 +331,9 @@ const T: Record<Lang, Record<string, string>> = {
     errorRateLimitedDetail:
       'محاولات تسجيل دخول كثيرة جداً. يرجى الانتظار قبل إعادة المحاولة.',
     errorInvalidCredentials: 'بيانات الدخول غير صحيحة. حاول مجدداً.',
+    errorServer: 'حدث خطأ في الخادم. يرجى المحاولة مرة أخرى بعد قليل.',
+    errorNetwork:
+      'تعذر الوصول إلى الخادم. تحقق من اتصالك ثم أعد المحاولة.',
     // SOUS_CHEF helper copy
     sousChefHelp: 'تعذر تسجيل الدخول؟ اطلب من مشرفك التحقق من بياناتك.',
     // Account unclaimed
@@ -549,35 +564,112 @@ export const LANE_LABELS: Record<Lang, Record<string, string>> = {
   AR: { SOUS_CHEF: 'عامل', CHEF_ATELIER: 'رئيس الورشة', ADMIN: 'مسؤول' },
 };
 
-// useTranslation hook
+// ── Shared language store ──────────────────────────────────
+// A module-level zustand store (instead of per-component useState) so every
+// consumer of useTranslation re-renders when the language changes — switching
+// language in Settings updates the whole app, not just one component.
 
 const STORAGE_KEY = 'app-lang';
 
+/**
+ * Synchronous initial value from localStorage so the very first paint already
+ * renders in the saved language (no flash of French before hydration).
+ */
+function readStoredLang(): Lang {
+  if (typeof window === 'undefined') return 'FR';
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored === 'AR' || stored === 'FR' ? stored : 'FR';
+  } catch {
+    return 'FR';
+  }
+}
+
+interface LangState {
+  lang: Lang;
+  /** Apply the language immediately (state + document attributes). */
+  apply: (next: Lang) => void;
+}
+
+const useLangStore = create<LangState>((set) => ({
+  lang: readStoredLang(),
+  apply: (next) => set({ lang: next }),
+}));
+
+function persistLocal(lang: Lang) {
+  try {
+    localStorage.setItem(STORAGE_KEY, lang);
+  } catch {
+    // localStorage unavailable — session-only language is fine.
+  }
+}
+
+/** Keep the document dir/lang in sync so Arabic renders RTL app-wide. */
+function applyDocumentLang(lang: Lang) {
+  if (typeof document === 'undefined') return;
+  document.documentElement.lang = lang === 'AR' ? 'ar' : 'fr';
+  document.documentElement.dir = lang === 'AR' ? 'rtl' : 'ltr';
+}
+
+let hydrationStarted = false;
+
+/**
+ * Adopt the server preference (Redis) when available — the authoritative
+ * source for an authenticated user. Skipped while unauthenticated (the login
+ * pages would otherwise trigger a pointless 401 refresh cycle); the
+ * subscription below re-runs it the moment the user signs in.
+ */
+function fetchServerLanguage() {
+  if (!useAuthStore.getState().accessToken) return;
+  getLanguagePreference().then((serverLang) => {
+    if (serverLang) {
+      useLangStore.getState().apply(serverLang);
+      applyDocumentLang(serverLang);
+      persistLocal(serverLang);
+    }
+  });
+}
+
+/**
+ * One-time bootstrap: apply the local language synchronously, then adopt the
+ * Redis preference. Idempotent — only the first caller performs the work. A
+ * subscription re-fetches on login (client-side navigation has no full reload,
+ * so the module-level guard would otherwise skip the server value).
+ */
+function startHydration() {
+  if (hydrationStarted) return;
+  hydrationStarted = true;
+  applyDocumentLang(useLangStore.getState().lang);
+  fetchServerLanguage();
+  useAuthStore.subscribe((state, prev) => {
+    if (!prev.isAuthenticated && state.isAuthenticated) fetchServerLanguage();
+  });
+}
+
 export function useTranslation() {
-  const [lang, setLangState] = useState<Lang>('FR');
-  const [hydrated, setHydrated] = useState(false);
+  const lang = useLangStore((s) => s.lang);
+  const apply = useLangStore((s) => s.apply);
 
-  // Hydrate from localStorage on mount
+  // Keep the document dir/lang in sync with every change.
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored === 'FR' || stored === 'AR') {
-        setLangState(stored);
-      }
-    } catch {
-      // localStorage unavailable
-    }
-    setHydrated(true);
+    applyDocumentLang(lang);
+  }, [lang]);
+
+  // Adopt the persisted preference once.
+  useEffect(() => {
+    startHydration();
   }, []);
 
-  const setLang = useCallback((next: Lang) => {
-    setLangState(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, next);
-    } catch {
-      // localStorage unavailable
-    }
-  }, []);
+  const setLang = useCallback(
+    (next: Lang) => {
+      apply(next);
+      applyDocumentLang(next);
+      persistLocal(next);
+      // Best-effort server persistence (Redis) — never blocks the UI.
+      setLanguagePreference(next);
+    },
+    [apply],
+  );
 
   return {
     lang,
@@ -586,7 +678,7 @@ export function useTranslation() {
     laneLabel: LANE_LABELS[lang],
     dir: lang === 'AR' ? ('rtl' as const) : ('ltr' as const),
     isRtl: lang === 'AR',
-    hydrated,
+    hydrated: true,
   };
 }
 

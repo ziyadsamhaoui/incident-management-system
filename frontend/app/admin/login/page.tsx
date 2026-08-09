@@ -63,6 +63,7 @@ export default function AdminLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   // Rate-limit countdown
   const [retryAfter, setRetryAfter] = useState(0);
@@ -150,6 +151,10 @@ export default function AdminLoginPage() {
       try {
         const response = await adminLogin(data.email, data.password);
         loginSucceeded(response, 'ADMIN');
+        // Show a full-screen loading state immediately — the identity fetch
+        // below plus the dashboard mount can take a moment and must never look
+        // like the app froze after a successful login.
+        setIsRedirecting(true);
         // Hydrate the real identity (names + canonical email) from /api/me —
         // never derive the display name from the email prefix.
         try {
@@ -168,14 +173,25 @@ export default function AdminLoginPage() {
         } else if (err?.code === 'RATE_LIMITED') {
           setRetryAfter(err.retryAfterSeconds);
           setErrorMessage(err.message);
+        } else if (err?.code === 'SERVER_ERROR') {
+          setErrorMessage(fl.errorServer);
+        } else if (err?.code === 'NETWORK_ERROR') {
+          setErrorMessage(fl.errorNetwork);
         } else {
-          setErrorMessage(err?.message ?? fl.errorAuth);
+          setErrorMessage(fl.errorInvalidCredentials);
         }
       } finally {
         setIsSubmitting(false);
       }
     },
-    [loginSucceeded, setLockoutEnd, router, fl.errorAuth],
+    [
+      loginSucceeded,
+      setLockoutEnd,
+      router,
+      fl.errorServer,
+      fl.errorNetwork,
+      fl.errorInvalidCredentials,
+    ],
   );
 
   const isLocked = lockoutTimer !== null;
@@ -370,7 +386,7 @@ export default function AdminLoginPage() {
                       ? fl.errorLockedDetail
                       : isRateLimited
                         ? fl.errorRateLimitedDetail
-                        : fl.errorInvalidCredentials}
+                        : errorMessage}
                     {isLocked && lockoutCountdown && (
                       <span className="ms-1 font-mono font-bold">
                         {fl.unlockIn} {lockoutCountdown}
@@ -421,6 +437,17 @@ export default function AdminLoginPage() {
           </div>
         </form>
       </div>
+
+      {/* Full-screen loading state after a successful login — the identity
+          fetch + dashboard mount must not look frozen. */}
+      {isRedirecting && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-4 bg-white/90 backdrop-blur-sm dark:bg-slate-900/90">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#0F62FE] border-t-transparent dark:border-blue-500 dark:border-t-transparent" />
+          <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+            {fl.redirecting}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

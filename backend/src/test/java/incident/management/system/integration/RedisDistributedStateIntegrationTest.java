@@ -146,7 +146,7 @@ class RedisDistributedStateIntegrationTest extends BaseRepositoryIntegrationTest
     void dashboardCache_isWrittenToRedis() {
         dashboardService.getIncidentsGroupedByStatus();
 
-        assertThat(stringRedisTemplate.hasKey("dashboard_stats::by-status")).isTrue();
+        assertThat(stringRedisTemplate.hasKey("dashboard_stats::v2:by-status")).isTrue();
     }
 
     @Test
@@ -154,7 +154,9 @@ class RedisDistributedStateIntegrationTest extends BaseRepositoryIntegrationTest
     void analyticsCache_roundTripsThroughRedis() {
         LocalDate start = LocalDate.now().minusDays(30);
         LocalDate end = LocalDate.now();
-        String cacheKey = "pareto:" + start + ":" + end + ":null";
+        // v2 namespace — the pre-typing serializer entries (raw LinkedHashMap
+        // JSON) must never be served; see RedisConfig#cacheValueSerializer.
+        String cacheKey = "v2:pareto:" + start + ":" + end + ":null";
 
         analyticsService.getPareto(start, end, null);
 

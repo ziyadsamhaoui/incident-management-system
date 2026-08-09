@@ -42,7 +42,11 @@ public class DashboardService {
     private final IncidentRepository incidentRepository;
     private final IncidentHistoryRepository incidentHistoryRepository;
 
-    @Cacheable(value = CacheNames.DASHBOARD_STATS, key = "'by-status'")
+    // Keys carry a v2 namespace: entries written before the typed JSON cache
+    // serializer (see RedisConfig#cacheValueSerializer) round-tripped as raw
+    // maps/Integer values and must never be served — bumping the namespace
+    // makes every stale entry miss automatically without a manual Redis flush.
+    @Cacheable(value = CacheNames.DASHBOARD_STATS, key = "'v2:by-status'")
     public Map<String, Long> getIncidentsGroupedByStatus() {
         List<IncidentEntity> all = incidentRepository.findAll();
         Map<String, Long> stats = all.stream()
@@ -58,7 +62,7 @@ public class DashboardService {
         return new TreeMap<>(stats);
     }
 
-    @Cacheable(value = CacheNames.DASHBOARD_STATS, key = "'by-priority'")
+    @Cacheable(value = CacheNames.DASHBOARD_STATS, key = "'v2:by-priority'")
     public Map<String, Long> getIncidentsGroupedByPriority() {
         List<IncidentEntity> all = incidentRepository.findAll();
         Map<String, Long> stats = all.stream()
@@ -72,7 +76,7 @@ public class DashboardService {
         return new TreeMap<>(stats);
     }
 
-    @Cacheable(value = CacheNames.DASHBOARD_STATS, key = "'by-department'")
+    @Cacheable(value = CacheNames.DASHBOARD_STATS, key = "'v2:by-department'")
     public Map<String, Long> getIncidentsGroupedByDepartment() {
         List<IncidentEntity> all = incidentRepository.findAll();
         Map<String, Long> stats = all.stream()
@@ -83,7 +87,7 @@ public class DashboardService {
         return new TreeMap<>(stats);
     }
 
-    @Cacheable(value = CacheNames.DASHBOARD_STATS, key = "'recent-activities'")
+    @Cacheable(value = CacheNames.DASHBOARD_STATS, key = "'v2:recent-activities'")
     public List<Map<String, Object>> getRecentIncidentActivities() {
         Page<IncidentEntity> recent = incidentRepository.findAll(
                 PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "declaredAt")));
@@ -107,7 +111,7 @@ public class DashboardService {
      * Audit activity log — chronological status transitions across all
      * incidents (derived from the incident_history table).
      */
-    @Cacheable(value = CacheNames.DASHBOARD_STATS, key = "'activity'")
+    @Cacheable(value = CacheNames.DASHBOARD_STATS, key = "'v2:activity'")
     public List<Map<String, Object>> getActivityLog() {
         List<IncidentHistory> history = incidentHistoryRepository.findAll(
                 Sort.by(Sort.Direction.DESC, "changedAt"))
@@ -138,7 +142,7 @@ public class DashboardService {
      * Admin evaluation heatmap — number of RESOLVED / NON_RESOLVED
      * evaluations per calendar day over the last 12 months.
      */
-    @Cacheable(value = CacheNames.DASHBOARD_STATS, key = "'admin-activity'")
+    @Cacheable(value = CacheNames.DASHBOARD_STATS, key = "'v2:admin-activity'")
     public List<Map<String, Object>> getAdminActivity() {
         LocalDateTime since = LocalDateTime.now().minusMonths(12);
         List<IncidentHistory> evaluations = incidentHistoryRepository

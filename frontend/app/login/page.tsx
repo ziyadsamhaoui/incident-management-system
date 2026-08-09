@@ -41,6 +41,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const [accountUnclaimed, setAccountUnclaimed] = useState(false);
 
   // Rate-limit countdown
@@ -173,6 +174,10 @@ export default function LoginPage() {
         loginSucceeded(response, data.lane);
         const displayName = data.firstName!;
         useAuthStore.getState().setUserIdentity(displayName, data.lastName!);
+        // Show a full-screen loading state immediately — the next page mount
+        // (data fetches + auth guard) can take a moment and must never look
+        // like the app froze after a successful login.
+        setIsRedirecting(true);
         // Route to the correct home based on lane
         if (data.lane === 'SOUS_CHEF') router.replace('/sous-chef');
         else router.replace('/chef-atelier');
@@ -187,14 +192,25 @@ export default function LoginPage() {
         } else if (err?.code === 'RATE_LIMITED') {
           setRetryAfter(err.retryAfterSeconds);
           setErrorMessage(err.message);
+        } else if (err?.code === 'SERVER_ERROR') {
+          setErrorMessage(fl.errorServer);
+        } else if (err?.code === 'NETWORK_ERROR') {
+          setErrorMessage(fl.errorNetwork);
         } else {
-          setErrorMessage(err?.message ?? fl.errorAuth);
+          setErrorMessage(fl.errorInvalidCredentials);
         }
       } finally {
         setIsSubmitting(false);
       }
     },
-    [loginSucceeded, setLockoutEnd, router, fl.errorAuth],
+    [
+      loginSucceeded,
+      setLockoutEnd,
+      router,
+      fl.errorServer,
+      fl.errorNetwork,
+      fl.errorInvalidCredentials,
+    ],
   );
 
   const isLocked = lockoutTimer !== null;
@@ -316,7 +332,7 @@ export default function LoginPage() {
                   ? fl.errorLockedDetail
                   : isRateLimited
                     ? fl.errorRateLimitedDetail
-                    : fl.errorInvalidCredentials}
+                    : errorMessage}
                 {isLocked && lockoutCountdown && (
                   <span className="ms-1 font-mono font-bold">
                     {fl.unlockIn} {lockoutCountdown}
@@ -353,24 +369,37 @@ export default function LoginPage() {
   );
 
   return (
-    <LoginFormShell
-      activeLane={activeLane}
-      onLaneChange={handleLaneChange}
-      language={lang}
-      onLanguageChange={setLang}
-      fieldSlot={fieldSlot}
-      onSubmit={rhfHandleSubmit(onSubmit)}
-      isSubmitting={isSubmitting}
-      errorMessage={errorMessage}
-      isLocked={isLocked}
-      lockoutCountdown={lockoutCountdown}
-      isRateLimited={isRateLimited}
-      retryAfter={retryAfter}
-      accountUnclaimed={accountUnclaimed}
-      onClaimRedirect={handleClaimRedirect}
-      t={fl}
-      laneLabel={laneLabel}
-      isRtl={isRtl}
-    />
+    <>
+      <LoginFormShell
+        activeLane={activeLane}
+        onLaneChange={handleLaneChange}
+        language={lang}
+        onLanguageChange={setLang}
+        fieldSlot={fieldSlot}
+        onSubmit={rhfHandleSubmit(onSubmit)}
+        isSubmitting={isSubmitting}
+        errorMessage={errorMessage}
+        isLocked={isLocked}
+        lockoutCountdown={lockoutCountdown}
+        isRateLimited={isRateLimited}
+        retryAfter={retryAfter}
+        accountUnclaimed={accountUnclaimed}
+        onClaimRedirect={handleClaimRedirect}
+        t={fl}
+        laneLabel={laneLabel}
+        isRtl={isRtl}
+      />
+
+      {/* Full-screen loading state after a successful login — the target page
+          is mounting (guards + data fetches) and must not look frozen. */}
+      {isRedirecting && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-4 bg-white/90 backdrop-blur-sm dark:bg-slate-900/90">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#0F62FE] border-t-transparent dark:border-blue-500 dark:border-t-transparent" />
+          <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+            {fl.redirecting}
+          </p>
+        </div>
+      )}
+    </>
   );
 }

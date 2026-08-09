@@ -26,6 +26,7 @@ import { ErrorState } from '@/components/ui/error-state';
 import { useAsync } from '@/lib/use-async';
 import { getIncidents } from '@/services/incidentService';
 import { getMe } from '@/services/userService';
+import { useAuthStore } from '@/store/useAuthStore';
 import type { IncidentDTO } from '@/types/incident';
 
 // ── Date Helpers ──────────────────────────────────
@@ -242,8 +243,10 @@ function FeedSkeleton() {
 export default function SousChefIncidentsPage() {
   const router = useRouter();
 
-  // Welcome overlay
-  const [showWelcome, setShowWelcome] = useState(true);
+  // Welcome overlay — appears exactly once per login (store flag, in-memory),
+  // not on every visit back to the home page.
+  const welcomeSeen = useAuthStore((s) => s.welcomeSeen);
+  const markWelcomeSeen = useAuthStore((s) => s.markWelcomeSeen);
 
   // Drawer
   const [drawerIncidentId, setDrawerIncidentId] = useState<string | null>(null);
@@ -272,8 +275,8 @@ export default function SousChefIncidentsPage() {
     <>
       {/* ── Welcome Overlay ── */}
       <WelcomeOverlay
-        isVisible={showWelcome}
-        onDismiss={() => setShowWelcome(false)}
+        isVisible={!welcomeSeen}
+        onDismiss={markWelcomeSeen}
         autoDismissMs={2600}
       />
 

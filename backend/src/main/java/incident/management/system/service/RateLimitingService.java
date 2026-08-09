@@ -6,12 +6,15 @@ import io.github.bucket4j.Bucket;
 import io.github.bucket4j.BucketConfiguration;
 import io.github.bucket4j.ConsumptionProbe;
 import io.github.bucket4j.Refill;
+import io.lettuce.core.RedisException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Distributed API rate limiting built on Bucket4j.
@@ -26,6 +29,14 @@ import java.time.Duration;
  * <p>Key resolution mirrors the previous behaviour: authenticated users on
  * incident-creation endpoints are keyed by matricule, everyone else by IP
  * (see {@code RateLimitingFilter#resolveClientKey}).
+ *
+ * <p><b>Degradation policy:</b> when Redis is unreachable the bucket cannot be
+ * read, so enforcement is <em>skipped</em> (fail-open) and a throttled warning
+ * is logged. A rate limiter is availability protection, not a security
+ * boundary — taking down every authenticated endpoint because Redis blinked
+ * is strictly worse than letting a few extra requests through. The JWT
+ * revocation blacklist, by contrast, fails <em>closed</em> (see
+ * {@link incident.management.system.security.TokenBlacklistService}).
  */
 @Service
 @Slf4j
@@ -38,10 +49,21 @@ public class RateLimitingService {
     /** Lower bound on Retry-After (bucket4j may report 0 when fully drained). */
     private static final long RETRY_AFTER_MIN_SECONDS = 1L;
 
+    /** Minimum interval between degraded-mode warnings (prevents log spam). */
+    private static final long DEGRADED_WARN_INTERVAL_MILLIS = 30_000L;
+
     private final RateLimitBucketProvider bucketProvider;
+
+    /** Last time a degraded-mode warning was emitted (throttling). */
+    private final AtomicLong lastDegradedWarnAt = new AtomicLong(0L);
 
     /**
      * Consumes one token from the client's bucket for the given endpoint rule.
+     *
+     * <p>Redis I/O is wrapped in the degraded-mode guard: bucket4j's remote
+     * proxy defers the actual command to {@code tryConsume...} (not to bucket
+     * acquisition), so both the acquisition <em>and</em> the consumption must
+     * sit inside the guarded block for fail-open to fire on an outage.
      *
      * @throws RateLimitExceededException when the bucket is empty.
      */
@@ -51,16 +73,24 @@ public class RateLimitingService {
             return; // Endpoint is not rate-limited
         }
 
-        Bucket bucket = bucketProvider.getBucket(redisKey(clientKey, rule), rule.configuration());
-        ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
+        try {
+            Bucket bucket = bucketProvider.getBucket(redisKey(clientKey, rule), rule.configuration());
+            ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
 
-        if (!probe.isConsumed()) {
-            long retryAfterSeconds = retryAfterSeconds(probe, rule);
-            log.warn("Rate limit exceeded for client '{}' on {} {} — retry after {}s",
-                    clientKey, httpMethod, requestPath, retryAfterSeconds);
-            throw new RateLimitExceededException(
-                    "Rate limit exceeded. Please try again in " + retryAfterSeconds + " seconds.",
-                    retryAfterSeconds);
+            if (!probe.isConsumed()) {
+                long retryAfterSeconds = retryAfterSeconds(probe, rule);
+                log.warn("Rate limit exceeded for client '{}' on {} {} — retry after {}s",
+                        clientKey, httpMethod, requestPath, retryAfterSeconds);
+                throw new RateLimitExceededException(
+                        "Rate limit exceeded. Please try again in " + retryAfterSeconds + " seconds.",
+                        retryAfterSeconds);
+            }
+        } catch (RuntimeException e) {
+            if (isRedisUnavailable(e)) {
+                warnDegraded(clientKey, e);
+                return; // Redis unreachable — degraded mode, enforcement skipped
+            }
+            throw e;
         }
     }
 
@@ -72,8 +102,16 @@ public class RateLimitingService {
         if (rule == null) {
             return -1;
         }
-        Bucket bucket = bucketProvider.getBucket(redisKey(clientKey, rule), rule.configuration());
-        return bucket.getAvailableTokens();
+        try {
+            Bucket bucket = bucketProvider.getBucket(redisKey(clientKey, rule), rule.configuration());
+            return bucket.getAvailableTokens();
+        } catch (RuntimeException e) {
+            if (isRedisUnavailable(e)) {
+                warnDegraded(clientKey, e);
+                return -1;
+            }
+            throw e;
+        }
     }
 
     /**
@@ -126,6 +164,42 @@ public class RateLimitingService {
     // ──────────────────────────────────────────────────────────────────────
     //  Private helpers
     // ──────────────────────────────────────────────────────────────────────
+
+    /**
+     * Returns whether the failure chain originates from Redis being
+     * unreachable. The cause chain is inspected so both the raw Lettuce
+     * {@link RedisException} (connect refused, command timeout) and the
+     * Spring-wrapped {@link RedisConnectionFailureException} — including the
+     * lazy bean-creation wrapper thrown when the bucket4j proxy manager is
+     * first materialized — are recognised. Any other failure propagates.
+     */
+    private static boolean isRedisUnavailable(Throwable t) {
+        for (Throwable cause = t; cause != null; cause = cause.getCause()) {
+            if (cause instanceof RedisException
+                    || cause instanceof RedisConnectionFailureException) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void warnDegraded(String clientKey, Throwable cause) {
+        long now = System.currentTimeMillis();
+        long last = lastDegradedWarnAt.get();
+        if (now - last >= DEGRADED_WARN_INTERVAL_MILLIS
+                && lastDegradedWarnAt.compareAndSet(last, now)) {
+            log.warn("Redis unreachable — rate limiting degraded to fail-open for client '{}': {}",
+                    clientKey, rootMessage(cause));
+        }
+    }
+
+    private static String rootMessage(Throwable t) {
+        Throwable deepest = t;
+        while (deepest.getCause() != null) {
+            deepest = deepest.getCause();
+        }
+        return deepest.getMessage() != null ? deepest.getMessage() : t.getMessage();
+    }
 
     private static byte[] redisKey(String clientKey, RateLimitRule rule) {
         return (KEY_PREFIX + rule.ruleName() + ":" + clientKey).getBytes(StandardCharsets.UTF_8);

@@ -18,6 +18,8 @@ interface AuthActions {
   setAccessToken: (token: string) => void;
   /** Set lockout timestamp */
   setLockoutEnd: (iso: string | null) => void;
+  /** Mark the welcome overlay as seen for this session */
+  markWelcomeSeen: () => void;
   /** Clear session (logout / token expired) */
   logout: () => void;
   /** Hydrate persisted state on app initialisation */
@@ -43,6 +45,7 @@ const initialState: AuthState = {
   isAuthenticated: false,
   lane: null,
   lockoutEnd: null,
+  welcomeSeen: false,
 };
 
 // ──────────────────────────────────────────────────
@@ -63,7 +66,13 @@ export const useAuthStore = create<AuthStore>()(
           isAuthenticated: true,
           lane,
           lockoutEnd: null,
+          // A fresh login re-arms the welcome overlay for the new session.
+          welcomeSeen: false,
         });
+      },
+
+      markWelcomeSeen: () => {
+        set({ welcomeSeen: true });
       },
 
       setUserIdentity: (firstName: string, lastName: string, email?: string | null) => {
@@ -105,6 +114,9 @@ export const useAuthStore = create<AuthStore>()(
         departmentName: state.departmentName,
         isAuthenticated: state.isAuthenticated,
         lane: state.lane,
+        // Persisted so a mid-session page reload doesn't re-trigger the
+        // welcome overlay; loginSucceeded/logout reset it for the next login.
+        welcomeSeen: state.welcomeSeen,
       }),
     },
   ),

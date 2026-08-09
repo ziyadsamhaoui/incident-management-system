@@ -19,12 +19,6 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAsync } from '@/lib/use-async';
 import { getMe } from '@/services/userService';
@@ -82,7 +76,7 @@ function notifTitle(n: NotificationDTO): string {
 
 // ── Shared data hook ──────────────────────────────
 
-function useNotificationsData(active = true) {
+export function useNotificationsData(active = true) {
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [localReadIds, setLocalReadIds] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -148,7 +142,7 @@ type NotificationsData = ReturnType<typeof useNotificationsData>;
 
 // ── Panel content (shared by the header dropdown and the mobile bottom sheet) ──
 
-function NotificationsPanelContent({
+export function NotificationsPanelContent({
   data,
   onItemClick,
 }: {
@@ -170,7 +164,7 @@ function NotificationsPanelContent({
             type="button"
             onClick={data.markAllRead}
             disabled={data.busy}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-slate-100 disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100"
           >
             {data.busy ? (
               <Loader2 className="h-3 w-3 animate-spin" />
@@ -190,8 +184,8 @@ function NotificationsPanelContent({
           className={cn(
             'rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
             filter === 'all'
-              ? 'bg-blue-600/15 text-blue-400'
-              : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200',
+              ? 'bg-blue-600/15 text-blue-700 dark:text-blue-400'
+              : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200',
           )}
         >
           <span className="flex items-center gap-1.5">
@@ -205,8 +199,8 @@ function NotificationsPanelContent({
           className={cn(
             'rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
             filter === 'unread'
-              ? 'bg-blue-600/15 text-blue-400'
-              : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200',
+              ? 'bg-blue-600/15 text-blue-700 dark:text-blue-400'
+              : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200',
           )}
         >
           <span className="flex items-center gap-1.5">
@@ -221,7 +215,7 @@ function NotificationsPanelContent({
         </button>
       </div>
 
-      <div className="border-t border-slate-800" />
+      <div className="border-t border-slate-200 dark:border-slate-800" />
 
       {/* List */}
       <div className="max-h-[320px] overflow-y-auto">
@@ -238,20 +232,20 @@ function NotificationsPanelContent({
             ))}
           </div>
         ) : data.error ? (
-          <div className="px-4 py-8 text-center text-xs text-slate-400">
+          <div className="px-4 py-8 text-center text-xs text-slate-500 dark:text-slate-400">
             Impossible de charger les notifications.
           </div>
         ) : data.filtered.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
-            <BellOff className="h-6 w-6 text-slate-600" />
-            <p className="text-xs text-slate-400">
+            <BellOff className="h-6 w-6 text-slate-400 dark:text-slate-600" />
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               {filter === 'unread'
                 ? 'Aucune notification non lue'
                 : 'Aucune notification'}
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-800">
+          <div className="divide-y divide-slate-200 dark:divide-slate-800">
             {data.filtered.map((notif) => {
               const { icon: Icon, color } = notifStyle(notif.type);
               return (
@@ -269,8 +263,8 @@ function NotificationsPanelContent({
                     }
                   }}
                   className={cn(
-                    'flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-800/60',
-                    !notif.isRead && 'bg-blue-950/20',
+                    'flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-100 dark:hover:bg-slate-800/60',
+                    !notif.isRead && 'bg-blue-50 dark:bg-blue-950/20',
                   )}
                 >
                   <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', color)}>
@@ -280,19 +274,21 @@ function NotificationsPanelContent({
                     <div className="flex items-center justify-between gap-2">
                       <p className={cn(
                         'truncate text-xs',
-                        !notif.isRead ? 'font-semibold text-slate-100' : 'font-medium text-slate-400',
+                        !notif.isRead
+                          ? 'font-semibold text-slate-900 dark:text-slate-100'
+                          : 'font-medium text-slate-500 dark:text-slate-400',
                       )}>
                         {notifTitle(notif)}
                       </p>
-                      <span className="shrink-0 text-[10px] text-slate-500">
+                      <span className="shrink-0 text-[10px] text-slate-400 dark:text-slate-500">
                         {formatRelativeTime(notif.createdAt)}
                       </span>
                     </div>
-                    <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-400/80">
+                    <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-500 dark:text-slate-400/80">
                       {notif.message}
                     </p>
                     {notif.incidentReference && (
-                      <p className="mt-0.5 font-mono text-[10px] text-slate-500">
+                      <p className="mt-0.5 font-mono text-[10px] text-slate-400 dark:text-slate-500">
                         {notif.incidentReference}
                       </p>
                     )}
@@ -307,52 +303,18 @@ function NotificationsPanelContent({
         )}
       </div>
 
-      <div className="border-t border-slate-800" />
+      <div className="border-t border-slate-200 dark:border-slate-800" />
 
       {/* Footer — full notifications page */}
       <Link
         href="/admin/notifications"
         onClick={onItemClick}
-        className="flex items-center justify-between px-4 py-2.5 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-800/60 hover:text-slate-100"
+        className="flex items-center justify-between px-4 py-2.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/60 dark:hover:text-slate-100"
       >
         Voir toutes les notifications
         <ChevronRight className="h-3.5 w-3.5" />
       </Link>
     </div>
-  );
-}
-
-// ── Header bell dropdown (admin, lg+) ─────────────
-
-export function NotificationsDropdown() {
-  const data = useNotificationsData();
-
-  return (
-    <DropdownMenu onOpenChange={(next) => { if (next) data.refetch(); }}>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="relative min-h-[44px] min-w-[44px] text-slate-400 hover:bg-slate-800 hover:text-slate-100"
-          aria-label="Notifications"
-        >
-          <Bell className="h-5 w-5" />
-          {data.unreadCount > 0 && (
-            <span className="absolute right-0.5 top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
-              {data.unreadCount > 9 ? '9+' : data.unreadCount}
-            </span>
-          )}
-        </Button>
-      </DropdownMenuTrigger>
-
-      <DropdownMenuContent
-        align="end"
-        forceMount
-        className="w-[min(92vw,380px)] border-slate-800 bg-slate-900 p-0 text-slate-100 shadow-2xl shadow-black/50"
-      >
-        <NotificationsPanelContent data={data} />
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }
 
@@ -400,15 +362,15 @@ export function NotificationsSheet({ open, onClose }: { open: boolean; onClose: 
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-            className="fixed bottom-0 inset-x-0 z-[70] bg-slate-900 border-t border-slate-800 rounded-t-2xl max-h-[75vh] overflow-y-auto lg:hidden"
+            className="fixed bottom-0 inset-x-0 z-[70] bg-white border-t border-slate-200 rounded-t-2xl max-h-[75vh] overflow-y-auto lg:hidden dark:bg-slate-900 dark:border-slate-800"
           >
             {/* Handle */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 sticky top-0 bg-slate-900 z-10">
-              <span className="text-sm font-semibold text-slate-200">Notifications</span>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 sticky top-0 bg-white z-10 dark:border-slate-800 dark:bg-slate-900">
+              <span className="text-sm font-semibold text-slate-900 dark:text-slate-200">Notifications</span>
               <button
                 type="button"
                 onClick={onClose}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800"
               >
                 <X className="h-4 w-4" />
               </button>

@@ -59,6 +59,12 @@ export interface AuthState {
   lane: UserRole | null;
   /** Account lockout end timestamp (ISO string) */
   lockoutEnd: string | null;
+  /**
+   * In-memory flag — whether the welcome overlay was already shown for the
+   * current session. Reset on every login so it appears exactly once per
+   * login, never on every visit to the home page. Deliberately not persisted.
+   */
+  welcomeSeen: boolean;
 }
 
 /** Reflects the backend `UserSummaryResponse` DTO */

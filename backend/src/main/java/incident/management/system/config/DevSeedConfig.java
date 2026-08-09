@@ -38,7 +38,7 @@ public class DevSeedConfig {
     static final String DEV_ADMIN_PASSWORD = "admin123";
     static final int    DEV_ADMIN_MATRICULE = 0;
 
-    private static final String ROSTER_CSV_PATH = "data/roster-dev.csv";
+    private static final String ROSTER_CSV_PATH = "data/ListeICGL.csv";
 
     private static final String[] EXPECTED_ROSTER_HEADERS = {"matricule", "firstName", "lastName"};
 

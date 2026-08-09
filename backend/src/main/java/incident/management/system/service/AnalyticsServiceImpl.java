@@ -43,9 +43,13 @@ public class AnalyticsServiceImpl implements AnalyticsService {
     //  Public API
     // ──────────────────────────────────────────────────────────────────────
 
+    // Keys carry a v2 namespace: entries written before the typed JSON cache
+    // serializer (see RedisConfig#cacheValueSerializer) deserialised back as
+    // LinkedHashMap instead of the record DTOs — bumping the namespace makes
+    // every stale entry miss automatically without a manual Redis flush.
     @Override
     @Cacheable(value = CacheNames.ANALYTICS_METRICS,
-            key = "'volumeSpeed:' + #start + ':' + #end + ':' + #departmentId + ':' + #compare")
+            key = "'v2:volumeSpeed:' + #start + ':' + #end + ':' + #departmentId + ':' + #compare")
     public VolumeSpeedResponse getVolumeSpeed(LocalDate start, LocalDate end,
                                               Long departmentId, boolean compare) {
         validateRange(start, end);
@@ -86,7 +90,7 @@ public class AnalyticsServiceImpl implements AnalyticsService {
 
     @Override
     @Cacheable(value = CacheNames.ANALYTICS_METRICS,
-            key = "'pareto:' + #start + ':' + #end + ':' + #departmentId")
+            key = "'v2:pareto:' + #start + ':' + #end + ':' + #departmentId")
     public ParetoResponse getPareto(LocalDate start, LocalDate end, Long departmentId) {
         validateRange(start, end);
         LocalDateTime queryStart = start.atStartOfDay();
@@ -109,7 +113,7 @@ public class AnalyticsServiceImpl implements AnalyticsService {
 
     @Override
     @Cacheable(value = CacheNames.ANALYTICS_METRICS,
-            key = "'heatmap:' + #start + ':' + #end + ':' + #departmentId")
+            key = "'v2:heatmap:' + #start + ':' + #end + ':' + #departmentId")
     public HeatmapResponse getHeatmap(LocalDate start, LocalDate end, Long departmentId) {
         validateRange(start, end);
         LocalDateTime queryStart = start.atStartOfDay();
@@ -131,7 +135,7 @@ public class AnalyticsServiceImpl implements AnalyticsService {
 
     @Override
     @Cacheable(value = CacheNames.ANALYTICS_METRICS,
-            key = "'repeatSignals:' + #start + ':' + #end + ':' + #departmentId")
+            key = "'v2:repeatSignals:' + #start + ':' + #end + ':' + #departmentId")
     public RepeatSignalResponse getRepeatSignals(LocalDate start, LocalDate end, Long departmentId) {
         validateRange(start, end);
         LocalDateTime queryStart = start.atStartOfDay();
@@ -157,7 +161,7 @@ public class AnalyticsServiceImpl implements AnalyticsService {
 
     @Override
     @Cacheable(value = CacheNames.ANALYTICS_METRICS,
-            key = "'workload:' + #start + ':' + #end + ':' + #departmentId")
+            key = "'v2:workload:' + #start + ':' + #end + ':' + #departmentId")
     public List<WorkloadEntry> getWorkload(LocalDate start, LocalDate end, Long departmentId) {
         validateRange(start, end);
         LocalDateTime queryStart = start.atStartOfDay();

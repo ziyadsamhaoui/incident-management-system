@@ -441,7 +441,13 @@
 - `LettuceConnectionFactory` built from `RedisStandaloneConfiguration` + `LettucePoolingClientConfiguration` (commons-pool2).
 - `RedisTemplate<String,Object>`: string keys, JSON values.
 - `RedisCacheManager`: default TTL + per-cache overrides via `withInitialCacheConfigurations`.
-- A **dedicated Lettuce `RedisClient` + `StatefulRedisConnection<byte[],byte[]>`** feeds the bucket4j `ProxyManager`, isolating rate-limit traffic from template/cache traffic. The connection and proxy manager beans are **`@Lazy`** — Lettuce's `connect()` throws synchronously when Redis is down, so deferring the connect keeps the application bootable during a Redis outage (fail-closed at request time, never an in-memory fallback).
+- **Typed cache value serializer (`cacheValueSerializer()`):** both the template and the cache manager use `GenericJacksonJsonRedisSerializer.builder()` configured with
+  - **default typing `DefaultTyping.NON_FINAL_AND_RECORDS`** (property `@class`) — the analytics payloads are Java records (final classes), so a plain JSON serializer deserialises them back as `LinkedHashMap` and the typed controller responses blow up with `ClassCastException`;
+  - **`DeserializationFeature.USE_LONG_FOR_INTS`** — the dashboard aggregates are `Map<String, Long>`; without it small JSON numbers round-trip as `Integer` and the `Map<String, Long>` response writer fails with `Integer cannot be cast to Long`.
+  - The `PolymorphicTypeValidator` is a strict allowlist (`java.util.`, `java.time.`, `java.lang.`, `incident.management.system.`, arrays).
+- **Cache key namespaces:** dashboard + analytics keys carry a `v2:` prefix (`'v2:by-status'`, `'v2:volumeSpeed:…'`…). Bumping the namespace invalidated every entry written by the pre-typing serializer (which would otherwise fail to deserialize) without a manual Redis flush — follow the same practice if the wire format ever changes again.
+- A **dedicated Lettuce `RedisClient` + `StatefulRedisConnection<byte[],byte[]>`** feeds the bucket4j `ProxyManager`, isolating rate-limit traffic from template/cache traffic. The connection and proxy manager beans are **`@Lazy`** — Lettuce's `connect()` throws synchronously when Redis is down, so deferring the connect keeps the application bootable during a Redis outage.
+- **Degradation policy (see §8.8):** rate limiting fails **open** (enforcement skipped, throttled warning logged) when Redis is unreachable; the JWT revocation blacklist fails **closed** (security boundary).
 
 ### 8.4 Distributed JWT Revocation (`security/TokenBlacklistService.java`)
 - **Key scheme:** `blacklist:jwt:{jti}` — every token now carries a UUID `jti` claim (`JwtService`). Legacy tokens without a `jti` fall back to the SHA-256 digest of the token, keeping the lookup deterministic.
@@ -452,11 +458,18 @@
 - Bucket4j buckets are now **distributed**: `ProxyManager` → Lettuce → Redis under `rate_limit:api:{rule}:{clientKey}` (authenticated users on incident creation are keyed by matricule, everyone else by IP). Limits survive restarts and are enforced consistently across every instance.
 - **TTL discipline:** the proxy manager uses `ExpirationAfterWriteStrategy.basedOnTimeForRefillingBucketUpToMax(15min)` — bucket state expires once it could have refilled (bounded by the longest window, the 15-minute password-reset rule). No key outlives its usefulness.
 - `RateLimitBucketProvider` is a thin seam isolating bucket4j; production is `RedisRateLimitBucketProvider`, unit tests use an in-memory fake (test-only). Rules (`AUTH` 5/min, `INCIDENT_CREATE` 10/min, `PASSWORD_RESET_MANUAL` 3/15min) and `resolveRule` are unchanged.
+- **Fail-open on Redis outage:** `RateLimitingService` inspects the exception cause chain for Lettuce `RedisException` / Spring `RedisConnectionFailureException` (including the lazy bean-creation wrapper). When Redis is unreachable it logs a throttled warning (≤ 1/30s) and **skips enforcement** — the request proceeds instead of 500ing. Any non-Redis failure still propagates. `getRemainingTokens()` returns `-1` in degraded mode so rate-limit headers are omitted. Rationale: a rate limiter is availability protection, not a security boundary — an outage must not take down login/incident creation with it.
 
 ### 8.6 High-Performance Query Caching (`DashboardService` + `AnalyticsServiceImpl`)
 - **`dashboard_stats` (TTL 90s):** all six dashboard aggregations are now `@Cacheable` in a dedicated `DashboardService` (the controller is a thin delegate). Keys are explicit literals (`'by-status'`, `'by-priority'`, …) so no-arg methods don't collide on `SimpleKey.EMPTY`.
 - **`analytics_metrics` (TTL 120s):** the five analytics queries (`getVolumeSpeed`, `getPareto`, `getHeatmap`, `getRepeatSignals`, `getWorkload`) are `@Cacheable` with keys composed of method name + `start` + `end` + `departmentId` (+ `compare` for volume-speed). The heavier `DATE_TRUNC`/window-function SQL is absorbed by the 2-minute freshness budget.
 - **Invalidation:** `@EvictDashboardCaches` (a composed `@Caching` annotation) evicts **both** caches wholesale on every incident mutation in `IncidentServiceImpl` (`createIncident`, `claimIncident`, `progressIncident`, `evaluateIncident`, `deleteIncident`) — the aggregation keys are window/department-scoped, so `allEntries = true` is required.
+
+### 8.10 Per-User UI Language Preference (Redis) + FR/AR Switch
+- **Backend:** `GET /api/me/preferences/language` → `{"language":"FR"|"AR"}` (empty object when never set); `PUT /api/me/preferences/language` with `{"language":"FR"|"AR"}` persists it. Both are authenticated (identified by the JWT matricule) and live in `MeController` + `UserPreferenceService`.
+- **Key scheme:** `pref:lang:{matricule}` — a plain short string (never a heavyweight serialised object), TTL **365 days** (long-lived preference, still explicitly bounded — no unlimited-TTL keys).
+- **Validation:** unknown codes (`ES`, missing, …) → `IllegalArgumentException` → 400 by the global handler.
+- **Frontend (`lib/i18n.ts` + `services/preferencesService.ts`):** `useTranslation` now backs onto a module-level zustand store so every consumer re-renders on switch; `setLang` writes localStorage (`app-lang`) **and** fire-and-forgets the Redis PUT. On first load the hook adopts the localStorage value synchronously (no French flash), then applies the authoritative Redis preference once authenticated (one-time hydration guard). `document.documentElement.dir`/`lang` are kept in sync so Arabic renders **RTL app-wide**.
 
 ### 8.7 Idempotency Pipeline (`idempotency/` + `@Idempotent`)
 - **Problem:** operators on flaky factory Wi-Fi re-tap "Déclarer" after a client-side timeout, creating duplicate incidents.
@@ -470,13 +483,15 @@
 - **GlobalExceptionHandler:** `IdempotencyConflictException` → `409`, `MissingIdempotencyKeyException` → `400`.
 
 ### 8.8 Failure Mode & Testing
-- **Redis down:** the app still boots (lazy Lettuce connects). Authenticated traffic fails closed — revocation checks and rate limiting cannot be verified, so requests error instead of silently relaxing security. Restore Redis to recover; the cache simply misses and recomputes.
+- **Redis down:** the app still boots (lazy Lettuce connects). Restore Redis to recover; the cache simply misses and recomputes.
+  - **Rate limiting → fail-open:** requests on rate-limited endpoints (login, incident creation, password reset) proceed without enforcement; a throttled `WARN` is logged and `X-Rate-Limit-*` headers are omitted. The UI surfaces a localized *server error* message instead of misreporting a 500 as bad credentials (the frontend `authService` distinguishes `NETWORK_ERROR` / `SERVER_ERROR` from `AUTH_FAILED`).
+  - **JWT revocation → fail-closed:** revocation checks cannot be verified against Redis, so token-bearing requests error rather than silently accepting a possibly-revoked token (security boundary).
 - **Unit tests** (no infra): `TokenBlacklistServiceTest`, `RateLimitingServiceTest`, `IdempotencyAspectTest` (mocked/in-memory fakes).
 - **Integration test** `RedisDistributedStateIntegrationTest` (Testcontainers `redis:7-alpine` + full Spring context): proves revocation keys land in Redis with bounded TTL, rate-limit buckets are shared across two service instances, `SETNX` idempotency locks are atomic, and `dashboard_stats` entries are persisted.
 
 ### 8.9 Anti-Patterns (enforced)
 1. No unlimited-TTL Redis keys — blacklist TTL = remaining token validity, bucket state expires via write strategy, cache entries expire per-cache, idempotency locks expire after 30s.
-2. No in-memory state in production — `ConcurrentHashMap` blacklist and bucket map are deleted; the only in-memory `RateLimitBucketProvider` fake is test-scoped.
+2. No in-memory state in production — `ConcurrentHashMap` blacklist and bucket map are deleted; the only in-memory `RateLimitBucketProvider` fake is test-scoped. (Fail-open on Redis outage skips enforcement entirely — it does **not** fall back to a JVM-heap bucket store.)
 3. No unchecked duplicate submissions — incident creation refuses requests without `X-Idempotency-Key`.
 4. No JDK serialization — String + Jackson 3 JSON serializers only.
 

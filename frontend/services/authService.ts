@@ -63,7 +63,29 @@ export async function login(
       };
     }
 
-    // 401 / other
+    // Network failure — the request never reached the server (backend down,
+    // Wi-Fi dropped). Never report this as bad credentials.
+    if (!axiosErr.response) {
+      throw {
+        code: 'NETWORK_ERROR',
+        message:
+          'Impossible de contacter le serveur. Vérifiez votre connexion puis réessayez.',
+      };
+    }
+
+    // Server error (5xx) — a real backend failure, not a wrong password.
+    // A Spring default error body carries no `message` field, so without this
+    // branch the UI would misreport a 500 as "Identifiants invalides".
+    if (axiosErr.response.status >= 500) {
+      throw {
+        code: 'SERVER_ERROR',
+        message:
+          axiosErr.response.data?.message ??
+          'Le serveur rencontre une erreur. Veuillez réessayer dans un instant.',
+      };
+    }
+
+    // 401 / other 4xx auth failure
     throw {
       code: 'AUTH_FAILED',
       message:
@@ -106,6 +128,25 @@ export async function adminLogin(
         code: 'RATE_LIMITED',
         retryAfterSeconds: Number.isNaN(retryAfter) ? 60 : retryAfter,
         message: 'Too many requests. Please wait.',
+      };
+    }
+
+    // Network failure — never report as bad credentials.
+    if (!axiosErr.response) {
+      throw {
+        code: 'NETWORK_ERROR',
+        message:
+          'Impossible de contacter le serveur. Vérifiez votre connexion puis réessayez.',
+      };
+    }
+
+    // Server error (5xx) — real backend failure, not a wrong password.
+    if (axiosErr.response.status >= 500) {
+      throw {
+        code: 'SERVER_ERROR',
+        message:
+          axiosErr.response.data?.message ??
+          'Le serveur rencontre une erreur. Veuillez réessayer dans un instant.',
       };
     }
 

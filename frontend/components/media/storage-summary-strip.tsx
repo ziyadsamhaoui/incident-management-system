@@ -63,18 +63,21 @@ export function StorageSummaryStrip({ stats, loading, onRetry }: StorageSummaryS
         </div>
       )}
 
-      <div className="grid gap-5 md:grid-cols-[auto_1fr_auto] md:items-center">
+      {/* Mobile: 'Stockage des médias' and 'Espace disque libre' sit side by side
+          with aligned label/value rows; the roomier 3-column layout (as originally
+          designed) is restored from md up. */}
+      <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:gap-5 md:grid-cols-[auto_1fr_auto] md:items-center">
         {/* Total stored */}
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
+          <div className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600/10 text-blue-600 md:flex dark:bg-blue-500/20 dark:text-blue-400">
             <HardDrive className="h-5 w-5" />
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Stockage des médias
             </p>
-            <p className="text-2xl font-bold tracking-tight">{formatFileSize(stats.storedBytes)}</p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xl font-bold tracking-tight sm:text-2xl">{formatFileSize(stats.storedBytes)}</p>
+            <p className="hidden text-xs text-muted-foreground md:block">
               {stats.totalCount} fichier{stats.totalCount > 1 ? 's' : ''} ·{' '}
               {stats.photoCount} photo{stats.photoCount > 1 ? 's' : ''} · {stats.videoCount} vidéo
               {stats.videoCount > 1 ? 's' : ''}
@@ -82,8 +85,13 @@ export function StorageSummaryStrip({ stats, loading, onRetry }: StorageSummaryS
           </div>
         </div>
 
-        {/* Photo / Video breakdown bar */}
-        <div className="min-w-0">
+        {/* Photo / Video breakdown bar (full-width row on mobile, middle column from md up) */}
+        <div className="col-span-2 min-w-0 md:col-span-1">
+          <p className="mb-1.5 text-xs text-muted-foreground md:hidden">
+            {stats.totalCount} fichier{stats.totalCount > 1 ? 's' : ''} ·{' '}
+            {stats.photoCount} photo{stats.photoCount > 1 ? 's' : ''} · {stats.videoCount} vidéo
+            {stats.videoCount > 1 ? 's' : ''}
+          </p>
           <div
             className="flex h-3 w-full overflow-hidden rounded-full bg-muted"
             role="img"
@@ -115,7 +123,7 @@ export function StorageSummaryStrip({ stats, loading, onRetry }: StorageSummaryS
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             Espace disque libre
           </p>
-          <p className="text-xl font-bold tracking-tight">{formatFileSize(stats.usableBytes)}</p>
+          <p className="text-lg font-bold tracking-tight sm:text-xl">{formatFileSize(stats.usableBytes)}</p>
           <p className="text-xs text-muted-foreground">sur {formatFileSize(stats.totalBytes)}</p>
           <span
             className={cn(

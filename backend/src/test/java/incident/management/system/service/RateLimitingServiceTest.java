@@ -5,6 +5,7 @@ import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.BucketConfiguration;
 import io.github.bucket4j.local.LocalBucketBuilder;
+import io.lettuce.core.RedisConnectionException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -314,10 +315,112 @@ class RateLimitingServiceTest {
         }
     }
 
+    // Redis unreachable → fail-open (login must not 500 when Redis is down)
+    @Nested
+    @DisplayName("Redis unreachable — degraded fail-open mode")
+    class RedisUnreachable {
+
+        private static final String CLIENT_KEY = "ip:127.0.0.1";
+        private static final String AUTH_PATH = "/api/auth/login";
+        private static final String HTTP_METHOD = "POST";
+
+        @Test
+        @DisplayName("consume() does not throw when the bucket provider hits a Redis connection failure")
+        void consume_skipsEnforcementWhenRedisDown() {
+            RateLimitingService degraded = new RateLimitingService(new RedisDownBucketProvider());
+            degraded.consume(CLIENT_KEY, AUTH_PATH, HTTP_METHOD);
+            // Must not throw — the request proceeds without rate limiting
+        }
+
+        @Test
+        @DisplayName("consume() fails open when Redis dies during the deferred GET (tryConsume), not just at bucket acquisition")
+        void consume_failsOpenWhenRedisDiesMidConsume() {
+            // bucket4j's remote proxy defers the actual Redis command to
+            // tryConsumeAndReturnRemaining — this is the real outage failure
+            // point observed against a live instance (GET timed out after 2s).
+            Bucket bucket = org.mockito.Mockito.mock(Bucket.class);
+            org.mockito.Mockito.when(bucket.tryConsumeAndReturnRemaining(1))
+                    .thenThrow(new io.lettuce.core.RedisCommandTimeoutException(
+                            "GET. Command timed out after 2 second(s)"));
+            RateLimitBucketProvider provider = org.mockito.Mockito.mock(RateLimitBucketProvider.class);
+            org.mockito.Mockito.when(provider.getBucket(
+                            org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                    .thenReturn(bucket);
+
+            RateLimitingService degraded = new RateLimitingService(provider);
+            degraded.consume(CLIENT_KEY, AUTH_PATH, HTTP_METHOD);
+            // Must not throw — enforcement skipped, request proceeds
+        }
+
+        @Test
+        @DisplayName("getRemainingTokens() fails open when the deferred GET dies mid-call")
+        void getRemainingTokens_failsOpenWhenRedisDiesMidCall() {
+            Bucket bucket = org.mockito.Mockito.mock(Bucket.class);
+            org.mockito.Mockito.when(bucket.getAvailableTokens())
+                    .thenThrow(new io.lettuce.core.RedisCommandTimeoutException(
+                            "GET. Command timed out after 2 second(s)"));
+            RateLimitBucketProvider provider = org.mockito.Mockito.mock(RateLimitBucketProvider.class);
+            org.mockito.Mockito.when(provider.getBucket(
+                            org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                    .thenReturn(bucket);
+
+            RateLimitingService degraded = new RateLimitingService(provider);
+            org.assertj.core.api.Assertions.assertThat(
+                    degraded.getRemainingTokens(CLIENT_KEY, AUTH_PATH, HTTP_METHOD)).isEqualTo(-1);
+        }
+
+        @Test
+        @DisplayName("consume() still throws when the provider fails for a non-Redis reason")
+        void consume_propagatesNonRedisFailures() {
+            RateLimitingService degraded = new RateLimitingService(new ExplodingBucketProvider());
+            org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                    degraded.consume(CLIENT_KEY, AUTH_PATH, HTTP_METHOD))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("boom");
+        }
+
+        @Test
+        @DisplayName("getRemainingTokens() returns -1 in degraded mode so headers are omitted")
+        void getRemainingTokens_returnsMinusOneWhenRedisDown() {
+            RateLimitingService degraded = new RateLimitingService(new RedisDownBucketProvider());
+            org.assertj.core.api.Assertions.assertThat(
+                    degraded.getRemainingTokens(CLIENT_KEY, AUTH_PATH, HTTP_METHOD)).isEqualTo(-1);
+        }
+
+        @Test
+        @DisplayName("getLimit() still resolves the rule without touching Redis")
+        void getLimit_stillWorksWhenRedisDown() {
+            RateLimitingService degraded = new RateLimitingService(new RedisDownBucketProvider());
+            org.assertj.core.api.Assertions.assertThat(
+                    degraded.getLimit(AUTH_PATH, HTTP_METHOD)).isEqualTo(5);
+        }
+    }
+
     // ──────────────────────────────────────────────────────────────────────
     //  In-memory fake — real bucket4j buckets, no Redis. Production uses
     //  RedisRateLimitBucketProvider instead; this fake exists only for tests.
     // ──────────────────────────────────────────────────────────────────────
+
+    private static final class RedisDownBucketProvider implements RateLimitBucketProvider {
+
+        @Override
+        public Bucket getBucket(byte[] key, BucketConfiguration configuration) {
+            // Mirrors the Lettuce failure seen at request time when Redis is
+            // down, including the Spring bean-creation wrapper thrown when the
+            // lazy rate-limit connection is first materialized.
+            throw new org.springframework.beans.factory.BeanCreationException(
+                    "rateLimitRedisConnection", "Failed to instantiate",
+                    new RedisConnectionException("Unable to connect to localhost/<unresolved>:6379"));
+        }
+    }
+
+    private static final class ExplodingBucketProvider implements RateLimitBucketProvider {
+
+        @Override
+        public Bucket getBucket(byte[] key, BucketConfiguration configuration) {
+            throw new IllegalStateException("boom");
+        }
+    }
 
     private static final class InMemoryBucketProvider implements RateLimitBucketProvider {
 
