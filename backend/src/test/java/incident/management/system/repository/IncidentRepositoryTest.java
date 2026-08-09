@@ -604,6 +604,184 @@ class IncidentRepositoryTest extends BaseRepositoryIntegrationTest {
         }
     }
 
+    //  PostgreSQL native full-text search (searchByText — tsvector/GIN/ts_rank)
+    @Nested
+    @DisplayName("searchByText — PostgreSQL full-text search")
+    class FullTextSearchTest {
+
+        @Autowired
+        private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
+        @Test
+        @DisplayName("matches words in description (weight A)")
+        void matchesWholeWordsInDescription() {
+            IncidentEntity match = persistIncidentWithDescription(userA, departmentA,
+                    IncidentStatus.DECLARED, "Courroie de convoyeur désalignée sur la ligne 2");
+            persistIncidentWithDescription(userA, departmentA,
+                    IncidentStatus.DECLARED, "Capteur de température défectueux");
+
+            Page<IncidentEntity> page = incidentRepository.searchByText(
+                    "convoyeur", null, null, null, null, null, "declaredAt", Pageable.ofSize(10));
+
+            assertThat(page.getContent()).extracting(IncidentEntity::getId)
+                    .containsExactly(match.getId());
+            assertThat(page.getTotalElements()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("matches the incident reference (also weight A)")
+        void matchesReference() {
+            IncidentEntity match = persistIncidentWithDescription(userA, departmentA,
+                    IncidentStatus.DECLARED, "some description");
+            match.setReference("INC-2026-0042");
+            incidentRepository.save(match);
+
+            Page<IncidentEntity> page = incidentRepository.searchByText(
+                    "INC-2026-0042", null, null, null, null, null, "declaredAt", Pageable.ofSize(10));
+
+            assertThat(page.getContent()).extracting(IncidentEntity::getId)
+                    .containsExactly(match.getId());
+        }
+
+        @Test
+        @DisplayName("prefix search (term*) matches partial words")
+        void prefixSearch() {
+            persistIncidentWithDescription(userA, departmentA,
+                    IncidentStatus.DECLARED, "Convoyeur hors service");
+            persistIncidentWithDescription(userA, departmentA,
+                    IncidentStatus.DECLARED, "Panne moteur électrique");
+
+            Page<IncidentEntity> page = incidentRepository.searchByText(
+                    "convoy*", null, null, null, null, null, "declaredAt", Pageable.ofSize(10));
+
+            assertThat(page.getContent()).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("phrase search (\"...\") requires adjacent words")
+        void phraseSearch() {
+            persistIncidentWithDescription(userA, departmentA,
+                    IncidentStatus.DECLARED, "moteur défaillant sur la presse");
+            persistIncidentWithDescription(userA, departmentA,
+                    IncidentStatus.DECLARED, "moteur en bon état malgré défaillant test");
+
+            Page<IncidentEntity> page = incidentRepository.searchByText(
+                    "\"moteur défaillant\"", null, null, null, null, null, "declaredAt", Pageable.ofSize(10));
+
+            assertThat(page.getContent()).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("excluded terms (-term) filter out matching documents")
+        void excludedTerms() {
+            persistIncidentWithDescription(userA, departmentA,
+                    IncidentStatus.DECLARED, "Courroie convoyeur usée");
+            IncidentEntity remaining = persistIncidentWithDescription(userA, departmentA,
+                    IncidentStatus.DECLARED, "Courroie moteur usée");
+
+            Page<IncidentEntity> page = incidentRepository.searchByText(
+                    "courroie -convoyeur", null, null, null, null, null, "declaredAt", Pageable.ofSize(10));
+
+            assertThat(page.getContent()).extracting(IncidentEntity::getId)
+                    .containsExactly(remaining.getId());
+        }
+
+        @Test
+        @DisplayName("ts_rank ranks description (weight A) matches above resolution_note (weight B) matches")
+        void ranksWeightedMatches() {
+            IncidentEntity descriptionMatch = persistIncidentWithDescription(userA, departmentA,
+                    IncidentStatus.RESOLVED, "Panne pompe hydraulique");
+            descriptionMatch.setResolutionNote("Aucune note pertinente");
+            incidentRepository.save(descriptionMatch);
+
+            IncidentEntity noteOnlyMatch = persistIncidentWithDescription(userA, departmentA,
+                    IncidentStatus.RESOLVED, "Intervention sans lien");
+            noteOnlyMatch.setResolutionNote("Panne pompe hydraulique identifiée et corrigée");
+            incidentRepository.save(noteOnlyMatch);
+
+            Page<IncidentEntity> page = incidentRepository.searchByText(
+                    "pompe", null, null, null, null, null, "declaredAt", Pageable.ofSize(10));
+
+            assertThat(page.getContent()).hasSize(2);
+            assertThat(page.getContent().get(0).getId()).isEqualTo(descriptionMatch.getId());
+        }
+
+        @Test
+        @DisplayName("status + department filters compose with the text match")
+        void structuredFiltersCompose() {
+            IncidentEntity expected = persistIncidentWithDescription(userA, departmentA,
+                    IncidentStatus.DECLARED, "Panne moteur");
+            persistIncidentWithDescription(userA, departmentB,
+                    IncidentStatus.DECLARED, "Panne moteur");
+            persistIncidentWithDescription(userA, departmentA,
+                    IncidentStatus.RESOLVED, "Panne moteur");
+
+            Page<IncidentEntity> page = incidentRepository.searchByText(
+                    "moteur", "DECLARED", departmentA.getId(), null, null, null,
+                    "declaredAt", Pageable.ofSize(10));
+
+            assertThat(page.getContent()).extracting(IncidentEntity::getId)
+                    .containsExactly(expected.getId());
+        }
+
+        @Test
+        @DisplayName("date range composes on the declaredAt field")
+        void dateRangeComposesOnDeclaredAt() {
+            IncidentEntity old = persistIncidentWithDescription(userA, departmentA,
+                    IncidentStatus.DECLARED, "Panne frein");
+            jdbcTemplate.update("UPDATE incidents SET declared_at = ? WHERE id = ?",
+                    java.sql.Timestamp.valueOf(LocalDateTime.of(2026, 1, 1, 10, 0)), old.getId());
+            IncidentEntity fresh = persistIncidentWithDescription(userA, departmentA,
+                    IncidentStatus.DECLARED, "Panne frein");
+
+            Page<IncidentEntity> page = incidentRepository.searchByText(
+                    "frein", null, null, null,
+                    LocalDateTime.of(2026, 8, 1, 0, 0), null, "declaredAt", Pageable.ofSize(10));
+
+            assertThat(page.getContent()).extracting(IncidentEntity::getId)
+                    .containsExactly(fresh.getId());
+        }
+
+        @Test
+        @DisplayName("malformed search syntax degrades gracefully instead of throwing")
+        void malformedSyntaxDoesNotThrow() {
+            persistIncidentWithDescription(userA, departmentA,
+                    IncidentStatus.DECLARED, "Panne moteur électrique");
+
+            Page<IncidentEntity> page = incidentRepository.searchByText(
+                    "moteur &&&", null, null, null, null, null, "declaredAt", Pageable.ofSize(10));
+
+            assertThat(page.getContent()).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("no match returns an empty page with a correct total (countQuery)")
+        void noMatchReturnsEmptyPage() {
+            persistIncidentWithDescription(userA, departmentA,
+                    IncidentStatus.DECLARED, "Panne moteur");
+
+            Page<IncidentEntity> page = incidentRepository.searchByText(
+                    "inexistantxyz", null, null, null, null, null, "declaredAt", Pageable.ofSize(10));
+
+            assertThat(page).isEmpty();
+            assertThat(page.getTotalElements()).isZero();
+        }
+
+        private IncidentEntity persistIncidentWithDescription(final UserEntity user,
+                                                              final DepartmentEntity department,
+                                                              final IncidentStatus status,
+                                                              final String description) {
+            IncidentEntity incident = TestEntityFactory.createIncident();
+            incident.setUser(user);
+            incident.setDepartment(department);
+            incident.setStation(station);
+            incident.setCategory(category);
+            incident.setStatus(status);
+            incident.setDescription(description);
+            return incidentRepository.save(incident);
+        }
+    }
+
     //  Helper methods
     private IncidentEntity persistIncident(final UserEntity user,
                                            final DepartmentEntity department,

@@ -30,6 +30,68 @@ public interface IncidentRepository
     Optional<IncidentEntity> findByReference(String reference);
 
     //  ========================================================================
+    //  PostgreSQL Native Full-Text Search (tsvector + GIN + ts_rank)
+    //
+    //  Backed by the self-maintaining incidents.search_vector generated column
+    //  (see V11__add_fulltext_search.sql). websearch_to_tsquery parses raw user
+    //  input safely: "phrase match", -excluded terms and prefix* are supported,
+    //  malformed syntax degrades gracefully. ts_rank gives relevance ordering.
+    //  All non-text filters compose with the @@ match; NULL = filter inactive.
+    //  ========================================================================
+
+    /**
+     * Full-text search over {@code reference} (A), {@code description} (A) and
+     * {@code resolution_note} (B), ranked by {@code ts_rank} descending.
+     *
+     * @param term                 raw user search term (parsed by websearch_to_tsquery)
+     * @param statuses             comma-separated status names or {@code null} for all
+     * @param departmentId         department filter or {@code null}
+     * @param userId               declaring-user filter or {@code null}
+     * @param startDateTime        inclusive lower bound on the {@code dateField} column
+     *                             or {@code null}
+     * @param endExclusiveDateTime exclusive upper bound on the {@code dateField} column
+     *                             (i.e. endDate + 1 day at midnight) or {@code null}
+     * @param dateField            {@code resolvedAt} or {@code declaredAt} (default)
+     */
+    @Query(value = """
+            SELECT i.id, i.reference, i.user_id, i.claimed_by_id, i.department_id,
+                   i.station_id, i.category_id, i.priority, i.status, i.description,
+                   i.resolution_note, i.declared_at, i.claimed_at, i.in_progress_at,
+                   i.resolved_at, i.closed_at, i.resolved_by_id
+            FROM incidents i, websearch_to_tsquery('simple', CAST(:term AS text)) query
+            WHERE i.search_vector @@ query
+              AND (CAST(:statuses AS text) IS NULL OR i.status = ANY(string_to_array(CAST(:statuses AS text), ',')))
+              AND (CAST(:departmentId AS bigint) IS NULL OR i.department_id = CAST(:departmentId AS bigint))
+              AND (CAST(:userId AS bigint) IS NULL OR i.user_id = CAST(:userId AS bigint))
+              AND (CAST(:startDateTime AS timestamp) IS NULL OR CASE WHEN CAST(:dateField AS text) = 'resolvedAt'
+                  THEN i.resolved_at ELSE i.declared_at END >= CAST(:startDateTime AS timestamp))
+              AND (CAST(:endExclusiveDateTime AS timestamp) IS NULL OR CASE WHEN CAST(:dateField AS text) = 'resolvedAt'
+                  THEN i.resolved_at ELSE i.declared_at END < CAST(:endExclusiveDateTime AS timestamp))
+            ORDER BY ts_rank(i.search_vector, query) DESC
+            """,
+            countQuery = """
+            SELECT count(*)
+            FROM incidents i, websearch_to_tsquery('simple', CAST(:term AS text)) query
+            WHERE i.search_vector @@ query
+              AND (CAST(:statuses AS text) IS NULL OR i.status = ANY(string_to_array(CAST(:statuses AS text), ',')))
+              AND (CAST(:departmentId AS bigint) IS NULL OR i.department_id = CAST(:departmentId AS bigint))
+              AND (CAST(:userId AS bigint) IS NULL OR i.user_id = CAST(:userId AS bigint))
+              AND (CAST(:startDateTime AS timestamp) IS NULL OR CASE WHEN CAST(:dateField AS text) = 'resolvedAt'
+                  THEN i.resolved_at ELSE i.declared_at END >= CAST(:startDateTime AS timestamp))
+              AND (CAST(:endExclusiveDateTime AS timestamp) IS NULL OR CASE WHEN CAST(:dateField AS text) = 'resolvedAt'
+                  THEN i.resolved_at ELSE i.declared_at END < CAST(:endExclusiveDateTime AS timestamp))
+            """,
+            nativeQuery = true)
+    Page<IncidentEntity> searchByText(@Param("term") String term,
+                                      @Param("statuses") String statuses,
+                                      @Param("departmentId") Long departmentId,
+                                      @Param("userId") Long userId,
+                                      @Param("startDateTime") LocalDateTime startDateTime,
+                                      @Param("endExclusiveDateTime") LocalDateTime endExclusiveDateTime,
+                                      @Param("dateField") String dateField,
+                                      Pageable pageable);
+
+    //  ========================================================================
     //  Per-user activity analytics (GET /api/users/{id}/activity)
     //  All metrics are computed on demand — no denormalized counters.
     //  ========================================================================

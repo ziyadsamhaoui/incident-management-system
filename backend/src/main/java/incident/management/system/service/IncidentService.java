@@ -34,8 +34,11 @@ public interface IncidentService {
      * All incidents, combinable filters:
      *
      * @param statuses     optional terminal/active status group (empty = all statuses)
-     * @param search       optional case-insensitive term matched against reference,
-     *                     description and resolutionNote
+     * @param search       optional full-text term matched against reference, description
+     *                     and resolutionNote via PostgreSQL tsvector full-text search
+     *                     (word/prefix/phrase semantics with {@code ts_rank} relevance
+     *                     ordering — see {@code V11__add_fulltext_search.sql}). Results
+     *                     are ordered by relevance rather than by {@code pageable} sort.
      * @param departmentId optional department filter
      * @param userId       optional declaring-user filter
      * @param startDate    optional inclusive lower bound on the {@code dateField} column

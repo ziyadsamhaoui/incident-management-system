@@ -1,6 +1,7 @@
 package incident.management.system.service;
 
 import incident.management.system.dto.EvaluateIncidentRequest;
+import incident.management.system.dto.IncidentResponse;
 import incident.management.system.enums.IncidentStatus;
 import incident.management.system.enums.UserRole;
 import incident.management.system.event.IncidentTransitionEvent;
@@ -28,16 +29,25 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -422,9 +432,77 @@ class IncidentServiceImplTest {
             var resolved = incidentService.evaluateIncident(60L, evalRequest);
             assertThat(resolved.status()).isEqualTo(IncidentStatus.RESOLVED);
         }
+    }    //  Full-text search delegation (getFilteredIncidents with a text term)
+    @Nested
+    @DisplayName("getFilteredIncidents: full-text search delegation")
+    class FullTextSearchDelegation {
+
+        private final Pageable pageable = PageRequest.of(0, 20);
+
+        @Test
+        @DisplayName("text term present → delegates to searchByText with composed bind params")
+        void delegatesToFullTextSearch() {
+            Page<IncidentEntity> page = new PageImpl<>(List.of(), pageable, 0);
+            when(incidentRepository.searchByText(
+                    eq("courroie"),            // trimmed term
+                    eq("DECLARED,IN_PROGRESS"), // statuses CSV
+                    eq(3L), eq(7L),             // department + user filters
+                    eq(LocalDate.of(2026, 8, 1).atStartOfDay()),
+                    eq(LocalDate.of(2026, 8, 10).plusDays(1).atStartOfDay()),
+                    eq("declaredAt"),
+                    eq(pageable))).thenReturn(page);
+
+            Page<IncidentResponse> result = incidentService.getFilteredIncidents(
+                    List.of(IncidentStatus.DECLARED, IncidentStatus.IN_PROGRESS),
+                    "  courroie  ", 3L, 7L,
+                    LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 10),
+                    "declaredAt", pageable);
+
+            assertThat(result).isEmpty();
+            verify(incidentRepository).searchByText(
+                    eq("courroie"), eq("DECLARED,IN_PROGRESS"),
+                    eq(3L), eq(7L),
+                    eq(LocalDate.of(2026, 8, 1).atStartOfDay()),
+                    eq(LocalDate.of(2026, 8, 10).plusDays(1).atStartOfDay()),
+                    eq("declaredAt"), eq(pageable));
+            verify(incidentRepository, never())
+                    .findAll(any(Specification.class), any(Pageable.class));
+        }
+
+        @Test
+        @DisplayName("resolvedAt dateField is forwarded to the resolvedAt branch of the native query")
+        void forwardsResolvedAtDateField() {
+            when(incidentRepository.searchByText(anyString(), any(), any(), any(), any(), any(),
+                    eq("resolvedAt"), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+
+            incidentService.getFilteredIncidents(
+                    List.of(), "pompe", null, null, null, null, "resolvedAt", pageable);
+
+            verify(incidentRepository).searchByText(
+                    eq("pompe"), isNull(), isNull(), isNull(), isNull(), isNull(),
+                    eq("resolvedAt"), any(Pageable.class));
+        }
+
+        @Test
+        @DisplayName("blank or null search → criteria specification path (no full-text call)")
+        void blankOrNullSearchUsesCriteriaSpec() {
+            when(incidentRepository.findAll(any(Specification.class), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+
+            incidentService.getFilteredIncidents(
+                    List.of(), "   ", null, null, null, null, "declaredAt", pageable);
+            incidentService.getFilteredIncidents(
+                    List.of(), null, null, null, null, null, "declaredAt", pageable);
+
+            verify(incidentRepository, never())
+                    .searchByText(anyString(), any(), any(), any(), any(), any(), anyString(), any(Pageable.class));
+            verify(incidentRepository, times(2))
+                    .findAll(any(Specification.class), any(Pageable.class));
+        }
     }
 
-    // Dual-Write & Validation Constraints
+    //  Dual-Write & Validation Constraints
     @Nested
     @DisplayName("evaluateIncident: Dual-Write & Validation Constraints")
     class EvaluateIncidentConstraints {

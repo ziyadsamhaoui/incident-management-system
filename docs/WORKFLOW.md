@@ -524,3 +524,38 @@
 2. No unannotated REST endpoints — every endpoint carries `@Operation` with explicit success/error `@ApiResponse` codes.
 3. No missing authorization declarations — JWT-protected endpoints inherit the global `bearerAuth` requirement; public endpoints opt out explicitly with `@SecurityRequirements()`.
 4. No untyped responses — controllers return typed DTOs; ad-hoc map payloads are documented with explicit response schemas/examples.
+
+---
+
+# PostgreSQL Full-Text Search (tsvector & GIN)
+
+## Section 10: Incident Text Search Engine
+
+### 10.1 Why not `LIKE '%term%'`?
+- A leading wildcard defeats B-tree indexes → PostgreSQL falls back to **sequential scans** over the whole table.
+- `LIKE` gives **no relevance ranking** (every hit is equal) and **no stemming**.
+- Replaced by native full-text search: `tsvector` documents + GIN index + `ts_rank` scoring, with **zero extra infrastructure** (no Elasticsearch).
+
+### 10.2 Schema (`V11__add_fulltext_search.sql`)
+- `incidents.search_vector tsvector GENERATED ALWAYS AS (...) STORED` — PostgreSQL maintains it on every INSERT/UPDATE; **no application sync code, no triggers**.
+- Weights (feed `ts_rank`): **A** = `reference` + `description` (high priority — the reference is the primary lookup key, so `INC-2026-0042` searches keep working), **B** = `resolution_note`.
+- Dictionary: **`'simple'`** (tokenize + lowercase, no stemming) — correct for mixed French/Arabic operational text. Switch to `'french'` only if metrics prove entries are strictly French (stemming: `convoyeurs` → `convoyeur`).
+- Backfill is automatic: `GENERATED ... STORED` computes the vector for existing rows at `ALTER TABLE` time. Verify with `SELECT id, reference, search_vector FROM incidents LIMIT 5;`.
+
+### 10.3 Query Engine (`websearch_to_tsquery` + `ts_rank`)
+- `GET /api/incidents?search=...` now routes the text term to the native `IncidentRepository.searchByText` query. Search syntax (safe on raw user input — malformed operators are ignored, never an exception):
+  - **Phrase:** `"moteur défaillant"` (adjacent words)
+  - **Exclusion:** `courroie -convoyeur`
+  - **Prefix:** `convoy*`
+- Results are ordered by **`ts_rank(search_vector, query) DESC`** (relevance), with the client-supplied `sort` acting as a tie-breaker.
+- All structured filters (status group, department, user, `declaredAt`/`resolvedAt` date window) compose with the `@@` match inside the native query — searching the Logs tab (`status=RESOLVED` + `dateField=resolvedAt`) still works.
+- **Semantics change vs. the old `LIKE`:** FTS matches whole words (or prefixes with `*`), not arbitrary substrings — e.g. `convoyeur` no longer matches `convoyeurs` (unless `french` stemming is enabled).
+
+### 10.4 Architecture (`IncidentServiceImpl`)
+- `getFilteredIncidents`: a non-blank `search` term → `searchByText(...)` (FTS path); blank/`null` → the existing criteria `Specification` (indexed B-tree predicates). The old `LIKE` predicate was removed from the criteria spec — text search lives in exactly one place.
+
+### 10.5 Anti-Patterns (enforced)
+1. No external search clusters — PostgreSQL-native only.
+2. No `@PostPersist`/`@PostUpdate` listeners or PL/pgSQL triggers — the generated column is self-maintaining.
+3. No raw `to_tsquery` string concatenation — user input goes through `websearch_to_tsquery` only.
+4. No app-side relevance sorting — `ts_rank` runs in PostgreSQL.

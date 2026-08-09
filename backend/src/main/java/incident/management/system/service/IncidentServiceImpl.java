@@ -41,6 +41,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -222,27 +223,60 @@ public class IncidentServiceImpl implements IncidentService {
                                                       LocalDate endDate,
                                                       String dateField,
                                                       Pageable pageable) {
+        if (search != null && !search.isBlank()) {
+            // Text query → PostgreSQL full-text search (tsvector/GIN, ts_rank
+            // relevance ordering). All structured filters compose inside the
+            // native query, so searching the Logs tab with status=RESOLVED +
+            // a resolvedAt window keeps working.
+            return searchByFullText(statuses, search, departmentId, userId,
+                    startDate, endDate, dateField, pageable);
+        }
+        // No text term → pure criteria filtering (indexed B-tree predicates).
         Specification<IncidentEntity> spec = buildFilterSpec(
-                statuses, search, departmentId, userId, startDate, endDate, dateField);
+                statuses, departmentId, userId, startDate, endDate, dateField);
         return incidentRepository.findAll(spec, pageable).map(this::toResponse);
     }
 
     /**
-     * Builds the combined {@link Specification} behind {@code GET /api/incidents}.
+     * Full-text search path — delegates to the native {@code searchByText}
+     * query, translating the shared filter arguments into the SQL bind params.
+     */
+    private Page<IncidentResponse> searchByFullText(List<IncidentStatus> statuses,
+                                                    String search,
+                                                    Long departmentId,
+                                                    Long userId,
+                                                    LocalDate startDate,
+                                                    LocalDate endDate,
+                                                    String dateField,
+                                                    Pageable pageable) {
+        String statusesCsv = (statuses == null || statuses.isEmpty())
+                ? null
+                : statuses.stream().map(Enum::name).collect(Collectors.joining(","));
+        LocalDateTime startDateTime = startDate != null ? startDate.atStartOfDay() : null;
+        LocalDateTime endExclusive = endDate != null ? endDate.plusDays(1).atStartOfDay() : null;
+        String field = "resolvedAt".equalsIgnoreCase(dateField) ? "resolvedAt" : "declaredAt";
+
+        return incidentRepository.searchByText(
+                        search.trim(), statusesCsv, departmentId, userId,
+                        startDateTime, endExclusive, field, pageable)
+                .map(this::toResponse);
+    }
+
+    /**
+     * Builds the combined {@link Specification} behind {@code GET /api/incidents}
+     * for the <strong>non-text</strong> filters (a text term is routed to the
+     * PostgreSQL full-text-search path instead — see {@link #searchByFullText}).
      * <p>
      * All criteria are optional and AND-ed together:
      * <ul>
      *   <li>{@code statuses} — active group (DECLARED/CLAIMED/IN_PROGRESS) or
      *       terminal group (RESOLVED/NON_RESOLVED) for the Logs tab;</li>
-     *   <li>{@code search} — case-insensitive pattern over reference, description
-     *       and resolutionNote (resolutionNote matters for the Logs tab);</li>
      *   <li>{@code departmentId} / {@code userId} — scoping filters;</li>
      *   <li>{@code startDate}/{@code endDate} — inclusive range on the
      *       {@code dateField} column (declaredAt or resolvedAt).</li>
      * </ul>
      */
     private Specification<IncidentEntity> buildFilterSpec(List<IncidentStatus> statuses,
-                                                          String search,
                                                           Long departmentId,
                                                           Long userId,
                                                           LocalDate startDate,
@@ -253,15 +287,6 @@ public class IncidentServiceImpl implements IncidentService {
 
             if (statuses != null && !statuses.isEmpty()) {
                 predicates.add(root.get("status").in(statuses));
-            }
-
-            if (search != null && !search.isBlank()) {
-                String like = "%" + search.trim().toLowerCase() + "%";
-                predicates.add(cb.or(
-                        cb.like(cb.lower(root.get("reference")), like),
-                        cb.like(cb.lower(root.get("description")), like),
-                        cb.like(cb.lower(root.get("resolutionNote")), like)
-                ));
             }
 
             if (departmentId != null) {
@@ -277,8 +302,11 @@ public class IncidentServiceImpl implements IncidentService {
                 if (startDate != null) {
                     predicates.add(cb.greaterThanOrEqualTo(timestamp, startDate.atStartOfDay()));
                 }
+                // Exclusive upper bound (endDate + 1 day at midnight) — matches
+                // the full-text-search path so both search modes return the
+                // same date-window results.
                 if (endDate != null) {
-                    predicates.add(cb.lessThanOrEqualTo(timestamp, endDate.plusDays(1).atStartOfDay()));
+                    predicates.add(cb.lessThan(timestamp, endDate.plusDays(1).atStartOfDay()));
                 }
             }
 
