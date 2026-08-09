@@ -278,6 +278,332 @@ class IncidentRepositoryTest extends BaseRepositoryIntegrationTest {
         }
     }
 
+    //  Analytics & Quality Engineering queries (GET /api/analytics/**)
+    @Nested
+    @DisplayName("Analytics & Quality Engineering queries")
+    class AnalyticsQueriesTest {
+
+        @Autowired
+        private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
+        private CategoryEntity categoryB;
+        private StationEntity stationB;
+
+        @BeforeEach
+        void setUpAnalytics() {
+            categoryB = categoryRepository.save(TestEntityFactory.createCategory());
+            ProductionLineEntity line2 = productionLineRepository.save(
+                    TestEntityFactory.createProductionLine(sectionRepository.save(
+                            TestEntityFactory.createSection())));
+            stationB = stationRepository.save(TestEntityFactory.createStation(line2));
+        }
+
+        @Test
+        @DisplayName("volume buckets group declarations per day with terminal-outcome split")
+        void volumeBuckets_groupByDeclaredDay() {
+            IncidentEntity i1 = persistIncident(userA, departmentA, IncidentStatus.DECLARED);
+            backdateDeclaredAt(i1, LocalDateTime.of(2026, 1, 5, 10, 0));
+
+            IncidentEntity i2 = persistResolvedIncident(userA, departmentA, LocalDateTime.of(2026, 1, 5, 18, 0));
+            backdateDeclaredAt(i2, LocalDateTime.of(2026, 1, 5, 12, 0));
+
+            IncidentEntity i3 = persistIncident(userA, departmentA, IncidentStatus.NON_RESOLVED);
+            backdateDeclaredAt(i3, LocalDateTime.of(2026, 1, 6, 9, 0));
+
+            List<Object[]> rows = incidentRepository.analyticsVolumeBuckets(
+                    "day", LocalDateTime.of(2026, 1, 5, 0, 0),
+                    LocalDateTime.of(2026, 1, 7, 0, 0), null);
+
+            assertThat(rows).hasSize(2);
+            assertThat(rows.get(0)[0]).isEqualTo("2026-01-05");
+            assertThat(rows.get(0)[1]).isEqualTo(2L);  // reported
+            assertThat(rows.get(0)[2]).isEqualTo(1L);  // resolved
+            assertThat(((Number) rows.get(0)[3]).longValue()).isZero(); // non-resolved
+            assertThat(rows.get(1)[0]).isEqualTo("2026-01-06");
+            assertThat(rows.get(1)[1]).isEqualTo(1L);
+            assertThat(((Number) rows.get(1)[3]).longValue()).isEqualTo(1L);
+        }
+
+        @Test
+        @DisplayName("volume buckets support DATE_TRUNC week granularity")
+        void volumeBuckets_weekGranularity() {
+            // Wednesday + Saturday of the same ISO week
+            backdateDeclaredAt(persistIncident(userA, departmentA, IncidentStatus.DECLARED),
+                    LocalDateTime.of(2026, 1, 7, 10, 0));
+            backdateDeclaredAt(persistIncident(userA, departmentA, IncidentStatus.DECLARED),
+                    LocalDateTime.of(2026, 1, 10, 10, 0));
+
+            List<Object[]> rows = incidentRepository.analyticsVolumeBuckets(
+                    "week", LocalDateTime.of(2026, 1, 1, 0, 0),
+                    LocalDateTime.of(2026, 2, 1, 0, 0), null);
+
+            assertThat(rows).hasSize(1);
+            assertThat(rows.get(0)[0]).isEqualTo("2026-01-05"); // Monday of that ISO week
+            assertThat(rows.get(0)[1]).isEqualTo(2L);
+        }
+
+        @Test
+        @DisplayName("volume buckets respect the department filter")
+        void volumeBuckets_departmentFilter() {
+            backdateDeclaredAt(persistIncident(userA, departmentA, IncidentStatus.DECLARED),
+                    LocalDateTime.of(2026, 1, 5, 10, 0));
+            backdateDeclaredAt(persistIncident(userB, departmentB, IncidentStatus.DECLARED),
+                    LocalDateTime.of(2026, 1, 5, 11, 0));
+
+            List<Object[]> all = incidentRepository.analyticsVolumeBuckets(
+                    "day", LocalDateTime.of(2026, 1, 5, 0, 0),
+                    LocalDateTime.of(2026, 1, 6, 0, 0), null);
+            List<Object[]> filtered = incidentRepository.analyticsVolumeBuckets(
+                    "day", LocalDateTime.of(2026, 1, 5, 0, 0),
+                    LocalDateTime.of(2026, 1, 6, 0, 0), departmentA.getId());
+
+            assertThat(all.get(0)[1]).isEqualTo(2L);
+            assertThat(filtered.get(0)[1]).isEqualTo(1L);
+        }
+
+        @Test
+        @DisplayName("MTTR buckets average resolution hours per resolved-day bucket")
+        void mttrBuckets_averageResolutionHours() {
+            // 2h and 4h resolution durations, both resolved the same day
+            backdateDeclaredAt(persistResolvedIncident(userA, departmentA,
+                    LocalDateTime.of(2026, 1, 6, 14, 0)), LocalDateTime.of(2026, 1, 6, 12, 0));
+            backdateDeclaredAt(persistResolvedIncident(userA, departmentA,
+                    LocalDateTime.of(2026, 1, 6, 18, 0)), LocalDateTime.of(2026, 1, 6, 14, 0));
+
+            List<Object[]> rows = incidentRepository.analyticsMttrBuckets(
+                    "day", LocalDateTime.of(2026, 1, 6, 0, 0),
+                    LocalDateTime.of(2026, 1, 7, 0, 0), null);
+
+            assertThat(rows).hasSize(1);
+            assertThat(rows.get(0)[0]).isEqualTo("2026-01-06");
+            assertThat(((Number) rows.get(0)[1]).doubleValue()).isEqualTo(3.0); // avg of 2h + 4h
+        }
+
+        @Test
+        @DisplayName("time-to-claim buckets average claim latency per claimed-day bucket")
+        void timeToClaimBuckets_averageClaimLatency() {
+            IncidentEntity claimed = persistIncident(userA, departmentA, IncidentStatus.CLAIMED);
+            claimed.setClaimedBy(userA);
+            claimed.setClaimedAt(LocalDateTime.of(2026, 1, 6, 11, 0));
+            incidentRepository.save(claimed);
+            backdateDeclaredAt(claimed, LocalDateTime.of(2026, 1, 6, 9, 0)); // 2h latency
+
+            List<Object[]> rows = incidentRepository.analyticsTimeToClaimBuckets(
+                    "day", LocalDateTime.of(2026, 1, 6, 0, 0),
+                    LocalDateTime.of(2026, 1, 7, 0, 0), null);
+
+            assertThat(rows).hasSize(1);
+            assertThat(((Number) rows.get(0)[1]).doubleValue()).isEqualTo(2.0);
+        }
+
+        @Test
+        @DisplayName("totals return exact cohort counts over the window")
+        void totals_exactCohortCounts() {
+            backdateDeclaredAt(persistIncident(userA, departmentA, IncidentStatus.DECLARED),
+                    LocalDateTime.of(2026, 1, 5, 10, 0));
+            backdateDeclaredAt(persistResolvedIncident(userA, departmentA,
+                    LocalDateTime.of(2026, 1, 5, 15, 0)), LocalDateTime.of(2026, 1, 5, 11, 0));
+            backdateDeclaredAt(persistIncident(userA, departmentA, IncidentStatus.NON_RESOLVED),
+                    LocalDateTime.of(2026, 1, 5, 12, 0));
+
+            List<Object[]> rows = incidentRepository.analyticsTotals(
+                    LocalDateTime.of(2026, 1, 5, 0, 0),
+                    LocalDateTime.of(2026, 1, 6, 0, 0), null);
+
+            assertThat(rows).hasSize(1);
+            assertThat(rows.get(0)[0]).isEqualTo(3L); // reported
+            assertThat(rows.get(0)[1]).isEqualTo(1L); // resolved
+            assertThat(rows.get(0)[2]).isEqualTo(1L); // non-resolved
+        }
+
+        @Test
+        @DisplayName("department volumes rank departments descending")
+        void departmentVolumes_rankedDescending() {
+            backdateDeclaredAt(persistIncident(userA, departmentA, IncidentStatus.DECLARED),
+                    LocalDateTime.of(2026, 1, 5, 10, 0));
+            backdateDeclaredAt(persistIncident(userA, departmentA, IncidentStatus.DECLARED),
+                    LocalDateTime.of(2026, 1, 5, 11, 0));
+            backdateDeclaredAt(persistIncident(userB, departmentB, IncidentStatus.DECLARED),
+                    LocalDateTime.of(2026, 1, 5, 12, 0));
+
+            List<Object[]> rows = incidentRepository.analyticsDepartmentVolumes(
+                    LocalDateTime.of(2026, 1, 5, 0, 0),
+                    LocalDateTime.of(2026, 1, 6, 0, 0), null);
+
+            assertThat(rows).hasSize(2);
+            assertThat(rows.get(0)[0]).isEqualTo(departmentA.getName());
+            assertThat(rows.get(0)[1]).isEqualTo(2L);
+            assertThat(rows.get(1)[1]).isEqualTo(1L);
+        }
+
+        @Test
+        @DisplayName("category counts feed the Pareto analysis in descending order")
+        void categoryCounts_descendingOrder() {
+            backdateDeclaredAt(persistIncidentWithCategory(userA, departmentA, category,
+                    IncidentStatus.DECLARED), LocalDateTime.of(2026, 1, 5, 10, 0));
+            backdateDeclaredAt(persistIncidentWithCategory(userA, departmentA, category,
+                    IncidentStatus.DECLARED), LocalDateTime.of(2026, 1, 5, 11, 0));
+            backdateDeclaredAt(persistIncidentWithCategory(userA, departmentA, categoryB,
+                    IncidentStatus.DECLARED), LocalDateTime.of(2026, 1, 5, 12, 0));
+
+            List<Object[]> rows = incidentRepository.analyticsCategoryCounts(
+                    LocalDateTime.of(2026, 1, 5, 0, 0),
+                    LocalDateTime.of(2026, 1, 6, 0, 0), null);
+
+            assertThat(rows).hasSize(2);
+            assertThat(rows.get(0)[0]).isEqualTo(category.getName());
+            assertThat(rows.get(0)[1]).isEqualTo(2L);
+            assertThat(rows.get(1)[1]).isEqualTo(1L);
+        }
+
+        @Test
+        @DisplayName("heatmap cells expose raw PostgreSQL day-of-week and hour")
+        void heatmapCells_dayOfWeekAndHour() {
+            LocalDateTime at = LocalDateTime.of(2026, 1, 7, 10, 30); // a Wednesday, 10h30
+            backdateDeclaredAt(persistIncident(userA, departmentA, IncidentStatus.DECLARED), at);
+            backdateDeclaredAt(persistIncident(userA, departmentA, IncidentStatus.DECLARED), at);
+
+            List<Object[]> rows = incidentRepository.analyticsHeatmapCells(
+                    LocalDateTime.of(2026, 1, 7, 0, 0),
+                    LocalDateTime.of(2026, 1, 8, 0, 0), null);
+
+            assertThat(rows).hasSize(1);
+            int expectedDow = at.getDayOfWeek().getValue() % 7; // PG: 0=Sun … 6=Sat
+            assertThat(rows.get(0)[0]).isEqualTo(expectedDow);
+            assertThat(rows.get(0)[1]).isEqualTo(10);
+            assertThat(rows.get(0)[2]).isEqualTo(2L);
+        }
+
+        @Test
+        @DisplayName("repeat signals flag ≥3 same station+category incidents within 14 days")
+        void repeatSignals_flagRecurringPairs() {
+            // 3 declarations on the same station+category within 14 days → signal
+            for (LocalDateTime at : List.of(
+                    LocalDateTime.of(2026, 1, 1, 8, 0),
+                    LocalDateTime.of(2026, 1, 5, 8, 0),
+                    LocalDateTime.of(2026, 1, 10, 8, 0))) {
+                backdateDeclaredAt(persistIncidentWithCategory(userA, departmentA, category,
+                        IncidentStatus.DECLARED), at);
+            }
+            // 2 incidents only on another pair → no signal
+            for (LocalDateTime at : List.of(
+                    LocalDateTime.of(2026, 1, 2, 8, 0),
+                    LocalDateTime.of(2026, 1, 3, 8, 0))) {
+                IncidentEntity inc = persistIncidentWithCategory(userA, departmentA, categoryB,
+                        IncidentStatus.DECLARED);
+                inc.setStation(stationB);
+                incidentRepository.save(inc);
+                backdateDeclaredAt(inc, at);
+            }
+
+            List<Object[]> rows = incidentRepository.analyticsRepeatSignals(
+                    LocalDateTime.of(2026, 1, 1, 0, 0),
+                    LocalDateTime.of(2026, 2, 1, 0, 0), null);
+
+            assertThat(rows).hasSize(1);
+            assertThat(rows.get(0)[0]).isEqualTo(station.getId());
+            assertThat(rows.get(0)[1]).isEqualTo(station.getCode());
+            assertThat(rows.get(0)[3]).isEqualTo(category.getName());
+            assertThat(rows.get(0)[5]).isEqualTo(3L); // incident count
+        }
+
+        @Test
+        @DisplayName("repeat signals ignore pairs whose 3 incidents span more than 14 days")
+        void repeatSignals_ignoreSpreadOutPairs() {
+            for (LocalDateTime at : List.of(
+                    LocalDateTime.of(2026, 1, 1, 8, 0),
+                    LocalDateTime.of(2026, 1, 20, 8, 0),
+                    LocalDateTime.of(2026, 2, 5, 8, 0))) {
+                backdateDeclaredAt(persistIncidentWithCategory(userA, departmentA, category,
+                        IncidentStatus.DECLARED), at);
+            }
+
+            List<Object[]> rows = incidentRepository.analyticsRepeatSignals(
+                    LocalDateTime.of(2026, 1, 1, 0, 0),
+                    LocalDateTime.of(2026, 2, 28, 0, 0), null);
+
+            assertThat(rows).isEmpty();
+        }
+
+        @Test
+        @DisplayName("workload aggregates throughput per ADMIN evaluator")
+        void workload_aggregatesPerAdmin() {
+            UserEntity admin = TestEntityFactory.createAdmin();
+            admin.setDepartment(departmentA);
+            final UserEntity savedAdmin = userRepository.save(admin);
+
+            // 2 RESOLVED incidents (2h + 4h) + 1 NON_RESOLVED, all resolved by admin
+            for (int h : List.of(2, 4)) {
+                IncidentEntity resolved = persistResolvedIncident(userA, departmentA,
+                        LocalDateTime.of(2026, 1, 6, 10 + h, 0));
+                resolved.setResolvedBy(admin);
+                incidentRepository.save(resolved);
+                backdateDeclaredAt(resolved, LocalDateTime.of(2026, 1, 6, 10, 0));
+            }
+            IncidentEntity nonResolved = persistIncident(userA, departmentA, IncidentStatus.NON_RESOLVED);
+            nonResolved.setResolvedBy(admin);
+            nonResolved.setResolvedAt(LocalDateTime.of(2026, 1, 6, 16, 0));
+            incidentRepository.save(nonResolved);
+            backdateDeclaredAt(nonResolved, LocalDateTime.of(2026, 1, 6, 12, 0));
+
+            // 1 claim by admin
+            IncidentEntity claimed = persistIncident(userA, departmentA, IncidentStatus.CLAIMED);
+            claimed.setClaimedBy(admin);
+            claimed.setClaimedAt(LocalDateTime.of(2026, 1, 6, 11, 0));
+            incidentRepository.save(claimed);
+            backdateDeclaredAt(claimed, LocalDateTime.of(2026, 1, 6, 9, 0));
+
+            List<Object[]> rows = incidentRepository.analyticsWorkload(
+                    LocalDateTime.of(2026, 1, 6, 0, 0),
+                    LocalDateTime.of(2026, 1, 7, 0, 0), null);
+
+            Object[] adminRow = rows.stream()
+                    .filter(r -> ((Number) r[0]).longValue() == savedAdmin.getId())
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(adminRow[3]).isEqualTo(1L);  // claims
+            assertThat(adminRow[4]).isEqualTo(2L);  // resolved
+            assertThat(adminRow[5]).isEqualTo(1L);  // non-resolved
+            assertThat(((Number) adminRow[6]).doubleValue()).isEqualTo(3.0); // avg(2h, 4h)
+        }
+
+        //  ── Analytics helpers ─────────────────────────
+
+        private IncidentEntity persistIncidentWithCategory(final UserEntity user,
+                                                           final DepartmentEntity department,
+                                                           final CategoryEntity cat,
+                                                           final IncidentStatus status) {
+            IncidentEntity incident = TestEntityFactory.createIncident();
+            incident.setUser(user);
+            incident.setDepartment(department);
+            incident.setStation(station);
+            incident.setCategory(cat);
+            incident.setStatus(status);
+            return incidentRepository.save(incident);
+        }
+
+        private IncidentEntity persistResolvedIncident(final UserEntity user,
+                                                       final DepartmentEntity department,
+                                                       final LocalDateTime resolvedAt) {
+            IncidentEntity incident = TestEntityFactory.createIncident();
+            incident.setUser(user);
+            incident.setDepartment(department);
+            incident.setStation(station);
+            incident.setCategory(category);
+            incident.setStatus(IncidentStatus.RESOLVED);
+            incident.setResolvedAt(resolvedAt); // must be set pre-insert (updatable=false)
+            incident.setResolutionNote("Fixed in analytics test");
+            return incidentRepository.save(incident);
+        }
+
+        /** Backdates declared_at (insert-generated) via SQL so bucket tests are deterministic. */
+        private void backdateDeclaredAt(final IncidentEntity incident, final LocalDateTime at) {
+            jdbcTemplate.update(
+                    "UPDATE incidents SET declared_at = ? WHERE id = ?",
+                    java.sql.Timestamp.valueOf(at), incident.getId());
+        }
+    }
+
     //  Helper methods
     private IncidentEntity persistIncident(final UserEntity user,
                                            final DepartmentEntity department,

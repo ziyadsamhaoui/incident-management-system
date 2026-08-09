@@ -32,6 +32,7 @@ import { cn } from '@/lib/utils';
 
 const BREADCRUMB_LABELS: Record<string, string> = {
   '/dashboard': 'Tableau de bord',
+  '/analytics': 'Analytique',
   '/incidents': 'Incidents',
   '/users': 'Utilisateurs',
   '/admin/reference': 'Données de référence',

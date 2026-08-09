@@ -327,7 +327,7 @@ export default function ConfirmResetPage() {
               type="submit"
               disabled={!canSubmit}
               className={[
-                'flex w-full items-center justify-center rounded-xl py-3.5 text-base font-medium text-white shadow-lg shadow-blue-500/25 transition-all duration-200',
+                'flex w-full items-center justify-center rounded-xl py-3.5 text-base font-medium text-white shadow-lg shadow-blue-500/25 dark:shadow-none transition-all duration-200',
                 !canSubmit
                   ? 'cursor-not-allowed bg-[#0F62FE]/50 dark:bg-blue-700/50'
                   : 'bg-[#0F62FE] hover:bg-[#0353E9] active:scale-[0.98] dark:bg-blue-600 dark:hover:bg-blue-500',

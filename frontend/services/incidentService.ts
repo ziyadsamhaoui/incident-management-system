@@ -135,11 +135,25 @@ export async function getStaleIncidents(): Promise<IncidentDTO[]> {
 
 // ── Writes ──────────────────────────────────────────
 
+/**
+ * Generates a fresh idempotency key per submission attempt (UUID v4).
+ * Operators on flaky factory Wi-Fi re-tap "Déclarer" after a client-side
+ * timeout; the backend deduplicates retries carrying the same key, so a
+ * double-submit can never create two incidents.
+ */
+function newIdempotencyKey(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 /** Declare a new incident (SOUS_CHEF / CHEF_ATELIER only). */
 export async function createIncident(
   payload: CreateIncidentRequest,
 ): Promise<IncidentDTO> {
-  const { data } = await apiClient.post<RawIncident>('/api/incidents', payload);
+  const { data } = await apiClient.post<RawIncident>('/api/incidents', payload, {
+    headers: { 'X-Idempotency-Key': newIdempotencyKey() },
+  });
   return mapIncident(data);
 }
 
@@ -147,7 +161,9 @@ export async function createIncident(
 export async function claimIncident(
   id: string | number,
 ): Promise<IncidentDTO> {
-  const { data } = await apiClient.put<RawIncident>(`/api/incidents/${id}/claim`);
+  const { data } = await apiClient.put<RawIncident>(`/api/incidents/${id}/claim`, undefined, {
+    headers: { 'X-Idempotency-Key': newIdempotencyKey() },
+  });
   return mapIncident(data);
 }
 
@@ -155,7 +171,9 @@ export async function claimIncident(
 export async function progressIncident(
   id: string | number,
 ): Promise<IncidentDTO> {
-  const { data } = await apiClient.put<RawIncident>(`/api/incidents/${id}/progress`);
+  const { data } = await apiClient.put<RawIncident>(`/api/incidents/${id}/progress`, undefined, {
+    headers: { 'X-Idempotency-Key': newIdempotencyKey() },
+  });
   return mapIncident(data);
 }
 
@@ -167,6 +185,7 @@ export async function evaluateIncident(
   const { data } = await apiClient.put<RawIncident>(
     `/api/incidents/${id}/evaluate`,
     payload,
+    { headers: { 'X-Idempotency-Key': newIdempotencyKey() } },
   );
   return mapIncident(data);
 }

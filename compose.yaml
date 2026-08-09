@@ -15,11 +15,28 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+  # Distributed state: JWT revocation, rate-limit buckets, query caches,
+  # idempotency keys. Env-configurable via REDIS_PORT (default 6379).
+  redis:
+    image: 'redis:7-alpine'
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis-data:/data
+    command: ['redis-server', '--appendonly', 'yes']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
   backend:
     build:
       context: ./backend
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     ports:
       - '${BACKEND_PORT:-8080}:8080'
@@ -27,6 +44,9 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/icglma_local
       SPRING_DATASOURCE_USERNAME: icglma
       SPRING_DATASOURCE_PASSWORD: ICGLMA@2025
+
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
 
       MEDIA_STORAGE_PATH: /data/incident-media
       MEDIA_SIGNING_SECRET: 79fb7b946f5cc66ab5209f38755df20101c279aa24bf5ddaa3bc6f9af7a2980f
@@ -53,3 +73,4 @@ services:
 volumes:
   postgres-data:
   media-data:
+  redis-data:

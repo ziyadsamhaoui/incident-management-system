@@ -196,6 +196,42 @@ public class GlobalExceptionHandler {
     }
 
     // ──────────────────────────────────────────────
+    //  D4. Idempotency Failures → 409 / 400
+    // ──────────────────────────────────────────────
+
+    /**
+     * Handles {@link IdempotencyConflictException} — a duplicate request with
+     * the same {@code X-Idempotency-Key} arrived while the first attempt is
+     * still being processed. The client should either wait for the in-flight
+     * response or re-query the created resource.
+     */
+    @ExceptionHandler(IdempotencyConflictException.class)
+    public ResponseEntity<ErrorResponse> handleIdempotencyConflict(IdempotencyConflictException ex) {
+        log.warn("Idempotency conflict: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of(
+                        HttpStatus.CONFLICT.value(),
+                        "Conflict",
+                        ex.getMessage()));
+    }
+
+    /**
+     * Handles {@link MissingIdempotencyKeyException} — a protected endpoint
+     * requires the {@code X-Idempotency-Key} header and it was absent.
+     */
+    @ExceptionHandler(MissingIdempotencyKeyException.class)
+    public ResponseEntity<ErrorResponse> handleMissingIdempotencyKey(MissingIdempotencyKeyException ex) {
+        log.warn("Missing idempotency key: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of(
+                        HttpStatus.BAD_REQUEST.value(),
+                        "Bad Request",
+                        ex.getMessage()));
+    }
+
+    // ──────────────────────────────────────────────
     //  E. Rate Limiting Exceeded → 429
     // ──────────────────────────────────────────────
 

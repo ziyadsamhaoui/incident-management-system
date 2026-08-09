@@ -53,10 +53,34 @@
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
 
-        <!-- Rate Limiting -->
+        <!-- Redis (distributed state: JWT blacklist, rate limiting, caching, idempotency) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <!-- Lettuce connection pooling (commons-pool2 is required by LettucePoolingClientConfiguration) -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
+        </dependency>
+
+        <!-- AOP support for @Idempotent (X-Idempotency-Key deduplication aspect).
+             NB: Spring Boot 4 renamed spring-boot-starter-aop to
+             spring-boot-starter-aspectj (AspectJ is the only AOP engine). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aspectj</artifactId>
+        </dependency>
+
+        <!-- Rate Limiting (Bucket4j — in-memory core + Redis Lettuce distributed proxy manager) -->
         <dependency>
             <groupId>com.bucket4j</groupId>
             <artifactId>bucket4j-core</artifactId>
+            <version>8.7.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.bucket4j</groupId>
+            <artifactId>bucket4j-redis</artifactId>
             <version>8.7.0</version>
         </dependency>
 
@@ -145,6 +169,9 @@
             <version>${testcontainers.version}</version>
             <scope>test</scope>
         </dependency>
+        <!-- NB: Testcontainers has no dedicated Redis module at 1.20.1 — the Redis
+             integration test boots a GenericContainer from the core testcontainers
+             artifact (already on the classpath above). -->
     </dependencies>
 
     <build>

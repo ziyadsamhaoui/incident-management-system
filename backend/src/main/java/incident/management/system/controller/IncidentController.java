@@ -5,6 +5,7 @@ import incident.management.system.dto.EvaluateIncidentRequest;
 import incident.management.system.dto.IncidentHistoryResponse;
 import incident.management.system.dto.IncidentResponse;
 import incident.management.system.enums.IncidentStatus;
+import incident.management.system.idempotency.Idempotent;
 import incident.management.system.service.IncidentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -84,8 +85,14 @@ public class IncidentController {
 
     //  DECLARED
     //  Actor: SOUS_CHEF, CHEF_ATELIER or ADMIN (admin declare flow from the incidents console)
+    //
+    //  Idempotent: operators on flaky factory Wi-Fi re-tap "Déclarer" after a
+    //  client-side timeout. @Idempotent deduplicates via X-Idempotency-Key
+    //  (atomic SETNX lock + cached response replay) so a double-submit can never
+    //  create two incidents.
     @PostMapping
     @PreAuthorize("hasAnyRole('SOUS_CHEF', 'CHEF_ATELIER', 'ADMIN')")
+    @Idempotent
     public ResponseEntity<IncidentResponse> createIncident(@Valid @RequestBody CreateIncidentRequest request) {
         IncidentResponse response = incidentService.createIncident(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -111,8 +118,12 @@ public class IncidentController {
 
     //  DECLARED → CLAIMED
     //  Actor: ADMIN
+    //  Idempotency: optional header (required=false) — the state machine already
+    //  makes a duplicate claim a no-op (same-state transitions are allowed), so
+    //  the key only adds defense-in-depth.
     @PutMapping("/{id}/claim")
     @PreAuthorize("hasRole('ADMIN')")
+    @Idempotent(required = false)
     public ResponseEntity<IncidentResponse> claimIncident(@PathVariable Long id) {
         IncidentResponse response = incidentService.claimIncident(id);
         return ResponseEntity.ok(response);
@@ -121,6 +132,7 @@ public class IncidentController {
     //  CLAIMED → IN_PROGRESS
     //  Actor: CLIENT
     @PutMapping("/{id}/progress")
+    @Idempotent(required = false)
     public ResponseEntity<IncidentResponse> progressIncident(@PathVariable Long id) {
         IncidentResponse response = incidentService.progressIncident(id);
         return ResponseEntity.ok(response);
@@ -130,6 +142,7 @@ public class IncidentController {
     //  Actor: ADMIN
     @PutMapping("/{id}/evaluate")
     @PreAuthorize("hasRole('ADMIN')")
+    @Idempotent(required = false)
     public ResponseEntity<IncidentResponse> evaluateIncident(
             @PathVariable Long id,
             @Valid @RequestBody EvaluateIncidentRequest request) {

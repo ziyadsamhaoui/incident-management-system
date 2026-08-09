@@ -365,6 +365,121 @@
 
 ---
 
+# Analytics & Quality Engineering Page (`/analytics`)
+
+## Section 7: Historical Analytics Surface
+
+### 7.1 Philosophy & Access
+- **ADMIN-only page** (inside the `(admin)` route group → `AuthGuard allowedRoles=['ADMIN']` + ADMIN sidebar item `Analytique & Qualité` between *Tableau de bord* and *Incidents*). The workload widget is trivially admin-scoped; its backend endpoint is additionally guarded with `@PreAuthorize("hasRole('ADMIN')")`.
+- **Every widget carries a time-series / trend dimension** — the page answers *"what are the historical patterns over time"*, never a real-time snapshot (no static dashboard duplication).
+- **No client-side aggregation:** all time-bucketing, Pareto math and recurrence detection run in PostgreSQL; the browser only renders and merges already-bucketed series.
+
+### 7.2 Backend — `GET /api/analytics/*` (`AnalyticsController` + `AnalyticsService`)
+- **Shared parameters:** `startDate`/`endDate` (ISO dates, inclusive; defaults = rolling last-30-days), optional `departmentId`. **No hardcoded year/month boundaries anywhere.** Invalid ranges (`end < start`) → 400.
+- **`GET /api/analytics/volume-speed`** — the main payload:
+  - `buckets[]` — dense, gap-free `DATE_TRUNC` series. Granularity adapts to the window: **day** ≤ 32 days, **week** ≤ 120 days, **month** beyond. Each bucket: `reported` + cohort split `resolved`/`nonResolved` (by `declared_at`), `mttrHours` (by `resolved_at`) and `timeToClaimHours` (by `claimed_at`). Zero buckets are filled server-side so the client never invents points.
+  - `totals` — exact window aggregates (reported/resolved/nonResolved, `resolutionRatePct` = RESOLVED share of evaluations, avg MTTR, avg time-to-claim).
+  - `deltas` — **period-over-period percentages vs. the previous window of identical length** (only when `compare=true`). Every delta carries a `goodWhenUp` polarity flag so the client colors badges correctly (resolution-rate up = green; volume/MTTR/time-to-claim down = green). Null when the previous period has no comparable data.
+  - `departments[]` — ranked department volume (descending).
+- **`GET /api/analytics/pareto`** — category counts sorted strictly descending + **server-side cumulative percentages** + `insight` (`categoriesTo80`, `totalCategories`, `pctCovered`) powering the 80/20 banner.
+- **`GET /api/analytics/heatmap`** — sparse `[dayOfWeek, hour, count]` cells (dayOfWeek **0 = Monday … 6 = Sunday** ISO — the service normalizes PostgreSQL's `EXTRACT(DOW)` 0=Sunday).
+- **`GET /api/analytics/repeat-signals`** — **SQL windowing** recurrence detector: `LAG(2)` per `(station_id, category_id)` flags a pair when ≥ 3 incidents fall within any 14-day window; group stats (count, first/last occurrence, latest reference for deep-linking) are computed over the *whole* cluster. Query lives in `IncidentRepository.analyticsRepeatSignals` (validated against a real PostgreSQL 15 instance — CTEs + window functions).
+- **`GET /api/analytics/workload`** — **ADMIN-only** aggregate team workload per evaluator: claims, RESOLVED/NON_RESOLVED counts, mean resolution hours. Ordered by last name (neutral, non-competitive). No ranking, no scores.
+- All analytics SQL lives in `IncidentRepository` (native `@Query`), keeping the existing per-user analytics convention.
+
+### 7.3 Frontend (`/analytics` + `components/analytics/*`)
+- **Global control bar** (`analytics-controls.tsx`): presets **7 j / 30 j (default) / 90 j / Depuis le 1er janvier / Personnalisé** (custom = two date inputs), department filter, and the **`vs. période précédente`** comparison toggle that re-fetches volume-speed with `compare=true` and reveals delta badges on the summary strip.
+- **Summary strip** (`summary-strip.tsx`): 4 metric tiles (Incidents déclarés, Taux de résolution, MTTR, Prise en charge) with polarity-aware green/red delta badges when comparison is on.
+- **Volume & Resolution trends** (`volume-charts.tsx`): gradient area chart of reported volume + stacked area of RESOLVED vs NON_RESOLVED outcome proportion.
+- **Speed trends** (`speed-charts.tsx`): MTTR and time-to-claim line charts (hours, gaps where a bucket has no data).
+- **Industrial Pareto 80/20** (`pareto-chart.tsx`): composed bar (count) + cumulative-% line on a right axis, dashed **80 % reference line**, bars past the threshold muted, and an automatic insight banner ("3 / 12 catégories concentrent 78.2 % des incidents").
+- **Shift heatmap** (`shift-heatmap.tsx`): 24h × 7d grid, cell intensity ∝ density, hover tooltip, legend.
+- **Repeat-incident signals** (`repeat-signals-list.tsx`): amber alert callout cards (station code, category, count, first occurrence) each deep-linking to `/admin/incidents/{id}` of the cluster's latest incident (the signal carries `latestIncidentId` — the detail view works for active AND terminal incidents, unlike a `?ref=` search which only covers the active list).
+- **Department comparison** (`department-chart.tsx`): ranked horizontal bar chart.
+- **Team workload** (`workload-table.tsx`, ADMIN): neutral aggregate table — **no leaderboards, no rank badges, no gamified callouts** (anti-pattern §7.4.3).
+- **Export engine** (`lib/report.ts` + `export-dropdown.tsx`): `[Exporter le rapport]` dropdown → **CSV** (sectioned, UTF-8 BOM + `;`, reuses `lib/csv.ts`) and **PDF** (jsPDF + autotable, multi-section "Rapport mensuel — Sécurité & Exploitation": indicators, volume buckets, Pareto, departments, signals, workload). Filenames embed the active range.
+- **Service/types:** `services/analyticsService.ts` + `types/analytics.ts` (mirror the backend records exactly).
+- **i18n:** every string on the page goes through `useTranslation()` — keys under the `analytics*` namespace in both FR and AR dictionaries of `lib/i18n.ts` (the project keeps dictionaries in `lib/i18n.ts`, not `fr.json`/`ar.json` — see §6.5).
+- **Navigation:** ADMIN sidebar entry + header breadcrumb `Analytique & Qualité` + mobile bottom-nav "Plus" sheet entry.
+
+### 7.4 Anti-Patterns (enforced)
+1. No static dashboard snapshot cards — every tile/chart is trend- or delta-anchored.
+2. No client-side aggregations — buckets, cumulative % and 14-day windows are computed by SQL; the client merges dense server series only.
+3. No competitive gamification — the workload table is plain aggregate data (ADMIN only).
+4. No hardcoded date boundaries — every query is parameterised from the active window; defaults are rolling relative dates.
+
+---
+
+---
+
+# Redis Infrastructure & Distributed State
+
+## Section 8: Redis-Powered Resilience (JWT Revocation, Rate Limiting, Caching, Idempotency)
+
+### 8.1 Architectural Directive
+- **Every piece of cross-instance state lives in Redis** — never in JVM heap. The legacy in-memory `ConcurrentHashMap` token blacklist and Bucket4j bucket map were **fully removed** (no side-by-side in-memory fallbacks are kept in production).
+- **Every Redis key carries an explicit TTL** — no key is ever inserted without an expiration policy.
+- **No native Java serialization** — keys use `StringRedisSerializer`, values use the **Jackson 3** JSON serializer (`GenericJacksonJsonRedisSerializer`, the `tools.jackson` variant matching this Spring Boot 4 application).
+- **Dependency additions (`backend/pom.xml`):** `spring-boot-starter-data-redis` (Lettuce driver), `commons-pool2` (pooling), `spring-boot-starter-aspectj` (AOP for `@Idempotent` — Boot 4 renamed `spring-boot-starter-aop`), `bucket4j-redis` 8.7.0 (Lettuce `ProxyManager`).
+
+### 8.2 Configuration Keys (`application.properties`, env-overridable)
+| Property | Env var | Default | Purpose |
+|---|---|---|---|
+| `spring.data.redis.host` | `SPRING_REDIS_HOST` | `localhost` | Redis host |
+| `spring.data.redis.port` | `SPRING_REDIS_PORT` | `6379` | Redis port |
+| `spring.data.redis.password` | `SPRING_REDIS_PASSWORD` | *(empty)* | Redis password (blank = no auth) |
+| `spring.data.redis.database` | `SPRING_REDIS_DATABASE` | `0` | Logical DB index |
+| `spring.data.redis.lettuce.pool.*` | `REDIS_POOL_*` | 16/8/2 | Lettuce connection pool (max-active/max-idle/min-idle) |
+| `app.cache.default-ttl-seconds` | `CACHE_DEFAULT_TTL_SECONDS` | `90` | Default cache TTL |
+| `app.cache.dashboard-ttl-seconds` | `CACHE_DASHBOARD_TTL_SECONDS` | `90` | `dashboard_stats` TTL |
+| `app.cache.analytics-ttl-seconds` | `CACHE_ANALYTICS_TTL_SECONDS` | `120` | `analytics_metrics` TTL |
+| `app.idempotency.ttl-seconds` | `IDEMPOTENCY_TTL_SECONDS` | `30` | Idempotency lock window |
+
+**Local dev:** `compose.yaml` now declares a `redis:7-alpine` service (named volume `redis-data`, healthcheck via `redis-cli ping`); the backend `depends_on` it and receives `SPRING_REDIS_HOST=redis`. **CI/Prod (Railway):** provision a Redis instance and set `SPRING_REDIS_HOST` / `SPRING_REDIS_PORT` / `SPRING_REDIS_PASSWORD`.
+
+### 8.3 Connection & Serialization Standard (`config/RedisConfig.java`)
+- `LettuceConnectionFactory` built from `RedisStandaloneConfiguration` + `LettucePoolingClientConfiguration` (commons-pool2).
+- `RedisTemplate<String,Object>`: string keys, JSON values.
+- `RedisCacheManager`: default TTL + per-cache overrides via `withInitialCacheConfigurations`.
+- A **dedicated Lettuce `RedisClient` + `StatefulRedisConnection<byte[],byte[]>`** feeds the bucket4j `ProxyManager`, isolating rate-limit traffic from template/cache traffic. The connection and proxy manager beans are **`@Lazy`** — Lettuce's `connect()` throws synchronously when Redis is down, so deferring the connect keeps the application bootable during a Redis outage (fail-closed at request time, never an in-memory fallback).
+
+### 8.4 Distributed JWT Revocation (`security/TokenBlacklistService.java`)
+- **Key scheme:** `blacklist:jwt:{jti}` — every token now carries a UUID `jti` claim (`JwtService`). Legacy tokens without a `jti` fall back to the SHA-256 digest of the token, keeping the lookup deterministic.
+- **TTL:** set to the token's remaining validity (`expiration − now`, floored at 1s); a 15-minute fallback when the expiry cannot be extracted. Redis evicts entries itself — the old scheduled cleaner is gone.
+- **Enforcement:** `JwtAuthenticationFilter` performs an **O(1) `hasKey`** check before authenticating (the existing `isBlacklisted(token)` call now hits Redis). Malformed tokens are treated as not-blacklisted and left to signature/expiry validation.
+
+### 8.5 Distributed Rate Limiting (`service/RateLimitingService.java` + `RedisRateLimitBucketProvider`)
+- Bucket4j buckets are now **distributed**: `ProxyManager` → Lettuce → Redis under `rate_limit:api:{rule}:{clientKey}` (authenticated users on incident creation are keyed by matricule, everyone else by IP). Limits survive restarts and are enforced consistently across every instance.
+- **TTL discipline:** the proxy manager uses `ExpirationAfterWriteStrategy.basedOnTimeForRefillingBucketUpToMax(15min)` — bucket state expires once it could have refilled (bounded by the longest window, the 15-minute password-reset rule). No key outlives its usefulness.
+- `RateLimitBucketProvider` is a thin seam isolating bucket4j; production is `RedisRateLimitBucketProvider`, unit tests use an in-memory fake (test-only). Rules (`AUTH` 5/min, `INCIDENT_CREATE` 10/min, `PASSWORD_RESET_MANUAL` 3/15min) and `resolveRule` are unchanged.
+
+### 8.6 High-Performance Query Caching (`DashboardService` + `AnalyticsServiceImpl`)
+- **`dashboard_stats` (TTL 90s):** all six dashboard aggregations are now `@Cacheable` in a dedicated `DashboardService` (the controller is a thin delegate). Keys are explicit literals (`'by-status'`, `'by-priority'`, …) so no-arg methods don't collide on `SimpleKey.EMPTY`.
+- **`analytics_metrics` (TTL 120s):** the five analytics queries (`getVolumeSpeed`, `getPareto`, `getHeatmap`, `getRepeatSignals`, `getWorkload`) are `@Cacheable` with keys composed of method name + `start` + `end` + `departmentId` (+ `compare` for volume-speed). The heavier `DATE_TRUNC`/window-function SQL is absorbed by the 2-minute freshness budget.
+- **Invalidation:** `@EvictDashboardCaches` (a composed `@Caching` annotation) evicts **both** caches wholesale on every incident mutation in `IncidentServiceImpl` (`createIncident`, `claimIncident`, `progressIncident`, `evaluateIncident`, `deleteIncident`) — the aggregation keys are window/department-scoped, so `allEntries = true` is required.
+
+### 8.7 Idempotency Pipeline (`idempotency/` + `@Idempotent`)
+- **Problem:** operators on flaky factory Wi-Fi re-tap "Déclarer" after a client-side timeout, creating duplicate incidents.
+- **Client:** `frontend/services/incidentService.ts` generates a fresh UUID per attempt (`crypto.randomUUID()` with a legacy fallback) and sends `X-Idempotency-Key` on `createIncident` (required), and on `claimIncident` / `progressIncident` / `evaluateIncident` (defense-in-depth).
+- **Aspect (`IdempotencyAspect`):**
+  1. missing/blank header on a `required` endpoint → `400`;
+  2. atomic `SETNX idempotency:{key}` with a 30s TTL;
+  3. lock held → replay the cached response under `idempotency:{key}:response`, or `409 Conflict` while the first attempt is still in flight;
+  4. success → cache the JSON response (same TTL); failure → release the lock so the operator can retry.
+- **Endpoints:** `POST /api/incidents` is `@Idempotent` (required); the three PUT transitions are `@Idempotent(required = false)` — the state machine already makes repeat transitions no-ops.
+- **GlobalExceptionHandler:** `IdempotencyConflictException` → `409`, `MissingIdempotencyKeyException` → `400`.
+
+### 8.8 Failure Mode & Testing
+- **Redis down:** the app still boots (lazy Lettuce connects). Authenticated traffic fails closed — revocation checks and rate limiting cannot be verified, so requests error instead of silently relaxing security. Restore Redis to recover; the cache simply misses and recomputes.
+- **Unit tests** (no infra): `TokenBlacklistServiceTest`, `RateLimitingServiceTest`, `IdempotencyAspectTest` (mocked/in-memory fakes).
+- **Integration test** `RedisDistributedStateIntegrationTest` (Testcontainers `redis:7-alpine` + full Spring context): proves revocation keys land in Redis with bounded TTL, rate-limit buckets are shared across two service instances, `SETNX` idempotency locks are atomic, and `dashboard_stats` entries are persisted.
+
+### 8.9 Anti-Patterns (enforced)
+1. No unlimited-TTL Redis keys — blacklist TTL = remaining token validity, bucket state expires via write strategy, cache entries expire per-cache, idempotency locks expire after 30s.
+2. No in-memory state in production — `ConcurrentHashMap` blacklist and bucket map are deleted; the only in-memory `RateLimitBucketProvider` fake is test-scoped.
+3. No unchecked duplicate submissions — incident creation refuses requests without `X-Idempotency-Key`.
+4. No JDK serialization — String + Jackson 3 JSON serializers only.
+
 ### 4.5 Cross-Cutting Rules
 - **Lockout escape hatch:** the public request endpoints are NOT gated behind `isLocked()` — a locked account can still request a reset (then reset clears the lock via §4.4).
 - **Rate limiting:** `POST /api/auth/**` is limited to **5 req/min/IP** (`RateLimitRule.AUTH`); `request-manual` gets a stricter dedicated **3 req/15 min/IP** (`PASSWORD_RESET_MANUAL`). All three screens render the `Retry-After` seconds as a visual countdown on 429.

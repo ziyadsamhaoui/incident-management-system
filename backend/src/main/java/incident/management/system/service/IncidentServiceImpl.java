@@ -1,5 +1,6 @@
 package incident.management.system.service;
 
+import incident.management.system.config.EvictDashboardCaches;
 import incident.management.system.dto.CategoryResponse;
 import incident.management.system.dto.CreateIncidentRequest;
 import incident.management.system.dto.DepartmentResponse;
@@ -76,6 +77,7 @@ public class IncidentServiceImpl implements IncidentService {
     //  ========================================================================
 
     @Override
+    @EvictDashboardCaches
     public IncidentResponse createIncident(CreateIncidentRequest request) {
         UserEntity user = userRepository.findById(request.userId())
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", request.userId()));
@@ -289,6 +291,7 @@ public class IncidentServiceImpl implements IncidentService {
     //  ========================================================================
 
     @Override
+    @EvictDashboardCaches
     public IncidentResponse claimIncident(Long id) {
         IncidentEntity incident = incidentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Incident", "id", id));
@@ -323,6 +326,7 @@ public class IncidentServiceImpl implements IncidentService {
     //  ========================================================================
 
     @Override
+    @EvictDashboardCaches
     public IncidentResponse progressIncident(Long id) {
         IncidentEntity incident = incidentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Incident", "id", id));
@@ -353,6 +357,7 @@ public class IncidentServiceImpl implements IncidentService {
     //  ========================================================================
 
     @Override
+    @EvictDashboardCaches
     public IncidentResponse evaluateIncident(Long id, EvaluateIncidentRequest request) {
         IncidentEntity incident = incidentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Incident", "id", id));
@@ -408,6 +413,7 @@ public class IncidentServiceImpl implements IncidentService {
     //  ========================================================================
 
     @Override
+    @EvictDashboardCaches
     public void deleteIncident(Long id) {
         if (!incidentRepository.existsById(id)) {
             throw new ResourceNotFoundException("Incident", "id", id);

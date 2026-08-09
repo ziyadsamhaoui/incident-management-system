@@ -18,6 +18,7 @@ import {
   ChevronDown,
   Circle,
   Archive,
+  BarChart3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -96,6 +97,7 @@ export function MobileBottomNav({ isVisible = true, onNavigate }: MobileBottomNa
         { label: 'Stations', href: '/admin/reference?tab=stations' },
       ],
     },
+    { label: 'Analytics', href: '/analytics', icon: BarChart3 },
     { label: 'Archives', href: '/admin/incidents/logs', icon: Archive },
     { label: 'My Subscriptions', href: '/admin/subscriptions', icon: BellRing },
     { label: 'Settings', href: '/admin/settings', icon: Settings },

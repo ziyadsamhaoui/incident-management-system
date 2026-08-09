@@ -1,21 +1,39 @@
 package incident.management.system.service;
 
 import incident.management.system.exception.RateLimitExceededException;
+import io.github.bucket4j.Bandwidth;
+import io.github.bucket4j.Bucket;
+import io.github.bucket4j.BucketConfiguration;
+import io.github.bucket4j.local.LocalBucketBuilder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+/**
+ * Unit tests for {@link RateLimitingService}.
+ *
+ * <p>Production uses {@link RedisRateLimitBucketProvider} (bucket state in
+ * Redis, shared across instances). These tests exercise the exact same service
+ * logic against an in-memory {@link RateLimitBucketProvider} fake that returns
+ * real bucket4j buckets, so the token accounting rules are validated with real
+ * bucket semantics but without a Redis server. The cross-instance behaviour is
+ * covered by {@code RedisDistributedStateIntegrationTest}.
+ */
 class RateLimitingServiceTest {
 
     private RateLimitingService rateLimitingService;
 
     @BeforeEach
     void setUp() {
-        rateLimitingService = new RateLimitingService();
+        rateLimitingService = new RateLimitingService(new InMemoryBucketProvider());
     }
 
     // Auth endpoint rate limiting (5 req/min)
@@ -293,6 +311,28 @@ class RateLimitingServiceTest {
                     .isInstanceOfSatisfying(RateLimitExceededException.class, ex -> {
                         assertThat(ex.getRetryAfterSeconds()).isPositive();
                     });
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    //  In-memory fake — real bucket4j buckets, no Redis. Production uses
+    //  RedisRateLimitBucketProvider instead; this fake exists only for tests.
+    // ──────────────────────────────────────────────────────────────────────
+
+    private static final class InMemoryBucketProvider implements RateLimitBucketProvider {
+
+        private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
+
+        @Override
+        public Bucket getBucket(byte[] key, BucketConfiguration configuration) {
+            String stringKey = new String(key, StandardCharsets.UTF_8);
+            return buckets.computeIfAbsent(stringKey, ignored -> {
+                LocalBucketBuilder builder = Bucket.builder();
+                for (Bandwidth bandwidth : configuration.getBandwidths()) {
+                    builder.addLimit(bandwidth);
+                }
+                return builder.build();
+            });
         }
     }
 }

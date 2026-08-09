@@ -29,6 +29,7 @@ import {
   Cpu,
   Archive,
   Image,
+  BarChart3,
 } from 'lucide-react';
 
 // ── Badge hook for attention counts (real API data, ADMIN only) ──
@@ -90,6 +91,7 @@ const CHEF_ATELIER_ITEMS: NavEntry[] = [
 function buildAdminItems(criticalIncidents: number): NavEntry[] {
   return [
     { label: 'Tableau de bord', href: '/dashboard', icon: LayoutDashboard, roles: ['ADMIN'] },
+    { label: 'Analytique', href: '/analytics', icon: BarChart3, roles: ['ADMIN'] },
     {
       label: 'Incidents',
       href: '/admin/incidents',
