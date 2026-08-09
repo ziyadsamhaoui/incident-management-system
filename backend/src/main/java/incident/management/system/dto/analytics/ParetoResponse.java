@@ -1,5 +1,7 @@
 package incident.management.system.dto.analytics;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import java.util.List;
 
 /**
@@ -9,12 +11,14 @@ import java.util.List;
  * <p>Sorting, cumulative percentages and the 80% insight are all computed
  * server-side from the aggregated rows; the client only renders.
  */
+@Schema(description = "Industrial Pareto (80/20) analysis of incident categories — cumulative percentages "
+        + "and the 80% insight are computed server-side.")
 public record ParetoResponse(
-        /** Categories sorted strictly descending by incident count. */
+        @Schema(description = "Categories sorted strictly descending by incident count")
         List<Category> categories,
-        /** Total incidents considered by the analysis. */
+        @Schema(description = "Total incidents considered by the analysis", example = "960")
         long totalCount,
-        /** 80% threshold insight; {@code null} when there are no incidents. */
+        @Schema(description = "80% threshold insight — null when there are no incidents")
         Insight insight
 ) {
 
@@ -22,15 +26,26 @@ public record ParetoResponse(
      * @param cumulativePct running share (0–100) once the category and every
      *                      category before it (higher count) are summed.
      */
-    public record Category(String name, long count, double cumulativePct) {}
+    @Schema(description = "One Pareto category row.")
+    public record Category(
+            @Schema(description = "Category name", example = "Mécanique")
+            String name,
+            @Schema(description = "Incident count for this category", example = "412")
+            long count,
+            @Schema(description = "Running cumulative share (0–100)", example = "42.9")
+            double cumulativePct
+    ) {}
 
     /**
      * {@code N of M categories account for P% of all recorded incidents}.
-     *
-     * @param categoriesTo80 number of top categories whose combined share
-     *                       first reaches the 80% threshold
-     * @param totalCategories total distinct categories
-     * @param pctCovered      combined share (0–100) of those top categories
      */
-    public record Insight(int categoriesTo80, int totalCategories, double pctCovered) {}
+    @Schema(description = "Pareto 80% insight.")
+    public record Insight(
+            @Schema(description = "Number of top categories whose combined share first reaches 80%", example = "3")
+            int categoriesTo80,
+            @Schema(description = "Total distinct categories", example = "12")
+            int totalCategories,
+            @Schema(description = "Combined share (0–100) of those top categories", example = "86.4")
+            double pctCovered
+    ) {}
 }

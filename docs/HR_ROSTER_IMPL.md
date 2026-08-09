@@ -453,6 +453,12 @@ Expected result: `created: 2, skipped: 3, totalRows: 5`
 
 ## Quick Reference
 
+> **Canonical API reference:** the auto-generated OpenAPI 3.0 spec (Swagger UI at
+> `/swagger-ui/index.html`, raw JSON at `/v3/api-docs`) is the single source of
+> truth for the REST surface. The rows below are a quick operational summary and
+> may lag the implementation — e.g. the roster import currently runs at startup
+> (`DevSeedConfig`, `dev` profile) rather than via an HTTP endpoint.
+
 | Action | Endpoint | Method | Role |
 |---|---|---|---|
 | CSV Roster Import | `/api/admin/users/import/csv` | POST | ADMIN |

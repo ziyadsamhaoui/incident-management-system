@@ -500,3 +500,27 @@
 - **Rate limiting:** `POST /api/auth/**` is limited to **5 req/min/IP** (`RateLimitRule.AUTH`); `request-manual` gets a stricter dedicated **3 req/15 min/IP** (`PASSWORD_RESET_MANUAL`). All three screens render the `Retry-After` seconds as a visual countdown on 429.
 - **i18n:** every string on these screens goes through `useTranslation()` (FR/AR dictionaries in `lib/i18n.ts`) — no hardcoded copy.
 - **Audit strip:** `GET /api/users/{id}/audit-logs` (ADMIN) feeds the "Piste d'audit" card on `/admin/users/[id]`, rendering `GENERATE_RESET_CODE` entries as "Code de réinitialisation généré par [admin] le [date]".
+
+---
+
+# OpenAPI 3.0 & Swagger UI — Official API Surface
+
+## Section 9: Auto-Generated REST API Documentation
+
+### 9.1 Canonical API Reference
+- The **single source of truth** for the REST API is the auto-generated OpenAPI 3.0 specification:
+  - **Swagger UI (interactive):** `http://localhost:8080/swagger-ui/index.html`
+  - **Raw JSON spec:** `http://localhost:8080/v3/api-docs` — import into Postman, or generate typed clients from it.
+- The spec is produced at runtime by `springdoc-openapi` from `@Tag` / `@Operation` / `@ApiResponse` / `@Schema` annotations on controllers and DTOs — there is **no hand-maintained YAML/JSON spec file**, so the documentation can never silently drift from the code. Manual REST endpoint tables in this repo have been replaced by the Swagger UI reference.
+- **Authentication in Swagger UI:** click **Authorize** and paste a JWT access token (from `POST /api/auth/login` or `/api/auth/claim`) — the global `bearerAuth` HTTP security scheme applies it to every protected operation. Public endpoints (login, claim, password reset, …) are annotated to render as unauthenticated.
+
+### 9.2 Configuration & Environment Isolation
+- `springdoc.swagger-ui.enabled` (`SPRINGDOC_SWAGGER_UI_ENABLED`) toggles the interactive UI; `springdoc.api-docs.enabled` (`SPRINGDOC_API_DOCS_ENABLED`) toggles the raw spec. Both default to `true` in dev.
+- **Production:** set `SPRINGDOC_SWAGGER_UI_ENABLED=false` — `SecurityConfig` whitelists the Swagger paths **only** while the flag is enabled, so the docs are both unserved and unreachable anonymously.
+- Endpoints: UI at `/swagger-ui/index.html` (redirect from `/swagger-ui.html`), raw spec at `/v3/api-docs`.
+
+### 9.3 Anti-Patterns (enforced)
+1. No hand-maintained OpenAPI YAML/JSON files — everything is generated from annotations.
+2. No unannotated REST endpoints — every endpoint carries `@Operation` with explicit success/error `@ApiResponse` codes.
+3. No missing authorization declarations — JWT-protected endpoints inherit the global `bearerAuth` requirement; public endpoints opt out explicitly with `@SecurityRequirements()`.
+4. No untyped responses — controllers return typed DTOs; ad-hoc map payloads are documented with explicit response schemas/examples.

@@ -1,5 +1,7 @@
 package incident.management.system.dto.analytics;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * One row of {@code GET /api/analytics/workload} — an aggregate, team-health
  * oriented workload snapshot per ADMIN / CHEF_ATELIER evaluator.
@@ -8,18 +10,23 @@ package incident.management.system.dto.analytics;
  * ranking): fields describe throughput and average handling time, and no
  * derived rank/score is exposed.
  */
+@Schema(description = "Aggregate workload snapshot per evaluator — throughput and average handling time, "
+        + "deliberately non-competitive.")
 public record WorkloadEntry(
+        @Schema(description = "Evaluator user id", example = "42")
         Long userId,
+        @Schema(description = "Evaluator first name", example = "Yassine")
         String firstName,
+        @Schema(description = "Evaluator last name", example = "El Amrani")
         String lastName,
-        /** Incidents this user claimed (took into charge) in the window. */
+        @Schema(description = "Incidents claimed (taken into charge) in the window", example = "23")
         long claimedCount,
-        /** Incidents evaluated as RESOLVED by this user in the window. */
+        @Schema(description = "Incidents evaluated RESOLVED in the window", example = "19")
         long resolvedCount,
-        /** Incidents evaluated as NON_RESOLVED by this user in the window. */
+        @Schema(description = "Incidents evaluated NON_RESOLVED in the window", example = "4")
         long nonResolvedCount,
-        /** Total evaluations (RESOLVED + NON_RESOLVED). */
+        @Schema(description = "Total evaluations (RESOLVED + NON_RESOLVED)", example = "23")
         long evaluatedCount,
-        /** Mean resolution duration in hours (RESOLVED only); null when none. */
+        @Schema(description = "Mean resolution duration in hours (RESOLVED only; null when none)", example = "3.1")
         Double avgResolutionHours
 ) {}

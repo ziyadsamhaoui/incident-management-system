@@ -54,14 +54,14 @@ Media bytes are streamed **straight from the browser to the server's local files
 2. **Backend → disk:** `LocalFileStorageService` streams the file via `transferTo()` and a **16-byte magic-byte sniff** (JPEG/PNG/GIF/WebP/HEIC, MP4/WebM/AVI, WebM/Ogg/MP3/WAV/M4A) validates the payload before the `incident_attachments` row is persisted; spoofed payloads are deleted (`400`).
 3. **Client-side preprocessing:** images are compressed first (`browser-image-compression`: long edge ≤ 1280 px, JPEG ~75 %); video capture is capped in-browser at **30 s / 720p** (MediaRecorder); voice clips at **60 s** (`audio/webm` or `audio/mp4`).
 
-### Endpoints
+### API documentation (OpenAPI 3.0 / Swagger UI)
 
-| Method | Route | Purpose |
-|--------|-------|---------|
-| `POST` | `/api/incidents/{id}/attachments` | multipart upload (streamed to disk) |
-| `GET` | `/api/incidents/{id}/attachments` | list (fresh signed read URLs) |
-| `GET` | `/api/incidents/{id}/attachments/{attId}?token=…` | streamed file bytes — `Accept-Ranges: bytes` for video seeking |
-| `GET` | `/api/incidents/attachments/storage-status` | Admin metrics: DB `SUM(file_size_bytes)` + host disk headroom |
+The **complete REST API surface is auto-generated** from code annotations (`springdoc-openapi`) — there are no hand-maintained API tables to keep in sync:
+
+- **Swagger UI (interactive):** `http://localhost:8080/swagger-ui/index.html`
+- **Raw OpenAPI JSON:** `http://localhost:8080/v3/api-docs` — import into Postman, or generate typed clients from it
+
+Click **Authorize** in Swagger UI and paste a JWT from `POST /api/auth/login` to exercise protected endpoints inline. Disable the docs per environment with `SPRINGDOC_SWAGGER_UI_ENABLED=false` (recommended for production).
 
 Access rules mirror incident scoping: `ADMIN` everything, `CHEF_ATELIER` own department, `SOUS_CHEF` own declared incidents. Media reads are authorized by a short-lived HMAC signed token (for `<img>`/`<video>` tags) or the JWT session — the storage directory is **never** exposed as a public static path.
 

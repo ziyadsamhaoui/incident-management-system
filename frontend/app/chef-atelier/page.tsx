@@ -93,10 +93,6 @@ function formatDuration(diffMs: number): string {
   return `${mins} min`;
 }
 
-/**
- * Column "Temps". Terminal incidents (RESOLVED / NON_RESOLVED) show a fixed
- * processing duration (declared → resolved) instead of a live timer.
- */
 function formatIncidentTime(inc: IncidentDTO): string {
   const endTime = inc.resolvedAt ?? inc.closedAt;
   if (endTime) {

@@ -7,6 +7,14 @@ import incident.management.system.dto.IncidentResponse;
 import incident.management.system.enums.IncidentStatus;
 import incident.management.system.idempotency.Idempotent;
 import incident.management.system.service.IncidentService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -32,6 +40,10 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/incidents")
 @RequiredArgsConstructor
+@Tag(name = "Incidents",
+        description = "Incident lifecycle: filtered listing, declaration, the DECLARED → CLAIMED → "
+                + "IN_PROGRESS → RESOLVED/NON_RESOLVED state machine, and the per-incident audit trail. "
+                + "Requires a valid JWT (Bearer) for every operation; state transitions are role-gated.")
 public class IncidentController {
 
     private final IncidentService incidentService;
@@ -41,15 +53,36 @@ public class IncidentController {
     //  `status=DECLARED,CLAIMED,IN_PROGRESS` (Actifs) or
     //  `status=RESOLVED,NON_RESOLVED` (Logs).
     @GetMapping
+    @Operation(summary = "List incidents with combinable filters",
+            description = "Paginated incident listing. `status` accepts a single value or a comma-separated "
+                    + "group (e.g. DECLARED,CLAIMED,IN_PROGRESS for active incidents, RESOLVED,NON_RESOLVED "
+                    + "for the logs archive). `search` matches reference/description/resolutionNote "
+                    + "case-insensitively; `departmentId`/`userId` narrow the scope; `startDate`/`endDate` "
+                    + "bound the `dateField` column (`declaredAt` default, `resolvedAt` for logs). Spring "
+                    + "Data pagination via `page`/`size`/`sort`.")
+    @ApiResponses({
+            // Paginated payload — springdoc's PageOpenAPIConverter derives the
+            // PageIncidentResponse schema (with content items) from the return type.
+            @ApiResponse(responseCode = "200", description = "Paginated incidents (Page<IncidentResponse>)"),
+            @ApiResponse(responseCode = "400", description = "Invalid status token or malformed date range"),
+            @ApiResponse(responseCode = "403", description = "Missing or invalid JWT")
+    })
     public ResponseEntity<Page<IncidentResponse>> getIncidents(
+            @Parameter(description = "Single status or comma-separated group, e.g. DECLARED,CLAIMED")
             @RequestParam(required = false) List<String> status,
+            @Parameter(description = "Case-insensitive search over reference, description and resolution note")
             @RequestParam(required = false) String search,
+            @Parameter(description = "Filter by department id")
             @RequestParam(required = false) Long departmentId,
+            @Parameter(description = "Filter by declarer user id")
             @RequestParam(required = false) Long userId,
+            @Parameter(description = "Inclusive lower date bound (ISO yyyy-MM-dd)")
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @Parameter(description = "Inclusive upper date bound (ISO yyyy-MM-dd)")
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @Parameter(description = "Date column the range filter applies to: declaredAt (default) or resolvedAt")
             @RequestParam(defaultValue = "declaredAt") String dateField,
             @PageableDefault(size = 20) Pageable pageable) {
 
@@ -93,12 +126,37 @@ public class IncidentController {
     @PostMapping
     @PreAuthorize("hasAnyRole('SOUS_CHEF', 'CHEF_ATELIER', 'ADMIN')")
     @Idempotent
-    public ResponseEntity<IncidentResponse> createIncident(@Valid @RequestBody CreateIncidentRequest request) {
+    @Operation(summary = "Declare a new incident",
+            description = "Creates an incident in the DECLARED state. Roles: SOUS_CHEF, CHEF_ATELIER or "
+                    + "ADMIN. Idempotent: send the X-Idempotency-Key header so a client retry after a "
+                    + "timeout can never create duplicates (atomic SETNX lock + cached response replay). "
+                    + "The description is optional (photo-only declarations are allowed).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Incident created",
+                    content = @Content(schema = @Schema(implementation = IncidentResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Validation failure or missing idempotency key"),
+            @ApiResponse(responseCode = "403", description = "Role not allowed to declare incidents"),
+            @ApiResponse(responseCode = "409", description = "Duplicate request in flight for the same X-Idempotency-Key")
+    })
+    public ResponseEntity<IncidentResponse> createIncident(
+            @Parameter(in = ParameterIn.HEADER, name = "X-Idempotency-Key",
+                    description = "Client-generated deduplication key (UUID recommended) — required for this endpoint",
+                    example = "5f4dcc3b-5aa7-4f0c-9e9a-1f2c3d4e5f6a")
+            @Valid @RequestBody CreateIncidentRequest request) {
         IncidentResponse response = incidentService.createIncident(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping("/{id}")
+    @Operation(summary = "Get an incident by id",
+            description = "Full incident detail: reporter, assignee, resolver, department/station/category, "
+                    + "priority, status and the complete state-machine timestamps. Access is scoped by role "
+                    + "(ADMIN everything, CHEF_ATELIER own department, SOUS_CHEF own declared incidents).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Incident detail",
+                    content = @Content(schema = @Schema(implementation = IncidentResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Incident not found")
+    })
     public ResponseEntity<IncidentResponse> getIncidentById(@PathVariable Long id) {
         IncidentResponse response = incidentService.getIncidentById(id);
         return ResponseEntity.ok(response);
@@ -106,12 +164,27 @@ public class IncidentController {
 
     //  Aging incidents — CLAIMED / IN_PROGRESS for more than 2 hours
     @GetMapping("/stale")
+    @Operation(summary = "List aging incidents",
+            description = "Incidents stuck in CLAIMED or IN_PROGRESS for more than 2 hours — feeds the "
+                    + "operational 'incidents en retard' widget.")
+    @ApiResponses({
+            // Array schema is derived from the List<IncidentResponse> return type.
+            @ApiResponse(responseCode = "200", description = "Aging incidents (IncidentResponse[])")
+    })
     public ResponseEntity<List<IncidentResponse>> getStaleIncidents() {
         return ResponseEntity.ok(incidentService.getStaleIncidents());
     }
 
     //  Full audit trail for a single incident
     @GetMapping("/{id}/history")
+    @Operation(summary = "Get the full audit trail of an incident",
+            description = "Reverse-chronological list of every status transition with the acting user "
+                    + "resolved server-side. Powers the timeline on the incident detail views.")
+    @ApiResponses({
+            // Array schema is derived from the List<IncidentHistoryResponse> return type.
+            @ApiResponse(responseCode = "200", description = "Audit trail entries (IncidentHistoryResponse[])"),
+            @ApiResponse(responseCode = "404", description = "Incident not found")
+    })
     public ResponseEntity<List<IncidentHistoryResponse>> getIncidentHistory(@PathVariable Long id) {
         return ResponseEntity.ok(incidentService.getIncidentHistory(id));
     }
@@ -124,7 +197,20 @@ public class IncidentController {
     @PutMapping("/{id}/claim")
     @PreAuthorize("hasRole('ADMIN')")
     @Idempotent(required = false)
-    public ResponseEntity<IncidentResponse> claimIncident(@PathVariable Long id) {
+    @Operation(summary = "Claim an incident (DECLARED → CLAIMED)",
+            description = "Takes an incident into charge. Actor: ADMIN. Idempotency header is optional — "
+                    + "the state machine already treats same-state transitions as a no-op.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Incident claimed",
+                    content = @Content(schema = @Schema(implementation = IncidentResponse.class))),
+            @ApiResponse(responseCode = "400", description = "State transition not allowed"),
+            @ApiResponse(responseCode = "403", description = "ADMIN role required"),
+            @ApiResponse(responseCode = "404", description = "Incident not found")
+    })
+    public ResponseEntity<IncidentResponse> claimIncident(
+            @Parameter(in = ParameterIn.HEADER, name = "X-Idempotency-Key", required = false,
+                    description = "Optional deduplication key — the state machine already makes duplicate claims a no-op")
+            @PathVariable Long id) {
         IncidentResponse response = incidentService.claimIncident(id);
         return ResponseEntity.ok(response);
     }
@@ -133,7 +219,19 @@ public class IncidentController {
     //  Actor: CLIENT
     @PutMapping("/{id}/progress")
     @Idempotent(required = false)
-    public ResponseEntity<IncidentResponse> progressIncident(@PathVariable Long id) {
+    @Operation(summary = "Move an incident to IN_PROGRESS (CLAIMED → IN_PROGRESS)",
+            description = "System-driven transition as the client starts working the incident. Idempotency "
+                    + "header is optional.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Incident in progress",
+                    content = @Content(schema = @Schema(implementation = IncidentResponse.class))),
+            @ApiResponse(responseCode = "400", description = "State transition not allowed"),
+            @ApiResponse(responseCode = "404", description = "Incident not found")
+    })
+    public ResponseEntity<IncidentResponse> progressIncident(
+            @Parameter(in = ParameterIn.HEADER, name = "X-Idempotency-Key", required = false,
+                    description = "Optional deduplication key — the state machine already makes duplicate transitions a no-op")
+            @PathVariable Long id) {
         IncidentResponse response = incidentService.progressIncident(id);
         return ResponseEntity.ok(response);
     }
@@ -143,7 +241,20 @@ public class IncidentController {
     @PutMapping("/{id}/evaluate")
     @PreAuthorize("hasRole('ADMIN')")
     @Idempotent(required = false)
+    @Operation(summary = "Evaluate an incident (IN_PROGRESS → RESOLVED / NON_RESOLVED)",
+            description = "Terminal evaluation by an ADMIN. The request carries the outcome status "
+                    + "(RESOLVED or NON_RESOLVED) and an optional resolution note. After this transition "
+                    + "the incident becomes read-only and its media enter the retention lifecycle.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Incident evaluated",
+                    content = @Content(schema = @Schema(implementation = IncidentResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid outcome status or state transition"),
+            @ApiResponse(responseCode = "403", description = "ADMIN role required"),
+            @ApiResponse(responseCode = "404", description = "Incident not found")
+    })
     public ResponseEntity<IncidentResponse> evaluateIncident(
+            @Parameter(in = ParameterIn.HEADER, name = "X-Idempotency-Key", required = false,
+                    description = "Optional deduplication key — the state machine already makes duplicate evaluations a no-op")
             @PathVariable Long id,
             @Valid @RequestBody EvaluateIncidentRequest request) {
         IncidentResponse response = incidentService.evaluateIncident(id, request);

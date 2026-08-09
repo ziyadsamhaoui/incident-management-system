@@ -4,6 +4,12 @@ import incident.management.system.dto.UpdateUserRequest;
 import incident.management.system.dto.UserResponse;
 import incident.management.system.service.UserPreferenceService;
 import incident.management.system.service.UserService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -35,17 +41,38 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
+@Tag(name = "Current User",
+        description = "Session-context endpoints for the authenticated user: own profile, own department "
+                + "assignment, and the persisted UI language preference.")
 public class MeController {
 
     private final UserService userService;
     private final UserPreferenceService userPreferenceService;
 
     @GetMapping("/me")
+    @Operation(summary = "Get the current user's profile",
+            description = "Returns the profile of the authenticated user (resolved from the JWT matricule) "
+                    + "including department, subscriptions-relevant fields and claim status.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Current user profile",
+                    content = @Content(schema = @Schema(implementation = UserResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Missing or invalid JWT")
+    })
     public ResponseEntity<UserResponse> getCurrentUser() {
         return ResponseEntity.ok(userService.getUserByMatricule(resolveMatricule()));
     }
 
     @PatchMapping("/users/me/department")
+    @Operation(summary = "Assign the current user's department",
+            description = "Assigns or changes the current user's department (one-shot onboarding or Settings "
+                    + "change). Body: {\"departmentId\": 1}.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Department assigned",
+                    content = @Content(schema = @Schema(implementation = UserResponse.class))),
+            @ApiResponse(responseCode = "400", description = "departmentId missing"),
+            @ApiResponse(responseCode = "403", description = "Missing or invalid JWT"),
+            @ApiResponse(responseCode = "404", description = "Department not found")
+    })
     public ResponseEntity<UserResponse> setMyDepartment(@RequestBody Map<String, Long> body) {
         Long departmentId = body.get("departmentId");
         if (departmentId == null) {
@@ -65,6 +92,14 @@ public class MeController {
      * client decides the fallback (its local default).
      */
     @GetMapping("/me/preferences/language")
+    @Operation(summary = "Get the UI language preference",
+            description = "Returns {\"language\": \"FR\"|\"AR\"} when a preference was persisted, otherwise "
+                    + "an empty object — the client decides the fallback.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Language preference (possibly empty)",
+                    content = @Content(schema = @Schema(type = "object", example = "{\"language\": \"FR\"}"))),
+            @ApiResponse(responseCode = "403", description = "Missing or invalid JWT")
+    })
     public ResponseEntity<Map<String, String>> getLanguagePreference() {
         Map<String, String> body = new HashMap<>();
         userPreferenceService.getLanguage(resolveMatricule())
@@ -77,6 +112,15 @@ public class MeController {
      * {@link UserPreferenceService}).
      */
     @PutMapping("/me/preferences/language")
+    @Operation(summary = "Set the UI language preference",
+            description = "Persists the UI language in Redis ({@code pref:lang:{matricule}}, bounded TTL). "
+                    + "Body: {\"language\": \"FR\"|\"AR\"}.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Preference persisted",
+                    content = @Content(schema = @Schema(type = "object", example = "{\"language\": \"AR\"}"))),
+            @ApiResponse(responseCode = "400", description = "Unsupported language value"),
+            @ApiResponse(responseCode = "403", description = "Missing or invalid JWT")
+    })
     public ResponseEntity<Map<String, String>> setLanguagePreference(
             @RequestBody Map<String, String> body) {
         String language = body.get("language");

@@ -1,5 +1,7 @@
 package incident.management.system.dto.analytics;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import java.util.List;
 
 /**
@@ -9,8 +11,11 @@ import java.util.List;
  * <p>Only non-zero cells are returned (sparse payload); the client lays them
  * out on the 24×7 grid and derives colour intensity from {@code count}.
  */
+@Schema(description = "Sparse hour × day-of-week heatmap matrix (only non-zero cells are returned).")
 public record HeatmapResponse(
+        @Schema(description = "Non-zero matrix cells")
         List<Cell> cells,
+        @Schema(description = "Total incidents covered by the matrix", example = "1280")
         long totalCount
 ) {
 
@@ -20,5 +25,13 @@ public record HeatmapResponse(
      * @param hour      0–23 local hour of the incident declaration
      * @param count     number of incidents declared in that slot
      */
-    public record Cell(int dayOfWeek, int hour, long count) {}
+    @Schema(description = "One non-zero heatmap cell.")
+    public record Cell(
+            @Schema(description = "Day of week — 0 = Monday … 6 = Sunday", example = "1")
+            int dayOfWeek,
+            @Schema(description = "Local hour of declaration (0–23)", example = "9")
+            int hour,
+            @Schema(description = "Incidents declared in this slot", example = "37")
+            long count
+    ) {}
 }

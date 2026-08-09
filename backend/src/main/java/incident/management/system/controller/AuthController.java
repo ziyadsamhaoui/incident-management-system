@@ -15,6 +15,13 @@ import incident.management.system.repository.UserRepository;
 import incident.management.system.security.MultiChannelAuthenticationToken;
 import incident.management.system.security.TokenBlacklistService;
 import incident.management.system.service.AuthService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -46,6 +53,9 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 @Slf4j
+@Tag(name = "Authentication",
+        description = "Public authentication surface: multi-channel login, account claiming, token refresh "
+                + "and the hybrid password-reset lifecycle. All endpoints here are unauthenticated.")
 public class AuthController {
 
     private final AuthenticationManager authenticationManager;
@@ -59,6 +69,26 @@ public class AuthController {
     // Multi-Channel Login
 
     @PostMapping("/login")
+    @SecurityRequirements()
+    @Operation(summary = "Log in with role-specific credentials",
+            description = "Multi-channel login lane detection: ADMIN authenticates with email + password, "
+                    + "CHEF_ATELIER with matricule + firstName + lastName + password, and SOUS_CHEF "
+                    + "passwordlessly with matricule + firstName + lastName. On success returns a JWT access "
+                    + "token, a 7-day refresh token, the matricule and the granted roles. "
+                    + "403 = account not yet claimed (CHEF_ATELIER) or deactivated; 423 = account locked "
+                    + "after repeated failures (response carries the lockout expiry); 429 = rate limit hit.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Authenticated — JWT access + refresh tokens",
+                    content = @Content(schema = @Schema(implementation = JwtAuthenticationResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Malformed login payload"),
+            @ApiResponse(responseCode = "401", description = "Invalid credentials",
+                    content = @Content(schema = @Schema(type = "object", example = "{\"error\": \"Invalid credentials\"}"))),
+            @ApiResponse(responseCode = "403", description = "Account unclaimed or deactivated",
+                    content = @Content(schema = @Schema(type = "object", example = "{\"code\": \"ACCOUNT_UNCLAIMED\", \"message\": \"...\"}"))),
+            @ApiResponse(responseCode = "423", description = "Account locked — retry after lockoutEnd",
+                    content = @Content(schema = @Schema(type = "object", example = "{\"error\": \"...\", \"lockoutEnd\": \"2026-08-09T10:00:00\"}"))),
+            @ApiResponse(responseCode = "429", description = "Too many login attempts")
+    })
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
 
         try {
@@ -128,6 +158,19 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
+    @SecurityRequirements()
+    @Operation(summary = "Refresh an expired access token",
+            description = "Exchanges a valid, non-revoked refresh token for a fresh JWT access token. "
+                    + "The refresh token is a server-persisted opaque UUID; rotation is not applied — the "
+                    + "same refresh token remains usable until revoked or its 7-day expiry.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "New access token",
+                    content = @Content(schema = @Schema(type = "object", example = "{\"accessToken\": \"eyJhbGciOiJIUzI1NiJ9...\", \"type\": \"Bearer\"}"))),
+            @ApiResponse(responseCode = "400", description = "Missing refreshToken in body"),
+            @ApiResponse(responseCode = "401", description = "Invalid, expired or revoked refresh token"),
+            @ApiResponse(responseCode = "403", description = "User account is deactivated"),
+            @ApiResponse(responseCode = "404", description = "Refresh token references a user that no longer exists")
+    })
     public ResponseEntity<?> refreshAccessToken(@RequestBody Map<String, String> body) {
         String refreshTokenValue = body.get("refreshToken");
         if (refreshTokenValue == null || refreshTokenValue.isBlank()) {
@@ -161,6 +204,15 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
+    @SecurityRequirements()
+    @Operation(summary = "Revoke the current access token",
+            description = "Blacklists the presented Bearer access token (JWT revocation via Redis) so it can "
+                    + "no longer be used after its remaining lifetime. Accepts an empty/missing Authorization "
+                    + "header and still answers 200 — logout is best-effort.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Successfully logged out",
+                    content = @Content(schema = @Schema(type = "object", example = "{\"message\": \"Successfully logged out\"}")))
+    })
     public ResponseEntity<Map<String, String>> logout(
             @RequestHeader("Authorization") String authHeader) {
 
@@ -175,6 +227,19 @@ public class AuthController {
     // Hybrid Password Reset Lifecycle
 
     @PostMapping("/password-reset/request-manual")
+    @SecurityRequirements()
+    @Operation(summary = "Request a password-reset token (self-service identity bar)",
+            description = "Issues a 6-character, single-use reset token after a case-insensitive, trimmed "
+                    + "match of matricule + firstName + lastName against an active, claimed CHEF_ATELIER "
+                    + "record. Every mismatch returns the identical 400 — no identity enumeration. The "
+                    + "plaintext token is returned exactly once; only its hash is persisted with a 15-minute "
+                    + "TTL. Rate-limited to 3 attempts / IP / 15 minutes.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Token issued",
+                    content = @Content(schema = @Schema(type = "object", example = "{\"message\": \"Manual password reset token generated.\", \"token\": \"AB2CD3\", \"expiresInMinutes\": 15}"))),
+            @ApiResponse(responseCode = "400", description = "Identity mismatch or invalid payload"),
+            @ApiResponse(responseCode = "429", description = "Too many reset requests")
+    })
     public ResponseEntity<Map<String, Object>> requestPasswordResetManual(
             @Valid @RequestBody PasswordResetRequest request) {
 
@@ -188,6 +253,17 @@ public class AuthController {
     }
 
     @PostMapping("/password-reset/request-email")
+    @SecurityRequirements()
+    @Operation(summary = "Request a password-reset email",
+            description = "Sends a 10-minute reset deep link by email (Spring Mail → Gmail SMTP) when the "
+                    + "address exists. Anti-enumeration: the response is ALWAYS the same neutral 200 payload — "
+                    + "the reset token travels by email only and is never returned in the body. Only 429 "
+                    + "differs, so clients can render the rate-limit countdown.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Neutral response — always identical",
+                    content = @Content(schema = @Schema(type = "object", example = "{\"message\": \"Si cette adresse est enregistrée, un lien de réinitialisation a été envoyé.\", \"expiresInMinutes\": 10}"))),
+            @ApiResponse(responseCode = "429", description = "Too many reset requests")
+    })
     public ResponseEntity<Map<String, Object>> requestPasswordResetEmail(
             @RequestBody Map<String, String> body) {
 
@@ -211,6 +287,18 @@ public class AuthController {
     }
 
     @PostMapping("/password-reset/confirm")
+    @SecurityRequirements()
+    @Operation(summary = "Confirm a password reset with token or code",
+            description = "Consumes a manual token, a legacy email token, or an admin-issued 6-character "
+                    + "claim code and sets the new password (min 8 chars). No auto-login — the response "
+                    + "carries the resolved role + login identifier so the frontend can route the user to "
+                    + "the correct login lane pre-filled. Completing a reset clears any account lockout.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Password updated",
+                    content = @Content(schema = @Schema(type = "object", example = "{\"message\": \"Password has been successfully reset\", \"role\": \"CHEF_ATELIER\", \"loginIdentifier\": \"12345\"}"))),
+            @ApiResponse(responseCode = "400", description = "Invalid, expired or already-used token/code"),
+            @ApiResponse(responseCode = "429", description = "Too many reset requests")
+    })
     public ResponseEntity<Map<String, Object>> confirmPasswordReset(
             @Valid @RequestBody PasswordResetConfirmRequest request) {
 
@@ -228,6 +316,15 @@ public class AuthController {
     // Matricule Verification (Boolean-Only, No PII)
 
     @GetMapping("/check-matricule")
+    @SecurityRequirements()
+    @Operation(summary = "Check matricule existence & claim eligibility",
+            description = "Boolean-only lookup: reports whether the matricule exists and whether the "
+                    + "account is eligible to be claimed (role CHEF_ATELIER with no password set). Never "
+                    + "returns names or any PII. Non-numeric input is treated as non-existing.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lookup result",
+                    content = @Content(schema = @Schema(type = "object", example = "{\"exists\": true, \"eligibleToClaim\": false}")))
+    })
     public ResponseEntity<Map<String, Object>> checkMatricule(
             @RequestParam("matricule") String matricule) {
 
@@ -259,6 +356,25 @@ public class AuthController {
     // Account Claim Endpoint (Replaces Public Self-Register)
 
     @PostMapping("/claim")
+    @SecurityRequirements()
+    @Operation(summary = "Claim a CHEF_ATELIER account",
+            description = "Self-service activation for promoted-but-unclaimed CHEF_ATELIER accounts. "
+                    + "Verifies role, unclaimed state (passwordHash IS NULL) and a case-insensitive "
+                    + "firstName/lastName match against the roster record, then sets the password and "
+                    + "returns fresh JWT + refresh tokens for immediate login. 401 = identity mismatch, "
+                    + "403 = role not eligible, 409 = already claimed.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Account claimed — JWT issued",
+                    content = @Content(schema = @Schema(implementation = JwtAuthenticationResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Validation failure or non-numeric matricule"),
+            @ApiResponse(responseCode = "401", description = "Identity mismatch (names do not match the record)",
+                    content = @Content(schema = @Schema(type = "object", example = "{\"code\": \"IDENTITY_MISMATCH\", \"message\": \"...\"}"))),
+            @ApiResponse(responseCode = "403", description = "Account is not a CHEF_ATELIER (NOT_ELIGIBLE)",
+                    content = @Content(schema = @Schema(type = "object", example = "{\"code\": \"NOT_ELIGIBLE\", \"message\": \"...\"}"))),
+            @ApiResponse(responseCode = "404", description = "No user with this matricule"),
+            @ApiResponse(responseCode = "409", description = "Account already claimed (ALREADY_CLAIMED)",
+                    content = @Content(schema = @Schema(type = "object", example = "{\"code\": \"ALREADY_CLAIMED\", \"message\": \"...\"}")))
+    })
     public ResponseEntity<?> claimAccount(@Valid @RequestBody ClaimAccountRequest request) {
         String sanitizedMatricule = request.matricule().trim();
 

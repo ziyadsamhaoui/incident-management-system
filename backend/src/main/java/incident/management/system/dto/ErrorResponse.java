@@ -1,6 +1,7 @@
 package incident.management.system.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,17 +21,28 @@ import java.util.Map;
 @Builder
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
+@Schema(description = "Standardized error contract returned by the global exception handler. On validation "
+        + "failures the `errors` map holds field-name → message entries.")
 public class ErrorResponse {
 
+    @Schema(description = "Server-side timestamp of the error", example = "2026-08-09T14:30:00")
     private LocalDateTime timestamp;
+
+    @Schema(description = "HTTP status code", example = "400")
     private int status;
+
+    @Schema(description = "HTTP reason phrase", example = "Bad Request")
     private String error;
+
+    @Schema(description = "Human-readable error message", example = "One or more fields failed validation. See 'errors' for details.")
     private String message;
 
     /**
      * Optional map of field-level validation errors.
      * Key = the field name, Value = the validation message.
      */
+    @Schema(description = "Field-level validation errors (key = field name, value = message)",
+            example = "{\"newPassword\": \"Le mot de passe doit contenir au moins 8 caractères\"}")
     private Map<String, String> errors;
 
     /**

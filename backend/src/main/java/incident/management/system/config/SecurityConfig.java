@@ -18,6 +18,9 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatchers;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -45,6 +48,18 @@ public class SecurityConfig {
     @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:4200,http://localhost:8080}")
     private List<String> allowedOrigins;
 
+    /**
+     * Swagger UI / OpenAPI docs exposure toggle. Mirrors the springdoc property
+     * ({@code springdoc.swagger-ui.enabled}) so the security layer exposes the
+     * documentation anonymously ONLY in environments where the flag is on
+     * (dev/staging). When disabled the docs paths require an authenticated
+     * session instead of being anonymously reachable — set
+     * {@code SPRINGDOC_API_DOCS_ENABLED=false} as well to stop serving the raw
+     * spec entirely in production.
+     */
+    @Value("${springdoc.swagger-ui.enabled:false}")
+    private boolean swaggerUiEnabled;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -52,23 +67,45 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/actuator/**").permitAll()
-                        .requestMatchers("/ws/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/dashboard/**").authenticated()
-                        // Media bytes served by ResourceHttpRequestHandler — authorization is
-                        // enforced INSIDE the resolver (signed read token OR JWT session with
-                        // department/ownership scoping), because <img>/<video> tags cannot send
-                        // an Authorization header. Never permit other /api/** paths.
-                        .requestMatchers(HttpMethod.GET, "/api/incidents/*/attachments/*").permitAll()
-                        .requestMatchers("/api/**").authenticated()
-                        .anyRequest().permitAll())
+                .authorizeHttpRequests(auth -> {
+                    auth
+                            .requestMatchers("/api/auth/**").permitAll()
+                            .requestMatchers("/actuator/**").permitAll()
+                            .requestMatchers("/ws/**").permitAll();
+                    // Swagger UI + raw OpenAPI spec — anonymous ONLY while
+                    // springdoc.swagger-ui.enabled=true (dev/staging); otherwise
+                    // an authenticated session is required.
+                    if (swaggerUiEnabled) {
+                        auth.requestMatchers(swaggerDocsMatcher()).permitAll();
+                    } else {
+                        auth.requestMatchers(swaggerDocsMatcher()).authenticated();
+                    }
+                    auth
+                            .requestMatchers(HttpMethod.GET, "/api/dashboard/**").authenticated()
+                            // Media bytes served by ResourceHttpRequestHandler — authorization is
+                            // enforced INSIDE the resolver (signed read token OR JWT session with
+                            // department/ownership scoping), because <img>/<video> tags cannot send
+                            // an Authorization header. Never permit other /api/** paths.
+                            .requestMatchers(HttpMethod.GET, "/api/incidents/*/attachments/*").permitAll()
+                            .requestMatchers("/api/**").authenticated()
+                            .anyRequest().permitAll();
+                })
                 .userDetailsService(customUserDetailsService)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(rateLimitingFilter, JwtAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    /**
+     * Matches the Swagger UI assets and the raw OpenAPI JSON — the rule applied
+     * to these paths depends on {@link #swaggerUiEnabled}.
+     */
+    private RequestMatcher swaggerDocsMatcher() {
+        return RequestMatchers.anyOf(
+                PathPatternRequestMatcher.pathPattern("/swagger-ui/**"),
+                PathPatternRequestMatcher.pathPattern("/swagger-ui.html"),
+                PathPatternRequestMatcher.pathPattern("/v3/api-docs/**"));
     }
 
     // This bean is necessary for the authentication manager to work with the custom authentication provider

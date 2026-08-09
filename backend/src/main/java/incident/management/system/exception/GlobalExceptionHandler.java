@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -161,6 +162,23 @@ public class GlobalExceptionHandler {
                         ex.getStatus().value(),
                         ex.getStatus().getReasonPhrase(),
                         ex.getMessage()));
+    }
+
+    // ──────────────────────────────────────────────
+    //  D2b. Missing static resource → 404
+    //  (e.g. /swagger-ui/index.html when the docs are disabled in the
+    //  current profile — never a 500).
+    // ──────────────────────────────────────────────
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResourceFound(NoResourceFoundException ex) {
+        log.warn("Static resource not found: {}", ex.getResourcePath());
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of(
+                        HttpStatus.NOT_FOUND.value(),
+                        HttpStatus.NOT_FOUND.getReasonPhrase(),
+                        "Resource not found."));
     }
 
     // ──────────────────────────────────────────────
