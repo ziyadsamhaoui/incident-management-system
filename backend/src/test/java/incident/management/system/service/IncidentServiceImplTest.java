@@ -412,20 +412,20 @@ class IncidentServiceImplTest {
             when(incidentRepository.save(any(IncidentEntity.class)))
                     .thenAnswer(invocation -> invocation.getArgument(0));
 
-            // Step 1: DECLARED → CLAIMED
+            // DECLARED → CLAIMED
             var claimed = incidentService.claimIncident(60L);
             assertThat(claimed.status()).isEqualTo(IncidentStatus.CLAIMED);
 
             incident.setStatus(IncidentStatus.CLAIMED);
 
-            // Step 2: CLAIMED → IN_PROGRESS
+            // CLAIMED → IN_PROGRESS
             when(incidentRepository.findById(60L)).thenReturn(Optional.of(incident));
             var inProgress = incidentService.progressIncident(60L);
             assertThat(inProgress.status()).isEqualTo(IncidentStatus.IN_PROGRESS);
 
             incident.setStatus(IncidentStatus.IN_PROGRESS);
 
-            // Step 3: IN_PROGRESS → RESOLVED
+            // IN_PROGRESS → RESOLVED
             when(incidentRepository.findById(60L)).thenReturn(Optional.of(incident));
             EvaluateIncidentRequest evalRequest = new EvaluateIncidentRequest(
                     IncidentStatus.RESOLVED, "All checks passed.");

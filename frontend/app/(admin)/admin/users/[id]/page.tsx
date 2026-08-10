@@ -288,7 +288,7 @@ export default function AdminUserDetailPage() {
     setEditOpen(true);
   };
 
-  //  Supervisor-mediated reset code — step 1: confirm consequences first
+  //  Supervisor-mediated reset code — confirm consequences first
   //  (spec §4: the danger-zone action opens a confirmation modal before any
   //  code is issued, so an accidental open never burns the previous code).
   const openResetCode = () => {
@@ -300,7 +300,7 @@ export default function AdminUserDetailPage() {
     setCopied(false);
   };
 
-  //  Step 2: actually issue a fresh code (invalidates any previous one).
+  //  Issue a fresh code (invalidates any previous one).
   const generateResetCodeNow = async () => {
     setResetLoading(true);
     setResetError(null);
@@ -851,7 +851,7 @@ export default function AdminUserDetailPage() {
             </div>
           )}
 
-          {/* Step 1 — confirm consequences before issuing any code */}
+          {/* Confirm consequences before issuing any code */}
           {!resetLoading && !resetError && !resetData && (
             <div className="space-y-4 py-2">
               <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">

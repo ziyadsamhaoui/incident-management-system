@@ -24,9 +24,7 @@ CREATE INDEX IF NOT EXISTS idx_incidents_dept_status_resolved
 CREATE INDEX IF NOT EXISTS idx_incidents_status_resolved
     ON incidents (status, resolved_at DESC);
 
--- ---------------------------------------------------------------------------
 -- TERMINAL-STATUS RETENTION THRESHOLD (shared constant, documented)
--- ---------------------------------------------------------------------------
 -- The self-hosted media pipeline (see V9) purges incident_attachments rows +
 -- local files for terminal incidents through MediaRetentionJob. Its cutoff uses
 -- the SAME terminal predicate as this index (status IN ('RESOLVED','NON_RESOLVED'))
@@ -37,4 +35,3 @@ CREATE INDEX IF NOT EXISTS idx_incidents_status_resolved
 --
 -- Keep the retention window (N) consistent across the cleanup job, this query,
 -- and the Logs tab date-range default.
--- ---------------------------------------------------------------------------

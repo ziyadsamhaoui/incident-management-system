@@ -1,6 +1,4 @@
--- -----------------------------------------------------------------------------
 -- V9: Incident attachments (self-hosted local media pipeline)
--- -----------------------------------------------------------------------------
 
 CREATE TABLE incident_attachments (
     id              BIGSERIAL PRIMARY KEY,

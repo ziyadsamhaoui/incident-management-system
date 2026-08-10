@@ -87,7 +87,6 @@ public class UserEntity {
         this.deletedAt = LocalDateTime.now();
     }
 
-    // Check if the user is locked out.
     public boolean isLocked() {
         return lockoutEnd != null && LocalDateTime.now().isBefore(lockoutEnd);
     }

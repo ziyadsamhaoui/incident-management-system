@@ -210,9 +210,7 @@ public class UserServiceImpl implements UserService {
         return toResponse(userRepository.save(user));
     }
 
-    //  ========================================================================
     //  Promotion: SOUS_CHEF → CHEF_ATELIER
-    //  ========================================================================
 
     @Override
     public UserResponse promoteToChefAtelier(Long id) {
@@ -236,9 +234,7 @@ public class UserServiceImpl implements UserService {
         return toResponse(saved);
     }
 
-    //  ========================================================================
     //  Per-user activity analytics
-    //  ========================================================================
 
     @Override
     @Transactional(readOnly = true)
@@ -278,9 +274,7 @@ public class UserServiceImpl implements UserService {
         );
     }
 
-    //  ========================================================================
     //  Role state transitions (danger zone)
-    //  ========================================================================
 
     @Override
     public UserResponse demoteToSousChef(Long id) {
@@ -368,9 +362,7 @@ public class UserServiceImpl implements UserService {
                 .collect(Collectors.toList());
     }
 
-    //  ========================================================================
     //  Admin Department Subscriptions
-    //  ========================================================================
 
     @Override
     public void subscribeToDepartment(Long adminId, Long departmentId) {
@@ -413,17 +405,13 @@ public class UserServiceImpl implements UserService {
                 .collect(Collectors.toList());
     }
 
-    //  ========================================================================
     //  Helpers
-    //  ========================================================================
 
     private boolean isUnclaimed(UserEntity user) {
         return user.getPasswordHash() == null || user.getPasswordHash().isBlank();
     }
 
-    //  ========================================================================
     //  DTO Mapping
-    //  ========================================================================
 
     private UserResponse toResponse(UserEntity entity) {
         DepartmentResponse deptResponse = entity.getDepartment() != null

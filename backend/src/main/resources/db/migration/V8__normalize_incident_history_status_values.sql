@@ -1,4 +1,3 @@
--- -----------------------------------------------------------------------------
 -- V8: Normalize incident_history status values (ordinal numbers -> enum names)
 --
 -- WHY:
@@ -21,7 +20,6 @@
 -- Idempotency: the UPDATE only touches rows whose value is one of the ordinal
 -- digits ('0'..'4'); names, NULLs and any other values are left untouched, so
 -- re-running is a no-op.
--- -----------------------------------------------------------------------------
 
 -- previous_status (NOT NULL)
 UPDATE incident_history

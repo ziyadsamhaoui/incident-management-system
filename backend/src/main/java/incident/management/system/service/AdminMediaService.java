@@ -62,9 +62,7 @@ public class AdminMediaService {
     private final MediaUrlSigner urlSigner;
     private final MediaStorageProperties mediaProperties;
 
-    //  ========================================================================
     //  LIST — paginated, IMAGE/VIDEO only, combinable filters
-    //  ========================================================================
 
     @Transactional(readOnly = true)
     public Page<AdminMediaResponse> listMedia(String search,
@@ -113,9 +111,7 @@ public class AdminMediaService {
         };
     }
 
-    //  ========================================================================
     //  STATS — storage summary strip (DB bytes + real host disk headroom)
-    //  ========================================================================
 
     @Transactional(readOnly = true)
     public AdminMediaStatsResponse stats() {
@@ -138,9 +134,7 @@ public class AdminMediaService {
                 disk.totalBytes());
     }
 
-    //  ========================================================================
     //  SINGLE DELETE — disk removal + DB audit stub
-    //  ========================================================================
 
     public void deleteMedia(Long id) {
         IncidentAttachmentEntity attachment = attachmentRepository.findById(id)
@@ -155,9 +149,7 @@ public class AdminMediaService {
                 attachment.getFileSizeBytes());
     }
 
-    //  ========================================================================
     //  BULK DELETE — iterates ids, reports freed bytes + skipped ids
-    //  ========================================================================
 
     /**
      * Deletes the physical files of the requested media and transforms their DB
@@ -200,9 +192,7 @@ public class AdminMediaService {
         return new MediaBulkDeleteResult(deleted, freedBytes, skippedIds);
     }
 
-    //  ========================================================================
     //  SHARED DELETE PRIMITIVE
-    //  ========================================================================
 
     /**
      * Soft-deletes the DB row into an audit stub FIRST, then hard-deletes the
@@ -233,9 +223,7 @@ public class AdminMediaService {
         return 0L;
     }
 
-    //  ========================================================================
     //  GUARDS & MAPPING
-    //  ========================================================================
 
     private UserEntity requireAdmin() {
         UserEntity admin = CurrentUserResolver.resolve(userRepository);

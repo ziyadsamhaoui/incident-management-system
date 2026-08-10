@@ -131,8 +131,7 @@ apiClient.interceptors.response.use(
 
         const newAccessToken: string = data.accessToken;
 
-        // Update the store's token
-        // (import dynamically to avoid circular dependency)
+        // Update the store.s token (imported dynamically to avoid a circular dependency)
         const { useAuthStore } = await import('@/store/useAuthStore');
         useAuthStore.getState().setAccessToken(newAccessToken);
 

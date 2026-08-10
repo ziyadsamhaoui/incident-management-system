@@ -18,11 +18,8 @@
 -- The migration is idempotent: every UPDATE is guarded by a `WHERE` on the value
 -- it removes, so re-running it is a no-op.
 
-
--- ---------------------------------------------------------------------------
 -- STEP 1 — Restore incidents.status from the incident_history entry that
 -- produced the CLOSED state (latest RESOLVED/NON_RESOLVED predecessor).
--- ---------------------------------------------------------------------------
 UPDATE incidents i
 SET status = sub.previous_status
 FROM (
@@ -37,34 +34,25 @@ FROM (
 WHERE i.status = 'CLOSED'
   AND sub.incident_id = i.id;
 
-
--- ---------------------------------------------------------------------------
 -- STEP 2 — Explicit fallback for CLOSED incidents with no usable history entry
 -- (e.g. history was purged). Defaults to RESOLVED — documented last resort.
--- ---------------------------------------------------------------------------
 UPDATE incidents
 SET status = 'RESOLVED'
 WHERE status = 'CLOSED';
 
-
--- ---------------------------------------------------------------------------
 -- STEP 3 — Defensive normalization: 'CLOSED' could never be a source state
 -- under the old state machine (it was terminal), but the old validation
 -- silently allowed same-state transitions, so a stray 'CLOSED' previous_status
 -- cannot be ruled out. Normalize previous_status FIRST so the next step's
 -- `current_status = previous_status` can never re-introduce 'CLOSED'.
--- ---------------------------------------------------------------------------
 UPDATE incident_history
 SET previous_status = 'RESOLVED'
 WHERE previous_status = 'CLOSED';
 
-
--- ---------------------------------------------------------------------------
 -- STEP 4 — Normalize incident_history so no 'CLOSED' survives in
 -- current_status. The row's previous_status is its true terminal predecessor
 -- (already guaranteed non-CLOSED by step 3); the comment ("Auto-closed by
 -- system...") keeps the audit trail intact.
--- ---------------------------------------------------------------------------
 UPDATE incident_history
 SET current_status = previous_status
 WHERE current_status = 'CLOSED';

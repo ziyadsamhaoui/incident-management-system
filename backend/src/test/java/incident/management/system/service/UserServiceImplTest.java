@@ -86,9 +86,7 @@ class UserServiceImplTest {
                         List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))));
     }
 
-    //  ========================================================================
     //  demoteToSousChef — Rétrograder en Opérateur
-    //  ========================================================================
 
     @Nested
     @DisplayName("demoteToSousChef (CHEF_ATELIER → SOUS_CHEF)")
@@ -137,9 +135,7 @@ class UserServiceImplTest {
         }
     }
 
-    //  ========================================================================
     //  cancelPromotion — Annuler la promotion
-    //  ========================================================================
 
     @Nested
     @DisplayName("cancelPromotion (unclaimed CHEF_ATELIER → SOUS_CHEF)")
@@ -187,9 +183,7 @@ class UserServiceImplTest {
         }
     }
 
-    //  ========================================================================
     //  Hard guards — deactivateUser
-    //  ========================================================================
 
     @Nested
     @DisplayName("deactivateUser hard safety guards")
@@ -254,9 +248,7 @@ class UserServiceImplTest {
         }
     }
 
-    //  ========================================================================
     //  getUserActivity — extended analytics payload
-    //  ========================================================================
 
     @Nested
     @DisplayName("getUserActivity extended analytics")
@@ -314,9 +306,7 @@ class UserServiceImplTest {
         }
     }
 
-    //  ========================================================================
     //  createUser — ADMIN email requirement & canonicalization
-    //  ========================================================================
 
     @Nested
     @DisplayName("createUser — email handling")
@@ -388,9 +378,7 @@ class UserServiceImplTest {
         }
     }
 
-    //  ========================================================================
     //  Misc
-    //  ========================================================================
 
     @Test
     @DisplayName("countActiveAdmins delegates to the repository")

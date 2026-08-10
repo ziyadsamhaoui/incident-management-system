@@ -1,6 +1,4 @@
--- -----------------------------------------------------------------------------
 -- V10: Admin media management — soft-delete stubs + admin list indexes
--- -----------------------------------------------------------------------------
 
 ALTER TABLE incident_attachments
     ADD COLUMN is_deleted     BOOLEAN     NOT NULL DEFAULT FALSE,

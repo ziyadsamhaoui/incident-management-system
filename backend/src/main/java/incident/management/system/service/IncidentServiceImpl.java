@@ -57,13 +57,10 @@ public class IncidentServiceImpl implements IncidentService {
     private final ApplicationEventPublisher eventPublisher;
     private final IncidentReferenceGenerator referenceGenerator;
 
-    //  -------------------------------------------------------------------------
     //  5-Stage Linear State Machine
-    //  -------------------------------------------------------------------------
     //  DECLARED → CLAIMED → IN_PROGRESS → RESOLVED / NON_RESOLVED
     //
     //  RESOLVED and NON_RESOLVED are terminal states with empty transition sets.
-    //  -------------------------------------------------------------------------
 
     private static final Map<IncidentStatus, IncidentStatus[]> VALID_TRANSITIONS = Map.of(
             IncidentStatus.DECLARED,       new IncidentStatus[]{IncidentStatus.CLAIMED},
@@ -73,9 +70,7 @@ public class IncidentServiceImpl implements IncidentService {
             IncidentStatus.NON_RESOLVED,   new IncidentStatus[]{}
     );
 
-    //  ========================================================================
     //  CREATE INCIDENT
-    //  ========================================================================
 
     @Override
     @EvictDashboardCaches
@@ -115,9 +110,7 @@ public class IncidentServiceImpl implements IncidentService {
         return toResponse(saved);
     }
 
-    //  ========================================================================
     //  READ OPERATIONS
-    //  ========================================================================
 
     @Override
     @Transactional(readOnly = true)
@@ -314,9 +307,7 @@ public class IncidentServiceImpl implements IncidentService {
         };
     }
 
-    //  ========================================================================
     //  A. CLAIM INCIDENT  —  DECLARED → CLAIMED
-    //  ========================================================================
 
     @Override
     @EvictDashboardCaches
@@ -349,9 +340,7 @@ public class IncidentServiceImpl implements IncidentService {
         return toResponse(saved);
     }
 
-    //  ========================================================================
     //  B. PROGRESS INCIDENT  —  CLAIMED → IN_PROGRESS
-    //  ========================================================================
 
     @Override
     @EvictDashboardCaches
@@ -378,11 +367,9 @@ public class IncidentServiceImpl implements IncidentService {
         return toResponse(saved);
     }
 
-    //  ========================================================================
     //  C. EVALUATE INCIDENT  —  IN_PROGRESS → RESOLVED / NON_RESOLVED
     //     Dual-write comment architecture: note saved to incident.resolutionNote
     //     AND mirrored to incident_history.comment
-    //  ========================================================================
 
     @Override
     @EvictDashboardCaches
@@ -436,9 +423,7 @@ public class IncidentServiceImpl implements IncidentService {
         return toResponse(saved);
     }
 
-    //  ========================================================================
     //  DELETE
-    //  ========================================================================
 
     @Override
     @EvictDashboardCaches
@@ -449,9 +434,7 @@ public class IncidentServiceImpl implements IncidentService {
         incidentRepository.deleteById(id);
     }
 
-    //  ========================================================================
     //  VALIDATION & HELPERS
-    //  ========================================================================
 
     /**
      * Validates that a transition from {@code current} to {@code target} is
@@ -496,9 +479,7 @@ public class IncidentServiceImpl implements IncidentService {
         incidentHistoryRepository.save(history);
     }
 
-    //  ========================================================================
     //  DTO MAPPING
-    //  ========================================================================
 
     private IncidentResponse toResponse(IncidentEntity entity) {
         UserSummaryResponse userSummary = entity.getUser() != null

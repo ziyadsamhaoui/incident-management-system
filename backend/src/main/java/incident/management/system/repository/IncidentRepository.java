@@ -29,7 +29,6 @@ public interface IncidentRepository
 
     Optional<IncidentEntity> findByReference(String reference);
 
-    //  ========================================================================
     //  PostgreSQL Native Full-Text Search (tsvector + GIN + ts_rank)
     //
     //  Backed by the self-maintaining incidents.search_vector generated column
@@ -37,7 +36,6 @@ public interface IncidentRepository
     //  input safely: "phrase match", -excluded terms and prefix* are supported,
     //  malformed syntax degrades gracefully. ts_rank gives relevance ordering.
     //  All non-text filters compose with the @@ match; NULL = filter inactive.
-    //  ========================================================================
 
     /**
      * Full-text search over {@code reference} (A), {@code description} (A) and
@@ -91,10 +89,8 @@ public interface IncidentRepository
                                       @Param("dateField") String dateField,
                                       Pageable pageable);
 
-    //  ========================================================================
     //  Per-user activity analytics (GET /api/users/{id}/activity)
     //  All metrics are computed on demand — no denormalized counters.
-    //  ========================================================================
 
     long countByUser(UserEntity user);
 
@@ -157,11 +153,9 @@ public interface IncidentRepository
             """, nativeQuery = true)
     List<Object[]> countResolvedByDay(@Param("userId") Long userId);
 
-    //  ========================================================================
     //  Analytics & Quality Engineering page (GET /api/analytics/**)
     //  All aggregation happens at the database layer with DATE_TRUNC time
     //  bucketing + SQL window functions — never raw datasets in the client.
-    //  ========================================================================
 
     /**
      * Cohort volume buckets: incidents declared in the window, grouped by

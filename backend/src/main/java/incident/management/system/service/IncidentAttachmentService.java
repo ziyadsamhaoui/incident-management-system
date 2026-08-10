@@ -100,9 +100,7 @@ public class IncidentAttachmentService {
     private final MediaUrlSigner urlSigner;
     private final MediaStorageProperties mediaProperties;
 
-    //  ========================================================================
     //  UPLOAD — multipart streaming to local disk
-    //  ========================================================================
 
     public IncidentAttachmentResponse uploadAttachment(Long incidentId, MultipartFile file, AttachmentType fileType) {
         IncidentEntity incident = getIncident(incidentId);
@@ -167,9 +165,7 @@ public class IncidentAttachmentService {
         return toResponse(saved);
     }
 
-    //  ========================================================================
     //  LIST — signed read URLs for browser rendering
-    //  ========================================================================
 
     @Transactional(readOnly = true)
     public List<IncidentAttachmentResponse> listAttachments(Long incidentId) {
@@ -183,9 +179,7 @@ public class IncidentAttachmentService {
                 .toList();
     }
 
-    //  ========================================================================
     //  RETENTION & METRICS
-    //  ========================================================================
 
     /**
      * Deletes media files + rows for terminal incidents older than the retention
@@ -233,9 +227,7 @@ public class IncidentAttachmentService {
                                      long usableBytes, long totalBytes, String storagePath) {
     }
 
-    //  ========================================================================
     //  GUARDRAILS & HELPERS
-    //  ========================================================================
 
     private IncidentEntity getIncident(Long incidentId) {
         return incidentRepository.findById(incidentId)
