@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   Search,
@@ -10,6 +10,7 @@ import {
   UserPlus,
   Loader2,
   AlertTriangle,
+  ChevronDown,
   Eye,
   SlidersHorizontal,
 } from 'lucide-react';
@@ -269,13 +270,71 @@ export default function UsersPage() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
 
-  const { data, loading, error, refetch } = useAsync(
-    () => getUsers({ page: 0, size: 100 }),
-    [],
-  );
+  // Server-side pagination — the roster alone has 1000+ users, so the list is
+  // loaded page by page (100 at a time) with a "Charger plus" footer. The
+  // backend sorts newest-first, so freshly created accounts always appear at
+  // the top of page 0.
+  const PAGE_SIZE = 100;
+  const [users, setUsers] = useState<UserResponseDTO[]>([]);
+  const [totalElements, setTotalElements] = useState<number | null>(null);
+  const [nextPage, setNextPage] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Synchronous guard for the load-more button (state alone is too slow to
+  // stop two rapid clicks fetching the same page twice).
+  const loadingMoreRef = useRef(false);
+  // Generation counter — invalidates any in-flight request when the list is
+  // reset (create-user / retry) so a stale page can never append to a fresh list.
+  const generationRef = useRef(0);
+
+  const loadFirstPage = useCallback(async () => {
+    generationRef.current += 1;
+    const gen = generationRef.current;
+    setLoading(true);
+    setError(null);
+    try {
+      const page = await getUsers({ page: 0, size: PAGE_SIZE });
+      if (generationRef.current !== gen) return;
+      setUsers(page.content);
+      setTotalElements(page.totalElements);
+      setNextPage(1);
+    } catch (err) {
+      if (generationRef.current === gen) setError(extractErrorMessage(err));
+    } finally {
+      if (generationRef.current === gen) setLoading(false);
+    }
+  }, []);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
+    const gen = generationRef.current;
+    const pageToLoad = nextPage;
+    setLoadingMore(true);
+    setError(null);
+    try {
+      const page = await getUsers({ page: pageToLoad, size: PAGE_SIZE });
+      if (generationRef.current !== gen) return;
+      setUsers((prev) => [...prev, ...page.content]);
+      setTotalElements(page.totalElements);
+      setNextPage((p) => p + 1);
+    } catch (err) {
+      if (generationRef.current === gen) setError(extractErrorMessage(err));
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [nextPage]);
+
+  useEffect(() => {
+    void loadFirstPage();
+  }, [loadFirstPage]);
+
   const { data: departments } = useAsync(getDepartments, []);
 
-  const users = useMemo(() => data?.content ?? [], [data]);
+  const hasMore = totalElements != null && users.length < totalElements;
 
   const hasActiveFilters =
     search.trim() !== '' || roleFilter !== 'all' || departmentFilter !== 'all';
@@ -328,11 +387,17 @@ export default function UsersPage() {
             <UserPlus className="h-4 w-4" />
             Nouvel Utilisateur
           </button>
-          <CreateUserModal open={createOpen} onOpenChange={setCreateOpen} onCreated={refetch} />
+          <CreateUserModal open={createOpen} onOpenChange={setCreateOpen} onCreated={loadFirstPage} />
         </div>
 
-        {/* Error banner */}
-        {error && <ErrorState message={error} onRetry={refetch} />}
+        {/* Error banner — when some users are already loaded the retry re-fetches
+            the failed page instead of discarding everything back to page 0 */}
+        {error && (
+          <ErrorState
+            message={error}
+            onRetry={users.length > 0 ? loadMore : loadFirstPage}
+          />
+        )}
 
         {/* Filters */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -398,23 +463,32 @@ export default function UsersPage() {
             {loading ? (
               <TableSkeleton />
             ) : filteredUsers.length === 0 ? (
-              <EmptyState
-                icon={Users}
-                title="Aucun utilisateur enregistré."
-                description={
-                  hasActiveFilters
-                    ? 'Aucun résultat ne correspond à vos filtres actuels.'
-                    : 'Créez votre premier compte pour commencer.'
-                }
-                actionLabel={hasActiveFilters ? 'Effacer les filtres' : 'Nouvel utilisateur'}
-                onAction={() => {
-                  if (hasActiveFilters) {
-                    resetFilters();
-                  } else {
-                    setCreateOpen(true);
+              error ? (
+                // Load failed and nothing is on screen — the banner above has the
+                // retry, so don't show a misleading "no users" empty state.
+                <div className="flex flex-col items-center gap-2 px-4 py-10 text-center text-sm text-muted-foreground">
+                  <AlertTriangle className="h-6 w-6" />
+                  Impossible de charger les utilisateurs.
+                </div>
+              ) : (
+                <EmptyState
+                  icon={Users}
+                  title="Aucun utilisateur enregistré."
+                  description={
+                    hasActiveFilters
+                      ? 'Aucun résultat ne correspond à vos filtres actuels.'
+                      : 'Créez votre premier compte pour commencer.'
                   }
-                }}
-              />
+                  actionLabel={hasActiveFilters ? 'Effacer les filtres' : 'Nouvel utilisateur'}
+                  onAction={() => {
+                    if (hasActiveFilters) {
+                      resetFilters();
+                    } else {
+                      setCreateOpen(true);
+                    }
+                  }}
+                />
+              )
             ) : (
               <>
                 {/* Desktop table */}
@@ -526,6 +600,28 @@ export default function UsersPage() {
                     </div>
                   ))}
                 </div>
+
+                {/* Load-more footer — server-side pagination */}
+                {hasMore && (
+                  <div className="flex flex-col items-center gap-2 border-t px-4 py-4">
+                    <button
+                      type="button"
+                      onClick={loadMore}
+                      disabled={loadingMore}
+                      className="inline-flex items-center gap-2 rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {loadingMore ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                      Charger plus d&apos;utilisateurs
+                    </button>
+                    <p className="text-xs text-muted-foreground">
+                      {users.length} / {totalElements} utilisateurs chargés
+                    </p>
+                  </div>
+                )}
               </>
             )}
           </CardContent>

@@ -157,7 +157,7 @@ export function IncidentDetailDrawer({
             initial="hidden"
             animate="visible"
             exit="exit"
-            className="fixed inset-y-0 right-0 z-[9999] w-full max-w-2xl bg-white shadow-2xl h-screen overflow-y-auto"
+            className="fixed inset-y-0 right-0 z-[9999] w-full max-w-2xl bg-background text-foreground shadow-2xl h-screen overflow-y-auto"
           >
             {/* ── Header bar — flush to top edge, no top offsets ─ */}
             <div className="flex h-14 items-center justify-between border-b px-4">

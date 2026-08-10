@@ -190,7 +190,7 @@ export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: H
 
   return (
     <>
-      <div ref={headerRootRef} className="relative z-10">
+      <div ref={headerRootRef} className="relative z-30">
       {/* ── Navbar — follows the light/dark theme (white ↔ slate-900) ── */}
       <header
         className={cn(
@@ -314,19 +314,19 @@ export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: H
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
-            className="absolute left-0 right-0 top-full z-20 overflow-hidden border-b border-slate-200 bg-white shadow-lg shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/30"
+            className="absolute left-0 right-0 top-full z-20 overflow-hidden"
           >
-            <div className="flex justify-end gap-3 px-4 py-3">
+            <div className="flex justify-end gap-3 pl-4 pr-8 py-3">
               {/* ── Notifications panel ─────────────── */}
               {notifOpen && (
-                <div className="w-[min(92vw,380px)] overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-lg shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-100 dark:shadow-black/40">
+                <div className="w-[min(92vw,380px)] overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-lg shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:shadow-black/40">
                   <NotificationsPanelContent data={notifData} onItemClick={closePanels} />
                 </div>
               )}
 
               {/* ── User Profile panel ──────────────── */}
               {profileOpen && (
-                <div className="w-72 overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-lg shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-100 dark:shadow-black/40">
+                <div className="w-72 overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-lg shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:shadow-black/40">
                   {/* Header Section: Large Avatar + Name + Role */}
                   <div className="p-4">
                     <div className="flex items-center gap-4">
@@ -413,7 +413,7 @@ export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: H
       </div>
 
       {/* ── Cmd+K Search Modal (Admin only) — rendered at the layout top
-            level (outside the z-10 wrapper) so its z-[200] stays above the
+            level (outside the z-30 wrapper) so its z-[200] stays above the
             mobile sidebar drawer (z-50) and bottom nav (z-40) ── */}
       {searchOpen && isAdmin && (
         <div className="fixed inset-0 z-[200] flex items-start justify-center pt-[15vh] sm:items-center sm:pt-0">

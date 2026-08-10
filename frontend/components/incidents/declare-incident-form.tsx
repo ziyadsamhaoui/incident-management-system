@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import {
   ChevronLeft,
   Mic,
-  MicOff,
   Check,
   Wrench,
   Shield,
@@ -23,6 +22,7 @@ import { getCategories, getStations, getDepartments } from '@/services/reference
 import { createIncident } from '@/services/incidentService';
 import { uploadAttachment } from '@/services/attachmentService';
 import { compressImage, MAX_ATTACHMENTS_PER_INCIDENT, validateMedia } from '@/lib/media';
+import { MediaRecorderDialog } from '@/components/media/media-recorder-dialog';
 import { getMe } from '@/services/userService';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -119,56 +119,10 @@ interface PendingPhoto {
   previewUrl: string;
 }
 
-// ── Voice Dictation Hook ──────────────────────────
-
-function useSpeechRecognition() {
-  const [isListening, setIsListening] = useState(false);
-  const [transcript, setTranscript] = useState('');
-  const recognitionRef = useRef<any>(null);
-
-  const startListening = useCallback(() => {
-    const SpeechRecognitionAPI =
-      (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognitionAPI) {
-      console.warn('SpeechRecognition not supported in this browser.');
-      return;
-    }
-    const recognition = new SpeechRecognitionAPI();
-    recognition.lang = 'fr-FR';
-    recognition.interimResults = false;
-    recognition.continuous = false;
-
-    recognition.onresult = (event: any) => {
-      const result = event.results[0][0].transcript;
-      setTranscript(result);
-      setIsListening(false);
-    };
-
-    recognition.onerror = () => {
-      setIsListening(false);
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
-    setIsListening(true);
-  }, []);
-
-  const stopListening = useCallback(() => {
-    recognitionRef.current?.stop();
-    setIsListening(false);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      recognitionRef.current?.stop();
-    };
-  }, []);
-
-  return { isListening, transcript, startListening, stopListening };
+interface PendingVoiceNote {
+  id: string;
+  file: File;
+  previewUrl: string;
 }
 
 // ── Category Tile ─────────────────────────────────
@@ -259,7 +213,8 @@ export function DeclareIncidentForm({
 }) {
   const router = useRouter();
   const { departmentId, departmentName } = useAuthStore();
-  const { isListening, transcript, startListening, stopListening } = useSpeechRecognition();
+  // ── Voice note recorder (real audio, like the drawer) ──
+  const [voiceNoteOpen, setVoiceNoteOpen] = useState(false);
 
   // ── Current user + reference data (real API) ───
   const { data: me } = useAsync(getMe, []);
@@ -326,6 +281,7 @@ export function DeclareIncidentForm({
     // Revoke object URLs + clear the toast timer on unmount.
     return () => {
       pendingPhotosRef.current.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+      pendingVoiceNotesRef.current.forEach((n) => URL.revokeObjectURL(n.previewUrl));
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
   }, []);
@@ -344,7 +300,10 @@ export function DeclareIncidentForm({
     // compressImage never rejects — it falls back to the original file on failure.
     const uploadFile = await compressImage(validated.media.file);
     setPendingPhotos((prev) => {
-      if (prev.length >= MAX_ATTACHMENTS_PER_INCIDENT) return prev;
+      // Photos and voice notes share the same attachment cap.
+      if (prev.length + pendingVoiceNotesRef.current.length >= MAX_ATTACHMENTS_PER_INCIDENT) {
+        return prev;
+      }
       return [
         ...prev,
         {
@@ -364,9 +323,60 @@ export function DeclareIncidentForm({
     });
   }, []);
 
+  // ── Voice notes recorded during declaration ─────
+  const [pendingVoiceNotes, setPendingVoiceNotes] = useState<PendingVoiceNote[]>([]);
+  const pendingVoiceNotesRef = useRef<PendingVoiceNote[]>([]);
+
+  useEffect(() => {
+    pendingVoiceNotesRef.current = pendingVoiceNotes;
+  }, [pendingVoiceNotes]);
+
+  const handleVoiceNoteRecorded = useCallback(
+    (file: File) => {
+      // Mirror the drawer's upload path: validate type/size before queueing.
+      const validated = validateMedia(file);
+      if (!validated.ok) {
+        showToast('error', validated.reason);
+        return;
+      }
+      if (validated.media.fileType !== 'AUDIO') {
+        showToast('error', 'Le fichier enregistré n’est pas un clip audio valide.');
+        return;
+      }
+      const remaining =
+        MAX_ATTACHMENTS_PER_INCIDENT -
+        (pendingPhotosRef.current.length + pendingVoiceNotesRef.current.length);
+      if (remaining <= 0) {
+        showToast('error', `Maximum ${MAX_ATTACHMENTS_PER_INCIDENT} pièces jointes par incident.`);
+        return;
+      }
+      setPendingVoiceNotes((prev) => [
+        ...prev,
+        {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          file: validated.media.file,
+          previewUrl: URL.createObjectURL(validated.media.file),
+        },
+      ]);
+      setVoiceNoteOpen(false);
+    },
+    [showToast],
+  );
+
+  const removeVoiceNote = useCallback((id: string) => {
+    setPendingVoiceNotes((prev) => {
+      const target = prev.find((n) => n.id === id);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((n) => n.id !== id);
+    });
+  }, []);
+
   const effectiveDepartmentId = departmentId ? Number(departmentId) : departmentChoice;
 
   const isValid = stationId != null && categoryId != null && effectiveDepartmentId != null;
+
+  // Photos + voice notes share the 5-attachment cap.
+  const pendingAttachmentCount = pendingPhotos.length + pendingVoiceNotes.length;
 
   // ── Auto-priority from category ─────────────────
   useEffect(() => {
@@ -413,13 +423,6 @@ export function DeclareIncidentForm({
     localStorage.setItem(draftKey, JSON.stringify(draft));
   }, [draftKey, effectiveDepartmentId, stationId, categoryId, priority, description]);
 
-  // ── Voice transcript integration ────────────────
-  useEffect(() => {
-    if (transcript) {
-      setDescription((prev) => (prev ? `${prev} ${transcript}` : transcript));
-    }
-  }, [transcript]);
-
   // ── Submit handler (real API) ───────────────────
   const handleSubmit = async () => {
     if (!isValid || !stationId || !categoryId || !effectiveDepartmentId) return;
@@ -439,23 +442,35 @@ export function DeclareIncidentForm({
       localStorage.removeItem(draftKey);
 
       // Attach the photos captured during declaration to the new incident.
-      let failedPhotos = 0;
+      let failedAttachments = 0;
       for (const photo of pendingPhotos) {
         try {
           await uploadAttachment(created.id, photo.file, 'IMAGE');
         } catch (err) {
-          failedPhotos += 1;
+          failedAttachments += 1;
           console.warn('Failed to attach captured photo:', err);
         }
       }
       pendingPhotos.forEach((p) => URL.revokeObjectURL(p.previewUrl));
       setPendingPhotos([]);
 
+      // Attach the voice notes recorded during declaration.
+      for (const note of pendingVoiceNotes) {
+        try {
+          await uploadAttachment(created.id, note.file, 'AUDIO');
+        } catch (err) {
+          failedAttachments += 1;
+          console.warn('Failed to attach voice note:', err);
+        }
+      }
+      pendingVoiceNotes.forEach((n) => URL.revokeObjectURL(n.previewUrl));
+      setPendingVoiceNotes([]);
+
       const baseMessage = `Incident ${created.reference} créé avec succès`;
       showToast(
         'success',
-        failedPhotos > 0
-          ? `${baseMessage} — ${failedPhotos} photo(s) non jointes.`
+        failedAttachments > 0
+          ? `${baseMessage} — ${failedAttachments} pièce(s) jointe(s) non attachée(s).`
           : baseMessage,
       );
       setTimeout(() => {
@@ -667,17 +682,17 @@ export function DeclareIncidentForm({
               <button
                 type="button"
                 onClick={() => photoInputRef.current?.click()}
-                disabled={isSubmitting || pendingPhotos.length >= MAX_ATTACHMENTS_PER_INCIDENT}
+                disabled={isSubmitting || pendingAttachmentCount >= MAX_ATTACHMENTS_PER_INCIDENT}
                 title={
-                  pendingPhotos.length >= MAX_ATTACHMENTS_PER_INCIDENT
-                    ? `Maximum ${MAX_ATTACHMENTS_PER_INCIDENT} photos`
+                  pendingAttachmentCount >= MAX_ATTACHMENTS_PER_INCIDENT
+                    ? `Maximum ${MAX_ATTACHMENTS_PER_INCIDENT} pièces jointes`
                     : 'Prendre une photo'
                 }
                 className={cn(
                   'absolute bottom-3 right-12 flex h-8 w-8 items-center justify-center rounded-lg transition-all',
                   'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700',
                   'active:scale-[0.9]',
-                  (isSubmitting || pendingPhotos.length >= MAX_ATTACHMENTS_PER_INCIDENT) &&
+                  (isSubmitting || pendingAttachmentCount >= MAX_ATTACHMENTS_PER_INCIDENT) &&
                     'opacity-50 cursor-not-allowed',
                 )}
               >
@@ -690,17 +705,22 @@ export function DeclareIncidentForm({
               </button>
               <button
                 type="button"
-                onClick={isListening ? stopListening : startListening}
-                title={isListening ? 'Arrêter la dictée' : 'Dicter'}
+                onClick={() => setVoiceNoteOpen(true)}
+                disabled={isSubmitting || pendingAttachmentCount >= MAX_ATTACHMENTS_PER_INCIDENT}
+                title={
+                  pendingAttachmentCount >= MAX_ATTACHMENTS_PER_INCIDENT
+                    ? `Maximum ${MAX_ATTACHMENTS_PER_INCIDENT} pièces jointes`
+                    : 'Enregistrer une note vocale'
+                }
                 className={cn(
                   'absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-lg transition-all',
-                  isListening
-                    ? 'bg-red-500 text-white animate-pulse'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700',
+                  'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700',
                   'active:scale-[0.9]',
+                  (isSubmitting || pendingAttachmentCount >= MAX_ATTACHMENTS_PER_INCIDENT) &&
+                    'opacity-50 cursor-not-allowed',
                 )}
               >
-                {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                <Mic className="h-4 w-4" />
               </button>
             </div>
 
@@ -733,6 +753,42 @@ export function DeclareIncidentForm({
                         className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-white shadow-md ring-2 ring-white dark:ring-slate-900 transition-all hover:scale-110 hover:bg-red-700 active:scale-95"
                       >
                         <X className="h-3 w-3" strokeWidth={3} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Recorded voice notes — attached automatically after declaration */}
+            {pendingVoiceNotes.length > 0 && (
+              <div className="mt-3">
+                <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                  <Mic className="h-3.5 w-3.5" />
+                  {pendingVoiceNotes.length} note
+                  {pendingVoiceNotes.length > 1 ? 's' : ''} vocale
+                  {pendingVoiceNotes.length > 1 ? 's' : ''} à joindre à l&apos;incident
+                </p>
+                <div className="space-y-2">
+                  {pendingVoiceNotes.map((n) => (
+                    <div
+                      key={n.id}
+                      className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700"
+                    >
+                      <audio
+                        src={n.previewUrl}
+                        controls
+                        preload="metadata"
+                        className="h-8 min-w-0 flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeVoiceNote(n.id)}
+                        aria-label="Retirer la note vocale"
+                        title="Retirer la note vocale"
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition-all hover:scale-110 hover:bg-red-100 hover:text-red-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-red-950/50 dark:hover:text-red-400"
+                      >
+                        <X className="h-3.5 w-3.5" strokeWidth={2.5} />
                       </button>
                     </div>
                   ))}
@@ -802,6 +858,15 @@ export function DeclareIncidentForm({
             <span className="text-sm font-semibold leading-snug">{toast.message}</span>
           </div>
         </div>
+      )}
+
+      {/* ── Voice note recorder ───────────────────── */}
+      {voiceNoteOpen && (
+        <MediaRecorderDialog
+          mode="AUDIO"
+          onClose={() => setVoiceNoteOpen(false)}
+          onRecorded={handleVoiceNoteRecorded}
+        />
       )}
     </>
   );
