@@ -41,8 +41,11 @@ cp.txt
 test.log
 /frontend/nul
 /docs/applicationlogs.txt
-/docs/cicd_logs.txt
 /docs/AGENT_SUMMARY.md
 /docs/DEPLOYMENT.md
-/docs/text
 /backend/src/main/resources/data/roster-dev.csv
+/docs/HR_ROSTER_IMPL.md
+/docs/OLD_PROJECT_STATUS.pdf
+/docs/OLD_WORKFLOW.pdf
+/docs/WORKFLOW.md
+/docs/PROJECT_STATUS.md
