@@ -33,15 +33,22 @@ public interface IncidentRepository
     //
     //  Backed by the self-maintaining incidents.search_vector generated column
     //  (see V11__add_fulltext_search.sql). websearch_to_tsquery parses raw user
-    //  input safely: "phrase match", -excluded terms and prefix* are supported,
-    //  malformed syntax degrades gracefully. ts_rank gives relevance ordering.
-    //  All non-text filters compose with the @@ match; NULL = filter inactive.
+    //  input safely: "phrase match", -excluded terms and OR are supported and
+    //  malformed syntax degrades gracefully. The * prefix operator is NOT part
+    //  of websearch_to_tsquery (it ignores the asterisk, so "convoy*" would
+    //  degrade to the exact lexeme "convoy"), so terms ending in '*' are routed
+    //  to to_tsquery with a sanitized 'term:*' prefix instead. The sanitizer
+    //  keeps Unicode letters ([[:alnum:]]) so accented French / Arabic prefixes
+    //  survive (the 'simple' config tokenizes per Unicode). ts_rank gives
+    //  relevance ordering. All non-text filters compose with the @@ match;
+    //  NULL = filter inactive.
 
     /**
      * Full-text search over {@code reference} (A), {@code description} (A) and
      * {@code resolution_note} (B), ranked by {@code ts_rank} descending.
      *
-     * @param term                 raw user search term (parsed by websearch_to_tsquery)
+     * @param term                 raw user search term (parsed by websearch_to_tsquery; a
+     *                             trailing {@code *} enables prefix matching, e.g. {@code convoy*})
      * @param statuses             comma-separated status names or {@code null} for all
      * @param departmentId         department filter or {@code null}
      * @param userId               declaring-user filter or {@code null}
@@ -56,8 +63,14 @@ public interface IncidentRepository
                    i.station_id, i.category_id, i.priority, i.status, i.description,
                    i.resolution_note, i.declared_at, i.claimed_at, i.in_progress_at,
                    i.resolved_at, i.closed_at, i.resolved_by_id
-            FROM incidents i, websearch_to_tsquery('simple', CAST(:term AS text)) query
-            WHERE i.search_vector @@ query
+            FROM incidents i,
+                 (SELECT CASE
+                           WHEN CAST(:term AS text) LIKE '%*'
+                            AND btrim(regexp_replace(left(CAST(:term AS text), -1), '[^[:alnum:]_]+', ' ', 'g')) <> '' THEN
+                               to_tsquery('simple', concat(regexp_replace(left(CAST(:term AS text), -1), '[^[:alnum:]_]+', ' ', 'g'), ':*'))
+                           ELSE websearch_to_tsquery('simple', CAST(:term AS text))
+                         END AS tsq) q
+            WHERE i.search_vector @@ q.tsq
               AND (CAST(:statuses AS text) IS NULL OR i.status = ANY(string_to_array(CAST(:statuses AS text), ',')))
               AND (CAST(:departmentId AS bigint) IS NULL OR i.department_id = CAST(:departmentId AS bigint))
               AND (CAST(:userId AS bigint) IS NULL OR i.user_id = CAST(:userId AS bigint))
@@ -65,12 +78,18 @@ public interface IncidentRepository
                   THEN i.resolved_at ELSE i.declared_at END >= CAST(:startDateTime AS timestamp))
               AND (CAST(:endExclusiveDateTime AS timestamp) IS NULL OR CASE WHEN CAST(:dateField AS text) = 'resolvedAt'
                   THEN i.resolved_at ELSE i.declared_at END < CAST(:endExclusiveDateTime AS timestamp))
-            ORDER BY ts_rank(i.search_vector, query) DESC
+            ORDER BY ts_rank(i.search_vector, q.tsq) DESC
             """,
             countQuery = """
             SELECT count(*)
-            FROM incidents i, websearch_to_tsquery('simple', CAST(:term AS text)) query
-            WHERE i.search_vector @@ query
+            FROM incidents i,
+                 (SELECT CASE
+                           WHEN CAST(:term AS text) LIKE '%*'
+                            AND btrim(regexp_replace(left(CAST(:term AS text), -1), '[^[:alnum:]_]+', ' ', 'g')) <> '' THEN
+                               to_tsquery('simple', concat(regexp_replace(left(CAST(:term AS text), -1), '[^[:alnum:]_]+', ' ', 'g'), ':*'))
+                           ELSE websearch_to_tsquery('simple', CAST(:term AS text))
+                         END AS tsq) q
+            WHERE i.search_vector @@ q.tsq
               AND (CAST(:statuses AS text) IS NULL OR i.status = ANY(string_to_array(CAST(:statuses AS text), ',')))
               AND (CAST(:departmentId AS bigint) IS NULL OR i.department_id = CAST(:departmentId AS bigint))
               AND (CAST(:userId AS bigint) IS NULL OR i.user_id = CAST(:userId AS bigint))

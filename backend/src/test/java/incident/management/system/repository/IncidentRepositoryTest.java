@@ -382,7 +382,15 @@ class IncidentRepositoryTest extends BaseRepositoryIntegrationTest {
         @Test
         @DisplayName("time-to-claim buckets average claim latency per claimed-day bucket")
         void timeToClaimBuckets_averageClaimLatency() {
-            IncidentEntity claimed = persistIncident(userA, departmentA, IncidentStatus.CLAIMED);
+            // claimed_at / claimed_by are mapped @Column(updatable = false): they
+            // must be populated before the INSERT — a save() after the insert
+            // would be a no-op UPDATE (see dailyBucketsGroupByCalendarDate).
+            IncidentEntity claimed = TestEntityFactory.createIncident();
+            claimed.setUser(userA);
+            claimed.setDepartment(departmentA);
+            claimed.setStation(station);
+            claimed.setCategory(category);
+            claimed.setStatus(IncidentStatus.CLAIMED);
             claimed.setClaimedBy(userA);
             claimed.setClaimedAt(LocalDateTime.of(2026, 1, 6, 11, 0));
             incidentRepository.save(claimed);
@@ -540,14 +548,26 @@ class IncidentRepositoryTest extends BaseRepositoryIntegrationTest {
                 incidentRepository.save(resolved);
                 backdateDeclaredAt(resolved, LocalDateTime.of(2026, 1, 6, 10, 0));
             }
-            IncidentEntity nonResolved = persistIncident(userA, departmentA, IncidentStatus.NON_RESOLVED);
+            // resolved_at is @Column(updatable = false): set it before the INSERT
+            // (a save() after the insert would be a no-op UPDATE — same for claimed_at).
+            IncidentEntity nonResolved = TestEntityFactory.createIncident();
+            nonResolved.setUser(userA);
+            nonResolved.setDepartment(departmentA);
+            nonResolved.setStation(station);
+            nonResolved.setCategory(category);
+            nonResolved.setStatus(IncidentStatus.NON_RESOLVED);
             nonResolved.setResolvedBy(admin);
             nonResolved.setResolvedAt(LocalDateTime.of(2026, 1, 6, 16, 0));
             incidentRepository.save(nonResolved);
             backdateDeclaredAt(nonResolved, LocalDateTime.of(2026, 1, 6, 12, 0));
 
             // 1 claim by admin
-            IncidentEntity claimed = persistIncident(userA, departmentA, IncidentStatus.CLAIMED);
+            IncidentEntity claimed = TestEntityFactory.createIncident();
+            claimed.setUser(userA);
+            claimed.setDepartment(departmentA);
+            claimed.setStation(station);
+            claimed.setCategory(category);
+            claimed.setStatus(IncidentStatus.CLAIMED);
             claimed.setClaimedBy(admin);
             claimed.setClaimedAt(LocalDateTime.of(2026, 1, 6, 11, 0));
             incidentRepository.save(claimed);
@@ -646,7 +666,7 @@ class IncidentRepositoryTest extends BaseRepositoryIntegrationTest {
         @Test
         @DisplayName("prefix search (term*) matches partial words")
         void prefixSearch() {
-            persistIncidentWithDescription(userA, departmentA,
+            IncidentEntity match = persistIncidentWithDescription(userA, departmentA,
                     IncidentStatus.DECLARED, "Convoyeur hors service");
             persistIncidentWithDescription(userA, departmentA,
                     IncidentStatus.DECLARED, "Panne moteur électrique");
@@ -654,7 +674,9 @@ class IncidentRepositoryTest extends BaseRepositoryIntegrationTest {
             Page<IncidentEntity> page = incidentRepository.searchByText(
                     "convoy*", null, null, null, null, null, "declaredAt", Pageable.ofSize(10));
 
-            assertThat(page.getContent()).hasSize(1);
+            assertThat(page.getContent()).extracting(IncidentEntity::getId)
+                    .containsExactly(match.getId());
+            assertThat(page.getTotalElements()).isEqualTo(1);
         }
 
         @Test

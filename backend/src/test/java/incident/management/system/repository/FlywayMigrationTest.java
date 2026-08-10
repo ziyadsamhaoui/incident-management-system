@@ -46,11 +46,11 @@ class FlywayMigrationTest {
                 .as("Flyway migrate() should report success = true")
                 .isTrue();
         assertThat(result.migrationsExecuted)
-                .as("Expected exactly 10 migrations (V1 baseline + V2 refactor + V3 widen date_key + V4 analytics indexes + V5 password-reset hardening + V6 CLOSED removal + V7 terminal indexes + V8 history status normalization + V9 incident attachments + V10 admin media soft-delete)")
-                .isEqualTo(10);
+                .as("Expected exactly 11 migrations (V1 baseline + V2 refactor + V3 widen date_key + V4 analytics indexes + V5 password-reset hardening + V6 CLOSED removal + V7 terminal indexes + V8 history status normalization + V9 incident attachments + V10 admin media soft-delete + V11 full-text search)")
+                .isEqualTo(11);
         assertThat(result.migrations)
                 .extracting(m -> m.version)
-                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10");
+                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11");
     }
 
     @Test
@@ -59,8 +59,8 @@ class FlywayMigrationTest {
 
         MigrationInfo[] applied = flyway.info().applied();
         assertThat(applied)
-                .as("Flyway schema_history should have 10 applied migrations")
-                .hasSize(10);
+                .as("Flyway schema_history should have 11 applied migrations")
+                .hasSize(11);
 
         assertThat(applied[0].getVersion().toString())
                 .as("First migration should be version 1")
@@ -187,6 +187,10 @@ class FlywayMigrationTest {
         assertColumnNullable("incident_attachments", "object_key");
         assertIndexExists("idx_attachment_admin_list");
         assertIndexExists("idx_attachment_stats");
+
+        // V11 full-text search — self-maintaining tsvector generated column + GIN index
+        assertColumnExists("incidents", "search_vector");
+        assertIndexExists("idx_incidents_search");
     }
 
     @Test

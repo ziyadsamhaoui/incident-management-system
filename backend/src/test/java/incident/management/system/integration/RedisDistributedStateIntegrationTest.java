@@ -144,8 +144,18 @@ class RedisDistributedStateIntegrationTest extends BaseRepositoryIntegrationTest
     @Test
     @DisplayName("dashboard_stats cache entry is persisted to Redis")
     void dashboardCache_isWrittenToRedis() {
+        // Force a guaranteed cache miss through the cache manager itself so the
+        // @Cacheable call below performs a real write (a pre-existing entry —
+        // however it got there — would otherwise short-circuit the write).
+        Cache dashboardCache = cacheManager.getCache(CacheNames.DASHBOARD_STATS);
+        assertThat(dashboardCache).isNotNull();
+        dashboardCache.clear();
+
         dashboardService.getIncidentsGroupedByStatus();
 
+        // The app's own read path must serve the freshly computed value...
+        assertThat(dashboardCache.get("v2:by-status")).isNotNull();
+        // ...and the value must physically live in Redis under the cache's key.
         assertThat(stringRedisTemplate.hasKey("dashboard_stats::v2:by-status")).isTrue();
     }
 
