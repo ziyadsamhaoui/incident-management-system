@@ -508,7 +508,7 @@ export default function ChefAtelierIncidentsPage() {
             <Button
               size="sm"
               className="h-9 gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white"
-              onClick={() => router.push('/sous-chef/incidents/declare')}
+              onClick={() => router.push('/chef-atelier/incidents/declare')}
             >
               <Plus className="h-3.5 w-3.5" />
               Déclarer
@@ -650,7 +650,7 @@ export default function ChefAtelierIncidentsPage() {
                 title="Aucun incident en cours dans le système."
                 description="Le système d'incidents est opérationnel. Les incidents apparaîtront ici une fois déclarés par les opérateurs."
                 actionLabel="Déclarer un incident"
-                onAction={() => router.push('/sous-chef/incidents/declare')}
+                onAction={() => router.push('/chef-atelier/incidents/declare')}
               />
             </CardContent>
           </Card>
