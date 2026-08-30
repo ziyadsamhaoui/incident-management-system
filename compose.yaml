@@ -15,8 +15,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-  # Distributed state: JWT revocation, rate-limit buckets, query caches,
-  # idempotency keys. Env-configurable via REDIS_PORT (default 6379).
   redis:
     image: 'redis:7-alpine'
     ports:
