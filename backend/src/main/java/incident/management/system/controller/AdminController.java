@@ -71,13 +71,6 @@ public class AdminController {
 
     //  Supervisor-mediated reset-code generation (authentication hardening)
 
-    /**
-     * Generates a 6-character, single-use reset code for a CHEF_ATELIER or
-     * SOUS_CHEF account — for in-person handoff to the employee. Only the
-     * SHA-256 hash of the code is persisted (15-minute TTL); the plaintext
-     * is returned once in the response body. Requires ADMIN (class-level
-     * {@code @PreAuthorize} + explicit guard here).
-     */
     @PostMapping("/users/{id}/generate-reset-code")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Generate a supervisor password-reset code",

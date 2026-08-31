@@ -213,7 +213,6 @@ class IncidentControllerWebTest extends StandaloneWebMvcTestBase {
                     .andExpect(jsonPath("$.error").value("Validation Failure"))
                     .andExpect(jsonPath("$.errors.userId").exists())
                     .andExpect(jsonPath("$.errors.departmentId").exists())
-                    .andExpect(jsonPath("$.errors.stationId").exists())
                     .andExpect(jsonPath("$.errors.categoryId").exists())
                     .andExpect(jsonPath("$.errors.priority").exists());
             // description is optional (nullable) — it must NOT produce a validation error.

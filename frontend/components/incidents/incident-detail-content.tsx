@@ -4,7 +4,6 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Building2,
-  Cpu,
   Tag,
   FileText,
   AlertTriangle,
@@ -297,10 +296,9 @@ export function IncidentDetailContent({
       {/* ── Meta Grid ────────────────────────────── */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <MetaItem icon={Building2} label="Département" value={incident.department} />
-        <MetaItem icon={Cpu} label="Station" value={incident.station} />
+        <MetaItem icon={Tag} label="Catégorie / Type" value={incident.category} />
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <MetaItem icon={Tag} label="Catégorie / Type" value={incident.category} />
         <MetaItem icon={Clock} label="Déclaré le" value={formatDateTime(incident.declaredAt)} />
       </div>
 

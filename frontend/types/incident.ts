@@ -27,18 +27,9 @@ export interface CategoryRef {
   name: string;
 }
 
-export interface StationRef {
-  id: number;
-  code: string;
-  rowIndex: number;
-  lineIndex: number;
-  isWorking: boolean;
-  productionLineId: number | null;
-}
-
 /**
  * Flattened incident DTO consumed by the UI.
- * `department`/`station`/`category` are display strings resolved from the
+ * `department`/`category` are display strings resolved from the
  * backend's nested reference objects.
  */
 export interface IncidentDTO {
@@ -50,7 +41,6 @@ export interface IncidentDTO {
   assignedTo: IncidentUserSummary | null;
   resolvedBy: IncidentUserSummary | null;
   department: string;
-  station: string;
   category: string;
   priority: IncidentPriority;
   status: IncidentStatus;
@@ -83,7 +73,7 @@ export interface IncidentDetailDTO extends IncidentDTO {
 export interface CreateIncidentRequest {
   userId: number;
   departmentId: number;
-  stationId: number;
+  stationId: number | null;
   categoryId: number;
   priority: IncidentPriority;
   /** Optional free-text note — the backend accepts null (photo-only declarations). */

@@ -17,8 +17,7 @@ public record CreateIncidentRequest(
                 requiredMode = Schema.RequiredMode.REQUIRED)
         Long departmentId,
 
-        @NotNull
-        @Schema(description = "Affected station id", example = "17", requiredMode = Schema.RequiredMode.REQUIRED)
+        @Schema(description = "Affected station id (optional)", example = "17")
         Long stationId,
 
         @NotNull

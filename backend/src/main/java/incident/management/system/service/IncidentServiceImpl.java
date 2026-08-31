@@ -79,8 +79,10 @@ public class IncidentServiceImpl implements IncidentService {
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", request.userId()));
         DepartmentEntity department = departmentRepository.findById(request.departmentId())
                 .orElseThrow(() -> new ResourceNotFoundException("Department", "id", request.departmentId()));
-        StationEntity station = stationRepository.findById(request.stationId())
-                .orElseThrow(() -> new ResourceNotFoundException("Station", "id", request.stationId()));
+        StationEntity station = request.stationId() != null
+                ? stationRepository.findById(request.stationId())
+                        .orElseThrow(() -> new ResourceNotFoundException("Station", "id", request.stationId()))
+                : null;
         CategoryEntity category = categoryRepository.findById(request.categoryId())
                 .orElseThrow(() -> new ResourceNotFoundException("Category", "id", request.categoryId()));
 

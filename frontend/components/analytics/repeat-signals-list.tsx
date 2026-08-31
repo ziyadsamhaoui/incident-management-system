@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { AlertTriangle, Cpu, ExternalLink } from 'lucide-react';
+import { AlertTriangle, ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -49,7 +49,7 @@ export function RepeatSignalsList({
         ) : signals.length === 0 ? (
           <EmptyState
             compact
-            icon={Cpu}
+            icon={AlertTriangle}
             title={t.analyticsSignalsEmpty}
             description={t.analyticsSignalsEmptyDesc}
           />
@@ -64,10 +64,7 @@ export function RepeatSignalsList({
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
-                  <Cpu className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                  <span className="truncate text-sm font-bold text-amber-800 dark:text-amber-300">
-                    {signal.stationCode ?? `#${signal.stationId}`}
-                  </span>
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
                   {signal.departmentName && (
                     <Badge variant="outline" className="shrink-0 border-amber-300 px-1.5 py-0 text-[9px] text-amber-700 dark:border-amber-800 dark:text-amber-400">
                       {signal.departmentName}

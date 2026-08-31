@@ -94,7 +94,6 @@ export function MobileBottomNav({ isVisible = true, onNavigate }: MobileBottomNa
         { label: 'Departments', href: '/admin/reference?tab=departments' },
         { label: 'Sections', href: '/admin/reference?tab=sections' },
         { label: 'Production Lines', href: '/admin/reference?tab=production-lines' },
-        { label: 'Stations', href: '/admin/reference?tab=stations' },
       ],
     },
     { label: 'Analytics', href: '/analytics', icon: BarChart3 },

@@ -18,7 +18,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useAsync } from '@/lib/use-async';
-import { getCategories, getStations, getDepartments } from '@/services/referenceService';
+import { getCategories, getDepartments } from '@/services/referenceService';
 import { createIncident } from '@/services/incidentService';
 import { uploadAttachment } from '@/services/attachmentService';
 import { compressImage, MAX_ATTACHMENTS_PER_INCIDENT, validateMedia } from '@/lib/media';
@@ -94,15 +94,9 @@ const PRIORITY_ACTIVE_CLASSES: Record<string, string> = {
 
 interface DraftState {
   departmentId: number | null;
-  stationId: number | null;
   categoryId: number | null;
   priority: string;
   description: string;
-}
-
-interface StationOption {
-  id: number;
-  label: string;
 }
 
 interface CategoryTileDef {
@@ -220,16 +214,9 @@ export function DeclareIncidentForm({
   const { data: me } = useAsync(getMe, []);
   const { data: categoriesData, loading: loadingCategories, error: categoriesError, refetch: refetchCategories } =
     useAsync(getCategories, []);
-  const { data: stationsData, loading: loadingStations, error: stationsError, refetch: refetchStations } =
-    useAsync(getStations, []);
   // Departments — only used when the current user has none assigned (e.g. ADMIN).
   const { data: departmentsData, loading: loadingDepartments, error: departmentsError, refetch: refetchDepartments } =
     useAsync(getDepartments, []);
-
-  const stations: StationOption[] = useMemo(
-    () => (stationsData ?? []).map((s) => ({ id: s.id, label: s.code })),
-    [stationsData],
-  );
 
   const categories: CategoryTileDef[] = useMemo(
     () =>
@@ -243,7 +230,7 @@ export function DeclareIncidentForm({
     [categoriesData],
   );
 
-  const departments: StationOption[] = useMemo(
+  const departments: { id: number; label: string }[] = useMemo(
     () => (departmentsData ?? []).map((d) => ({ id: d.id, label: d.name })),
     [departmentsData],
   );
@@ -252,7 +239,6 @@ export function DeclareIncidentForm({
   const [departmentChoice, setDepartmentChoice] = useState<number | null>(
     departmentId ? Number(departmentId) : null,
   );
-  const [stationId, setStationId] = useState<number | null>(null);
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [priority, setPriority] = useState('MEDIUM');
   const [description, setDescription] = useState('');
@@ -373,7 +359,7 @@ export function DeclareIncidentForm({
 
   const effectiveDepartmentId = departmentId ? Number(departmentId) : departmentChoice;
 
-  const isValid = stationId != null && categoryId != null && effectiveDepartmentId != null;
+  const isValid = categoryId != null && effectiveDepartmentId != null;
 
   // Photos + voice notes share the 5-attachment cap.
   const pendingAttachmentCount = pendingPhotos.length + pendingVoiceNotes.length;
@@ -400,7 +386,6 @@ export function DeclareIncidentForm({
       if (raw) {
         const draft: DraftState = JSON.parse(raw);
         if (draft.departmentId != null) setDepartmentChoice(draft.departmentId);
-        if (draft.stationId != null) setStationId(draft.stationId);
         if (draft.categoryId != null) setCategoryId(draft.categoryId);
         if (draft.priority) setPriority(draft.priority);
         if (draft.description) setDescription(draft.description);
@@ -415,23 +400,22 @@ export function DeclareIncidentForm({
   useEffect(() => {
     const draft: DraftState = {
       departmentId: effectiveDepartmentId,
-      stationId,
       categoryId,
       priority,
       description,
     };
     localStorage.setItem(draftKey, JSON.stringify(draft));
-  }, [draftKey, effectiveDepartmentId, stationId, categoryId, priority, description]);
+  }, [draftKey, effectiveDepartmentId, categoryId, priority, description]);
 
   // ── Submit handler (real API) ───────────────────
   const handleSubmit = async () => {
-    if (!isValid || !stationId || !categoryId || !effectiveDepartmentId) return;
+    if (!isValid || !categoryId || !effectiveDepartmentId) return;
     setIsSubmitting(true);
     try {
       const created = await createIncident({
         userId: me?.id ?? 0, // real user id from GET /api/me
         departmentId: effectiveDepartmentId,
-        stationId,
+        stationId: null,
         categoryId,
         priority: priority as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
         // Description is optional — send null when empty.
@@ -546,39 +530,7 @@ export function DeclareIncidentForm({
             </section>
           )}
 
-          {/* ── B. Station Selector ───────────────── */}
-          <section>
-            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Poste de travail
-            </label>
-            {loadingStations ? (
-              <Skeleton className="h-10 w-full rounded-lg" />
-            ) : stationsError ? (
-              <ErrorState compact message={stationsError} onRetry={refetchStations} />
-            ) : stations.length === 0 ? (
-              <p className="rounded-xl border border-dashed px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
-                Aucune station enregistrée. Contactez un administrateur.
-              </p>
-            ) : (
-              <Select
-                value={stationId != null ? String(stationId) : ''}
-                onValueChange={(v) => setStationId(Number(v))}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Sélectionner un poste de travail" />
-                </SelectTrigger>
-                <SelectContent>
-                  {stations.map((s) => (
-                    <SelectItem key={s.id} value={String(s.id)}>
-                      {s.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </section>
-
-          {/* ── C. Category Selector ──────────────── */}
+          {/* ── B. Category Selector ──────────────────── */}
           <section>
             <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Type d&apos;incident
@@ -609,7 +561,7 @@ export function DeclareIncidentForm({
             )}
           </section>
 
-          {/* ── D. Priority Segmented Control ─────── */}
+          {/* ── C. Priority Segmented Control ─────────── */}
           <section>
             <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Priorité
@@ -622,7 +574,7 @@ export function DeclareIncidentForm({
             )}
           </section>
 
-          {/* ── E. Description + Voice + Camera ───── */}
+          {/* ── D. Description + Voice + Camera ──────── */}
           <section>
             <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Description{' '}

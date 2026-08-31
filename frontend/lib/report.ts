@@ -122,9 +122,9 @@ export function downloadAnalyticsCsv(data: AnalyticsReportData): void {
   if (data.signals.length === 0) {
     rows.push(['Aucun signal de récurrence détecté.', '', '']);
   } else {
-    rows.push(['Station', 'Catégorie', 'Incidents']);
+    rows.push(['Catégorie', 'Département', 'Incidents']);
     for (const s of data.signals) {
-      rows.push([`${s.stationCode ?? '—'} (${s.departmentName ?? '—'})`, s.categoryName ?? '—', s.incidentCount]);
+      rows.push([s.categoryName ?? '—', s.departmentName ?? '—', s.incidentCount]);
     }
   }
   rows.push(['', '', '']);
@@ -232,14 +232,14 @@ export function downloadAnalyticsPdf(data: AnalyticsReportData): void {
   }
 
   // ── 5. Repeat signals
-  doc.text('Signal récurrent (≥ 3 incidents sur la même station / 14 jours)', margin, y);
+  doc.text('Signal récurrent (≥ 3 mêmes catégories / département / 14 jours)', margin, y);
   y += 3;
   autoTable(doc, {
     startY: y,
-    head: [['Station', 'Catégorie', 'Incidents', 'Premier', 'Dernier']],
+    head: [['Catégorie', 'Département', 'Incidents', 'Premier', 'Dernier']],
     body: data.signals.map((s) => [
-      `${s.stationCode ?? '—'} (${s.departmentName ?? '—'})`,
       s.categoryName ?? '—',
+      s.departmentName ?? '—',
       s.incidentCount,
       s.firstOccurrence ? formatDate(s.firstOccurrence.slice(0, 10)) : '—',
       s.lastOccurrence ? formatDate(s.lastOccurrence.slice(0, 10)) : '—',

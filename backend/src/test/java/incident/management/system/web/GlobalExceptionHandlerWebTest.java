@@ -45,7 +45,7 @@ class GlobalExceptionHandlerWebTest extends StandaloneWebMvcTestBase {
     class CreateIncidentValidation {
 
         @Test
-        @DisplayName("all null required fields → 400 Bad Request with 5 field errors (description optional)")
+        @DisplayName("all null required fields → 400 Bad Request with 4 field errors (stationId and description optional)")
         void allNullFields_returns400WithFieldErrors() throws Exception {
             var request = new CreateIncidentRequest(null, null, null, null, null, null);
 
@@ -58,7 +58,6 @@ class GlobalExceptionHandlerWebTest extends StandaloneWebMvcTestBase {
                     .andExpect(jsonPath("$.message").value("One or more fields failed validation. See 'errors' for details."))
                     .andExpect(jsonPath("$.errors.userId").exists())
                     .andExpect(jsonPath("$.errors.departmentId").exists())
-                    .andExpect(jsonPath("$.errors.stationId").exists())
                     .andExpect(jsonPath("$.errors.categoryId").exists())
                     .andExpect(jsonPath("$.errors.priority").exists());
         }

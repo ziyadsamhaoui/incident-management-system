@@ -7,7 +7,6 @@ import {
   FolderTree,
   MapPin,
   LayoutGrid,
-  Cpu,
   Plus,
   Search,
   Edit3,
@@ -43,22 +42,18 @@ import {
   getDepartments,
   getSections,
   getProductionLines,
-  getStations,
   createCategory,
   createDepartment,
   createSection,
   createProductionLine,
-  createStation,
   updateCategory,
   updateDepartment,
   updateSection,
   updateProductionLine,
-  updateStation,
   deleteCategory,
   deleteDepartment,
   deleteSection,
   deleteProductionLine,
-  deleteStation,
 } from '@/services/referenceService';
 
 // ── Category → Icon Map ───────────────────────────
@@ -92,7 +87,7 @@ interface RefTab {
   toItem: (raw: unknown) => { id: number; name: string; parent?: string; parentId?: number };
   /**
    * Optional parent picker shown in the create/edit dialog (e.g. a section
-   * for production lines, a production line for stations).
+   * for production lines, a section for production lines).
    */
   parent?: { label: string; fetch: () => Promise<unknown[]> };
 }
@@ -150,22 +145,7 @@ const REF_TABS: RefTab[] = [
       return { id: r.id, name: r.name, parent: r.section?.name, parentId: r.section?.id };
     },
   },
-  {
-    key: 'stations',
-    label: 'Stations',
-    icon: Cpu,
-    fetch: getStations,
-    create: createStation,
-    update: updateStation,
-    remove: deleteStation,
-    emptyTitle: 'Aucune station enregistrée.',
-    emptyCta: '+ Ajouter',
-    parent: { label: 'Ligne de production', fetch: getProductionLines },
-    toItem: (raw) => {
-      const r = raw as { id: number; code: string; productionLineId: number | null };
-      return { id: r.id, name: r.code, parentId: r.productionLineId ?? undefined };
-    },
-  },
+
 ];
 
 // ── Tab Button ────────────────────────────────────
@@ -334,7 +314,7 @@ function ReferenceDataContent() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Données de référence</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Gérer les catégories, départements, sections, lignes et stations
+          Gérer les catégories, départements, sections et lignes de production
         </p>
       </div>
 

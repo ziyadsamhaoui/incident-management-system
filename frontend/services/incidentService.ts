@@ -38,7 +38,6 @@ interface RawIncident {
   assignedTo: { id: number; firstName: string; lastName: string; matricule: number } | null;
   resolvedBy: { id: number; firstName: string; lastName: string; matricule: number } | null;
   department: { id: number; name: string } | null;
-  station: { id: number; code: string } | null;
   category: { id: number; name: string } | null;
   priority: string;
   status: string;
@@ -59,7 +58,6 @@ function mapIncident(raw: RawIncident): IncidentDTO {
     assignedTo: raw.assignedTo,
     resolvedBy: raw.resolvedBy,
     department: raw.department?.name ?? '—',
-    station: raw.station?.code ?? '—',
     category: raw.category?.name ?? '—',
     priority: raw.priority as IncidentDTO['priority'],
     status: raw.status as IncidentDTO['status'],

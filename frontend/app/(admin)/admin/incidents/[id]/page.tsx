@@ -12,7 +12,6 @@ import {
   Zap,
   Settings,
   Building2,
-  MapPin,
   UserCheck,
   CheckCircle2,
   XCircle,
@@ -253,12 +252,7 @@ export default function AdminIncidentDetailPage() {
               <Building2 className="h-3 w-3" />
               {incident.department}
             </span>
-            {incident.station && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border bg-muted/50 px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                <MapPin className="h-3 w-3" />
-                {incident.station}
-              </span>
-            )}
+
             <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium', cfg.textClass, 'bg-muted/50')}>
               <span className={cn('inline-block h-1.5 w-1.5 rounded-full', cfg.dotClass)} />
               {cfg.labelFr}
