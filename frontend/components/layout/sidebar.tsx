@@ -7,6 +7,7 @@ import { useNavigationProgress } from '@/components/ui/navigation-progress';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useAsync } from '@/lib/use-async';
+import { useTranslation } from '@/lib/i18n';
 import { getIncidents } from '@/services/incidentService';
 import type { UserRole } from '@/types/auth';
 import {
@@ -81,18 +82,20 @@ function isGroup(entry: NavEntry): entry is NavGroup {
 
 // ── Role-specific navigation definitions ─────────
 
-const CHEF_ATELIER_ITEMS: NavEntry[] = [
-  { label: 'Incidents', href: '/chef-atelier', icon: ClipboardList, roles: ['CHEF_ATELIER'] },
-  { label: 'Notifications', href: '/notifications', icon: Bell, roles: ['CHEF_ATELIER'] },
-  { label: 'Profile', href: '/profile', icon: User, roles: ['CHEF_ATELIER'] },
-];
-
-function buildAdminItems(criticalIncidents: number): NavEntry[] {
+function buildChefAtelierItems(t: Record<string, string>): NavEntry[] {
   return [
-    { label: 'Tableau de bord', href: '/dashboard', icon: LayoutDashboard, roles: ['ADMIN'] },
-    { label: 'Analytique', href: '/analytics', icon: BarChart3, roles: ['ADMIN'] },
+    { label: t.navIncidents, href: '/chef-atelier', icon: ClipboardList, roles: ['CHEF_ATELIER'] },
+    { label: t.navNotifications, href: '/notifications', icon: Bell, roles: ['CHEF_ATELIER'] },
+    { label: t.navProfile, href: '/profile', icon: User, roles: ['CHEF_ATELIER'] },
+  ];
+}
+
+function buildAdminItems(criticalIncidents: number, t: Record<string, string>): NavEntry[] {
+  return [
+    { label: t.navDashboard, href: '/dashboard', icon: LayoutDashboard, roles: ['ADMIN'] },
+    { label: t.navAnalytics, href: '/analytics', icon: BarChart3, roles: ['ADMIN'] },
     {
-      label: 'Incidents',
+      label: t.navIncidents,
       href: '/admin/incidents',
       icon: Flame,
       roles: ['ADMIN'],
@@ -101,36 +104,36 @@ function buildAdminItems(criticalIncidents: number): NavEntry[] {
       badgeClass: 'bg-rose-600 text-white',
     },
     {
-      label: 'Utilisateurs',
+      label: t.navUsers,
       href: '/users',
       icon: Users,
       roles: ['ADMIN'],
     },
     {
-      label: 'Archives',
+      label: t.navArchives,
       href: '/admin/incidents/logs',
       icon: Archive,
       roles: ['ADMIN'],
     },
     {
-      label: 'Médias',
+      label: t.navMedia,
       href: '/admin/media',
       icon: Image,
       roles: ['ADMIN'],
     },
     {
-      label: 'Données de référence',
+      label: t.navReferenceData,
       icon: Building2,
       roles: ['ADMIN'],
       children: [
-        { label: 'Catégories', href: '/admin/reference?tab=categories', icon: Folder },
-        { label: 'Départements', href: '/admin/reference?tab=departments', icon: Building2 },
-        { label: 'Sections', href: '/admin/reference?tab=sections', icon: Grid3x3 },
-        { label: 'Lignes de production', href: '/admin/reference?tab=production-lines', icon: Cable },
+        { label: t.navCategories, href: '/admin/reference?tab=categories', icon: Folder },
+        { label: t.navDepartments, href: '/admin/reference?tab=departments', icon: Building2 },
+        { label: t.navSections, href: '/admin/reference?tab=sections', icon: Grid3x3 },
+        { label: t.navProductionLines, href: '/admin/reference?tab=production-lines', icon: Cable },
       ],
     } as NavGroup,
-    { label: 'Mes abonnements', href: '/admin/subscriptions', icon: Bookmark, roles: ['ADMIN'] },
-    { label: 'Paramètres', href: '/admin/settings', icon: Settings, roles: ['ADMIN'] },
+    { label: t.navSubscriptions, href: '/admin/subscriptions', icon: Bookmark, roles: ['ADMIN'] },
+    { label: t.navSettings, href: '/admin/settings', icon: Settings, roles: ['ADMIN'] },
   ];
 }
 
@@ -181,6 +184,7 @@ function storeExpandedGroups(groups: Set<string>) {
 // ── Sidebar component ────────────────────────────
 
 export function Sidebar({ open, onOpenChange, variant = 'chef-atelier' }: SidebarProps) {
+  const { t } = useTranslation();
   const pathname = usePathname();
   const { startNavigation } = useNavigationProgress();
   const roles = useAuthStore((s) => s.roles);
@@ -196,8 +200,8 @@ export function Sidebar({ open, onOpenChange, variant = 'chef-atelier' }: Sideba
   // Pick nav items based on variant
   const navEntries: NavEntry[] =
     variant === 'admin'
-      ? buildAdminItems(criticalIncidents)
-      : CHEF_ATELIER_ITEMS;
+      ? buildAdminItems(criticalIncidents, t)
+      : buildChefAtelierItems(t);
 
   const toggleGroup = useCallback((label: string) => {
     setExpandedGroups((prev) => {
@@ -382,7 +386,7 @@ export function Sidebar({ open, onOpenChange, variant = 'chef-atelier' }: Sideba
         {/* Footer */}
         {!collapsed && (
           <div className="border-t p-4 text-xs text-muted-foreground">
-            Incident Management v0.1
+            {t.navFooter} v0.1
           </div>
         )}
       </aside>

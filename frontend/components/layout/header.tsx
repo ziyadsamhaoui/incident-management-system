@@ -22,19 +22,22 @@ import {
 } from '@/components/layout/notifications-dropdown';
 import { useAuthStore } from '@/store/useAuthStore';
 import { logout as logoutApi } from '@/services/authService';
+import { getIncidents } from '@/services/incidentService';
+import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/lib/i18n';
 
 // ── Route → Breadcrumb label map ─────────────────
 
-const BREADCRUMB_LABELS: Record<string, string> = {
-  '/dashboard': 'Tableau de bord',
-  '/analytics': 'Analytique',
-  '/incidents': 'Incidents',
-  '/users': 'Utilisateurs',
-  '/admin/reference': 'Données de référence',
-  '/admin/subscriptions': 'Mes abonnements',
-  '/admin/settings': 'Paramètres',
-  '/settings': 'Paramètres',
+const BREADCRUMB_KEYS: Record<string, string> = {
+  '/dashboard': 'navDashboard',
+  '/analytics': 'navAnalytics',
+  '/incidents': 'navIncidents',
+  '/users': 'navUsers',
+  '/admin/reference': 'navReferenceData',
+  '/admin/subscriptions': 'navSubscriptions',
+  '/admin/settings': 'navSettings',
+  '/settings': 'navSettings',
 };
 
 // ── Props ─────────────────────────────────────────
@@ -48,6 +51,7 @@ interface HeaderProps {
 }
 
 export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: HeaderProps) {
+  const { t } = useTranslation();
   const router = useRouter();
   const { startNavigation } = useNavigationProgress();
   const pathname = usePathname();
@@ -71,19 +75,26 @@ export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: H
   const breadcrumb = useMemo(() => {
     if (breadcrumbOverride) return breadcrumbOverride;
     // Try exact match first, then prefix match
-    if (BREADCRUMB_LABELS[pathname]) return BREADCRUMB_LABELS[pathname];
+    if (BREADCRUMB_KEYS[pathname]) return t[BREADCRUMB_KEYS[pathname]];
     // Match prefix routes like /admin/reference/categories/something
-    const prefix = Object.keys(BREADCRUMB_LABELS).find(
+    const prefix = Object.keys(BREADCRUMB_KEYS).find(
       (key) => pathname.startsWith(key + '/') || pathname === key
     );
-    return prefix ? BREADCRUMB_LABELS[prefix] : 'Incidents';
-  }, [pathname, breadcrumbOverride]);
+    return prefix ? t[BREADCRUMB_KEYS[prefix]] : t.navIncidents;
+  }, [pathname, breadcrumbOverride, t]);
 
   // Cmd+K search state (admin only)
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const isAdmin = primaryRole === 'ADMIN';
+  const normalizedSearchQuery = searchQuery.trim();
+  const { data: searchResults, loading: searchLoading, error: searchError } = useAsync(
+    () => normalizedSearchQuery
+      ? getIncidents({ search: normalizedSearchQuery, page: 0, size: 10 })
+      : Promise.resolve(null),
+    [normalizedSearchQuery],
+  );
 
   // ── Header panels (notifications + profile) ─────────────────────
   // Both panels render BELOW the navbar (y-axis) as an absolutely positioned
@@ -439,11 +450,37 @@ export function Header({ onToggleSidebar, kiosk = false, breadcrumbOverride }: H
                 ESC
               </kbd>
             </div>
-            <div className="p-12 text-center text-sm text-slate-400 dark:text-slate-500">
-              {searchQuery ? (
-                <p>Recherche de &quot;{searchQuery}&quot;...</p>
+            <div className="max-h-[55vh] overflow-y-auto p-3 text-sm">
+              {!normalizedSearchQuery ? (
+                <p className="p-9 text-center text-slate-400 dark:text-slate-500">Tapez une référence d&apos;incident ou un matricule pour rechercher.</p>
+              ) : searchLoading ? (
+                <p className="p-9 text-center text-slate-400 dark:text-slate-500">Recherche en cours…</p>
+              ) : searchError ? (
+                <p className="p-9 text-center text-red-600 dark:text-red-400">Impossible de rechercher les incidents.</p>
+              ) : searchResults?.content.length ? (
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {searchResults.content.map((incident) => (
+                    <button
+                      key={incident.id}
+                      type="button"
+                      onClick={() => {
+                        setSearchOpen(false);
+                        setSearchQuery('');
+                        startNavigation();
+                        router.push(`/admin/incidents/${incident.id}`);
+                      }}
+                      className="flex w-full items-center justify-between gap-4 px-3 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/70"
+                    >
+                      <span className="min-w-0">
+                        <span className="block font-mono text-xs font-semibold text-slate-900 dark:text-slate-100">{incident.reference}</span>
+                        <span className="block truncate text-xs text-slate-500 dark:text-slate-400">{incident.description || incident.category}</span>
+                      </span>
+                      <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">#{incident.user?.matricule ?? '—'}</span>
+                    </button>
+                  ))}
+                </div>
               ) : (
-                <p> Tapez une référence d&apos;incident ou un matricule pour rechercher</p>
+                <p className="p-9 text-center text-slate-400 dark:text-slate-500">Aucun incident trouvé.</p>
               )}
             </div>
           </div>

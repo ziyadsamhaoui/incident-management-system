@@ -56,7 +56,7 @@ public class IncidentController {
     @Operation(summary = "List incidents with combinable filters",
             description = "Paginated incident listing. `status` accepts a single value or a comma-separated "
                     + "group (e.g. DECLARED,CLAIMED,IN_PROGRESS for active incidents, RESOLVED,NON_RESOLVED "
-                    + "for the logs archive). `search` matches reference/description/resolutionNote "
+                    + "for the logs archive). `search` matches reference, declarer matricule, description and resolutionNote "
                     + "case-insensitively; `departmentId`/`userId` narrow the scope; `startDate`/`endDate` "
                     + "bound the `dateField` column (`declaredAt` default, `resolvedAt` for logs). Spring "
                     + "Data pagination via `page`/`size`/`sort`.")
@@ -70,7 +70,7 @@ public class IncidentController {
     public ResponseEntity<Page<IncidentResponse>> getIncidents(
             @Parameter(description = "Single status or comma-separated group, e.g. DECLARED,CLAIMED")
             @RequestParam(required = false) List<String> status,
-            @Parameter(description = "Case-insensitive search over reference, description and resolution note")
+            @Parameter(description = "Case-insensitive search over reference, declarer matricule, description and resolution note")
             @RequestParam(required = false) String search,
             @Parameter(description = "Filter by department id")
             @RequestParam(required = false) Long departmentId,

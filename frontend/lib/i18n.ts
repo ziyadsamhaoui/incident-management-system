@@ -289,6 +289,22 @@ const T: Record<Lang, Record<string, string>> = {
     analyticsLoading: 'Chargement des analyses…',
     analyticsEmpty: 'Aucune donnée pour cette période',
     analyticsError: 'Impossible de charger les analyses',
+    navDashboard: 'Tableau de bord', navAnalytics: 'Analytique', navIncidents: 'Incidents',
+    navUsers: 'Utilisateurs', navArchives: 'Archives', navMedia: 'Médias',
+    navReferenceData: 'Données de référence', navCategories: 'Catégories',
+    navDepartments: 'Départements', navSections: 'Sections', navProductionLines: 'Lignes de production',
+    navSubscriptions: 'Mes abonnements', navSettings: 'Paramètres', navNotifications: 'Notifications',
+    navProfile: 'Profil', navFooter: 'Gestion des incidents',
+    // Status labels (notification messages)
+    status_DECLARED: 'Déclaré',
+    status_IN_PROGRESS: 'En cours',
+    status_RESOLVED: 'Résolu',
+    status_REJECTED: 'Rejeté',
+    status_IN_TREATMENT: 'En traitement',
+    // Notification message templates
+    notifMsgStatusChanged: "L'incident {reference} a changé de statut de {oldStatus} à {newStatus} par {actor}.",
+    notifMsgUpdated: "L'incident {reference} a été mis à jour par {actor}.",
+    notifMsgUpdatedNoActor: "Le statut de l'incident {reference} est désormais {status}.",
   },
   AR: {
     title: 'التسجيل في حسابك',
@@ -554,6 +570,22 @@ const T: Record<Lang, Record<string, string>> = {
     analyticsLoading: 'جارٍ تحميل التحليلات…',
     analyticsEmpty: 'لا توجد بيانات لهذه الفترة',
     analyticsError: 'تعذر تحميل التحليلات',
+    navDashboard: 'لوحة التحكم', navAnalytics: 'التحليلات', navIncidents: 'الحوادث',
+    navUsers: 'المستخدمون', navArchives: 'الأرشيف', navMedia: 'الوسائط',
+    navReferenceData: 'البيانات المرجعية', navCategories: 'الفئات',
+    navDepartments: 'الأقسام', navSections: 'الأقسام الفرعية', navProductionLines: 'خطوط الإنتاج',
+    navSubscriptions: 'اشتراكاتي', navSettings: 'الإعدادات', navNotifications: 'الإشعارات',
+    navProfile: 'الملف الشخصي', navFooter: 'إدارة الحوادث',
+    // Status labels (notification messages)
+    status_DECLARED: 'مُصرَّح به',
+    status_IN_PROGRESS: 'قيد المعالجة',
+    status_RESOLVED: 'محلول',
+    status_REJECTED: 'مرفوض',
+    status_IN_TREATMENT: 'قيد المعالجة',
+    // Notification message templates
+    notifMsgStatusChanged: 'تغيّر حالة الحادث {reference} من {oldStatus} إلى {newStatus} بواسطة {actor}.',
+    notifMsgUpdated: 'تم تحديث الحادث {reference} بواسطة {actor}.',
+    notifMsgUpdatedNoActor: 'حالة الحادث {reference} الآن {status}.',
   },
 };
 

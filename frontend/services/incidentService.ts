@@ -13,7 +13,7 @@ export interface IncidentListParams {
   status?: string;
   /** Multi-status group sent as comma-separated `status` (e.g. ['RESOLVED','NON_RESOLVED']). */
   statuses?: string[];
-  /** Case-insensitive term matched against reference, description and resolutionNote. */
+  /** Case-insensitive term matched against reference, declarer matricule, description and resolutionNote. */
   search?: string;
   departmentId?: number;
   userId?: number;

@@ -63,14 +63,17 @@ public interface IncidentRepository
                    i.station_id, i.category_id, i.priority, i.status, i.description,
                    i.resolution_note, i.declared_at, i.claimed_at, i.in_progress_at,
                    i.resolved_at, i.closed_at, i.resolved_by_id
-            FROM incidents i,
+            FROM incidents i
+            JOIN users u ON u.id = i.user_id,
                  (SELECT CASE
                            WHEN CAST(:term AS text) LIKE '%*'
                             AND btrim(regexp_replace(left(CAST(:term AS text), -1), '[^[:alnum:]_]+', ' ', 'g')) <> '' THEN
                                to_tsquery('simple', concat(regexp_replace(left(CAST(:term AS text), -1), '[^[:alnum:]_]+', ' ', 'g'), ':*'))
                            ELSE websearch_to_tsquery('simple', CAST(:term AS text))
                          END AS tsq) q
-            WHERE i.search_vector @@ q.tsq
+            WHERE (i.search_vector @@ q.tsq
+                   OR i.reference ILIKE concat('%', CAST(:term AS text), '%')
+                   OR CAST(u.matricule AS text) LIKE concat('%', CAST(:term AS text), '%'))
               AND (CAST(:statuses AS text) IS NULL OR i.status = ANY(string_to_array(CAST(:statuses AS text), ',')))
               AND (CAST(:departmentId AS bigint) IS NULL OR i.department_id = CAST(:departmentId AS bigint))
               AND (CAST(:userId AS bigint) IS NULL OR i.user_id = CAST(:userId AS bigint))
@@ -82,14 +85,17 @@ public interface IncidentRepository
             """,
             countQuery = """
             SELECT count(*)
-            FROM incidents i,
+            FROM incidents i
+            JOIN users u ON u.id = i.user_id,
                  (SELECT CASE
                            WHEN CAST(:term AS text) LIKE '%*'
                             AND btrim(regexp_replace(left(CAST(:term AS text), -1), '[^[:alnum:]_]+', ' ', 'g')) <> '' THEN
                                to_tsquery('simple', concat(regexp_replace(left(CAST(:term AS text), -1), '[^[:alnum:]_]+', ' ', 'g'), ':*'))
                            ELSE websearch_to_tsquery('simple', CAST(:term AS text))
                          END AS tsq) q
-            WHERE i.search_vector @@ q.tsq
+            WHERE (i.search_vector @@ q.tsq
+                   OR i.reference ILIKE concat('%', CAST(:term AS text), '%')
+                   OR CAST(u.matricule AS text) LIKE concat('%', CAST(:term AS text), '%'))
               AND (CAST(:statuses AS text) IS NULL OR i.status = ANY(string_to_array(CAST(:statuses AS text), ',')))
               AND (CAST(:departmentId AS bigint) IS NULL OR i.department_id = CAST(:departmentId AS bigint))
               AND (CAST(:userId AS bigint) IS NULL OR i.user_id = CAST(:userId AS bigint))

@@ -10,7 +10,6 @@ import {
   Sun,
   Moon,
   ArrowLeft,
-  Languages,
   CheckCircle2,
   Globe,
   Mail,
@@ -22,20 +21,12 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/useAuthStore';
-import { useTranslation } from '@/lib/i18n';
 import { useAsync, extractErrorMessage } from '@/lib/use-async';
 import { getMe, updateUser } from '@/services/userService';
 import type { UserResponseDTO } from '@/types/user';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-
-// ── Language options ──────────────────────────────
-
-const LANG_OPTIONS = [
-  { value: 'FR', label: 'FR - Français', flag: '🇫🇷' },
-  { value: 'AR', label: 'AR - العربية', flag: '🇲🇦' },
-];
 
 // ── Theme options ──────────────────────────────────
 
@@ -86,7 +77,6 @@ export default function AdminSettingsPage() {
     setUserIdentity,
   } = useAuthStore();
 
-  const { lang, setLang } = useTranslation();
   const { theme, setTheme } = useTheme();
 
   // Real profile from /api/me — source of truth for names + email.
@@ -368,7 +358,7 @@ export default function AdminSettingsPage() {
         </Button>
       </div>
 
-      {/* ── Language & Theme Card ─────────────────── */}
+      {/* ── Theme Card ────────────────────────────── */}
       <Card>
         <CardHeader className="px-4 py-4 sm:px-6">
           <div className="flex items-center gap-3">
@@ -376,7 +366,7 @@ export default function AdminSettingsPage() {
               <Globe className="h-4 w-4 text-primary sm:h-5 sm:w-5" />
             </div>
             <div className="min-w-0">
-              <CardTitle className="text-base sm:text-lg">Langue & Thème</CardTitle>
+              <CardTitle className="text-base sm:text-lg">Thème</CardTitle>
               <CardDescription className="text-xs sm:text-sm">
                 Personnalisez l&apos;affichage
               </CardDescription>
@@ -384,34 +374,6 @@ export default function AdminSettingsPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-5 px-4 pb-5 sm:px-6">
-          {/* Language */}
-          <div className="space-y-2.5">
-            <label className="text-sm font-medium flex items-center gap-2">
-              <Languages className="h-4 w-4 text-muted-foreground" />
-              Langue d&apos;affichage
-            </label>
-            <div className="grid grid-cols-2 gap-2.5">
-              {LANG_OPTIONS.map((opt) => (
-                <PickerCard
-                  key={opt.value}
-                  value={opt.value}
-                  current={lang}
-                  onChange={(v) => setLang(v as 'FR' | 'AR')}
-                >
-                  <span className="text-xl sm:text-2xl">{opt.flag}</span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{opt.label}</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {opt.value === 'FR' ? 'Français' : 'العربية'}
-                    </p>
-                  </div>
-                </PickerCard>
-              ))}
-            </div>
-          </div>
-
-          <div className="border-t border-slate-200 dark:border-slate-700" />
-
           {/* Theme */}
           <div className="space-y-2.5">
             <label className="text-sm font-medium flex items-center gap-2">

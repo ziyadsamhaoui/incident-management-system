@@ -23,6 +23,8 @@ import { ErrorState } from '@/components/ui/error-state';
 import { useAsync } from '@/lib/use-async';
 import { getMe } from '@/services/userService';
 import { getAllNotifications, markNotificationAsRead } from '@/services/notificationService';
+import { useTranslation } from '@/lib/i18n';
+import { formatNotificationMessage } from '@/lib/notification-utils';
 import type { NotificationDTO } from '@/types/notification';
 
 
@@ -94,6 +96,7 @@ function ListSkeleton() {
 // ── Page ──────────────────────────────────────────
 
 export default function AdminNotificationsPage() {
+  const { lang, t } = useTranslation();
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [localReadIds, setLocalReadIds] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -296,7 +299,7 @@ export default function AdminNotificationsPage() {
                           </div>
                         </div>
                         <p className="mt-0.5 text-xs text-muted-foreground/70 line-clamp-2">
-                          {notif.message}
+                          {formatNotificationMessage(notif.message, lang, t)}
                         </p>
                         {notif.incidentReference && (
                           <p className="mt-1 font-mono text-[10px] text-muted-foreground/50">

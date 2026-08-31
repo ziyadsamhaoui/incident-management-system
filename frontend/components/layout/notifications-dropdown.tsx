@@ -23,6 +23,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAsync } from '@/lib/use-async';
 import { getMe } from '@/services/userService';
 import { getAllNotifications, markNotificationAsRead } from '@/services/notificationService';
+import { useTranslation } from '@/lib/i18n';
+import { formatNotificationMessage } from '@/lib/notification-utils';
 import type { NotificationDTO } from '@/types/notification';
 
 // ── Notification icon/color maps (mirrors the notifications page) ──
@@ -152,6 +154,7 @@ export function NotificationsPanelContent({
 }) {
   const router = useRouter();
   const { startNavigation } = useNavigationProgress();
+  const { lang, t } = useTranslation();
   const { filter, setFilter } = data;
 
   return (
@@ -285,7 +288,7 @@ export function NotificationsPanelContent({
                       </span>
                     </div>
                     <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-500 dark:text-slate-400/80">
-                      {notif.message}
+                      {formatNotificationMessage(notif.message, lang, t)}
                     </p>
                     {notif.incidentReference && (
                       <p className="mt-0.5 font-mono text-[10px] text-slate-400 dark:text-slate-500">
