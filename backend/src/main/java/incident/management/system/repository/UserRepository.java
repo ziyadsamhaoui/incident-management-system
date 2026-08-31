@@ -3,7 +3,11 @@ package incident.management.system.repository;
 import incident.management.system.enums.UserRole;
 import incident.management.system.model.DepartmentEntity;
 import incident.management.system.model.UserEntity;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -40,6 +44,16 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
     boolean existsByMatricule(int matricule);
 
     List<UserEntity> findByDepartmentAndRole(DepartmentEntity department, UserRole role);
+
+    /**
+     * Search users by firstName, lastName (case-insensitive) or matricule.
+     * Used by the admin user directory for server-side search.
+     */
+    @Query("SELECT u FROM UserEntity u WHERE " +
+           "LOWER(u.firstName) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+           "LOWER(u.lastName) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+           "CAST(u.matricule AS string) LIKE CONCAT('%', :search, '%')")
+    Page<UserEntity> search(@Param("search") String search, Pageable pageable);
 
     /**
      * Count of users with the given role and activation flag — used by the

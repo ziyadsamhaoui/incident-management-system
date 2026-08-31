@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from 'react';
 import Link from 'next/link';
 import {
   Search,
@@ -264,7 +264,8 @@ function TableSkeleton() {
 // ── Page ──────────────────────────────────────────
 
 export default function UsersPage() {
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const search = useDeferredValue(searchInput);
   const [roleFilter, setRoleFilter] = useState('all');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [filterOpen, setFilterOpen] = useState(false);
@@ -286,16 +287,21 @@ export default function UsersPage() {
   // stop two rapid clicks fetching the same page twice).
   const loadingMoreRef = useRef(false);
   // Generation counter — invalidates any in-flight request when the list is
-  // reset (create-user / retry) so a stale page can never append to a fresh list.
+  // reset (create-user / retry / search) so a stale page can never append to a fresh list.
   const generationRef = useRef(0);
+  // Tracks the active search term when a fetch was initiated, so load-more
+  // continues using the correct search term even if the user keeps typing.
+  const activeSearchRef = useRef<string>('');
 
-  const loadFirstPage = useCallback(async () => {
+  const loadFirstPage = useCallback(async (searchTerm?: string) => {
+    const term = searchTerm ?? '';
+    activeSearchRef.current = term;
     generationRef.current += 1;
     const gen = generationRef.current;
     setLoading(true);
     setError(null);
     try {
-      const page = await getUsers({ page: 0, size: PAGE_SIZE });
+      const page = await getUsers({ page: 0, size: PAGE_SIZE, search: term || undefined });
       if (generationRef.current !== gen) return;
       setUsers(page.content);
       setTotalElements(page.totalElements);
@@ -312,10 +318,11 @@ export default function UsersPage() {
     loadingMoreRef.current = true;
     const gen = generationRef.current;
     const pageToLoad = nextPage;
+    const searchTerm = activeSearchRef.current;
     setLoadingMore(true);
     setError(null);
     try {
-      const page = await getUsers({ page: pageToLoad, size: PAGE_SIZE });
+      const page = await getUsers({ page: pageToLoad, size: PAGE_SIZE, search: searchTerm || undefined });
       if (generationRef.current !== gen) return;
       setUsers((prev) => [...prev, ...page.content]);
       setTotalElements(page.totalElements);
@@ -328,27 +335,27 @@ export default function UsersPage() {
     }
   }, [nextPage]);
 
+  // Initial load
   useEffect(() => {
     void loadFirstPage();
   }, [loadFirstPage]);
+
+  // Re-fetch from page 0 when the debounced search term changes
+  const prevSearchRef = useRef('');
+  useEffect(() => {
+    if (search !== prevSearchRef.current) {
+      prevSearchRef.current = search;
+      void loadFirstPage(search);
+    }
+  }, [search, loadFirstPage]);
 
   const { data: departments } = useAsync(getDepartments, []);
 
   const hasMore = totalElements != null && users.length < totalElements;
 
-  const hasActiveFilters =
-    search.trim() !== '' || roleFilter !== 'all' || departmentFilter !== 'all';
-
+  // Client-side filters (role + department) are applied on top of the
+  // server-searched results.
   const filteredUsers = users.filter((u) => {
-    if (search) {
-      const q = search.toLowerCase();
-      if (
-        !u.firstName.toLowerCase().includes(q) &&
-        !u.lastName.toLowerCase().includes(q) &&
-        !String(u.matricule).includes(q)
-      )
-        return false;
-    }
     if (roleFilter !== 'all' && u.role !== roleFilter) return false;
     if (departmentFilter !== 'all' && String(u.department?.id ?? '') !== departmentFilter) {
       return false;
@@ -356,8 +363,11 @@ export default function UsersPage() {
     return true;
   });
 
+  const hasActiveFilters =
+    search.trim() !== '' || roleFilter !== 'all' || departmentFilter !== 'all';
+
   const resetFilters = () => {
-    setSearch('');
+    setSearchInput('');
     setRoleFilter('all');
     setDepartmentFilter('all');
   };
@@ -407,8 +417,8 @@ export default function UsersPage() {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Rechercher par nom ou matricule..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className="h-10 w-full pl-9"
               />
             </div>
@@ -619,6 +629,9 @@ export default function UsersPage() {
                     </button>
                     <p className="text-xs text-muted-foreground">
                       {users.length} / {totalElements} utilisateurs chargés
+                      {search.trim() && (
+                        <span className="ml-1">— résultat pour « {search} »</span>
+                      )}
                     </p>
                   </div>
                 )}

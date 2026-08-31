@@ -18,9 +18,9 @@ export async function getMe(): Promise<UserResponseDTO> {
 }
 
 /** Paginated user list (ADMIN only). */
-export async function getUsers(params: { page?: number; size?: number } = {}): Promise<Page<UserResponseDTO>> {
+export async function getUsers(params: { page?: number; size?: number; search?: string } = {}): Promise<Page<UserResponseDTO>> {
   const { data } = await apiClient.get<Page<UserResponseDTO>>('/api/users', {
-    params: { page: params.page ?? 0, size: params.size ?? 50 },
+    params: { page: params.page ?? 0, size: params.size ?? 50, ...(params.search ? { search: params.search } : {}) },
   });
   return data;
 }

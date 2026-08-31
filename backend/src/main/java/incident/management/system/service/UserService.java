@@ -23,7 +23,7 @@ public interface UserService {
 
     UserResponse getUserByMatricule(int matricule);
 
-    Page<UserResponse> getAllUsers(Pageable pageable);
+    Page<UserResponse> getAllUsers(Pageable pageable, String search);
 
     /**
      * On-demand activity analytics for the given user (declared / claimed /

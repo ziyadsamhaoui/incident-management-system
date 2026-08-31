@@ -157,7 +157,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<UserResponse> getAllUsers(Pageable pageable) {
+    public Page<UserResponse> getAllUsers(Pageable pageable, String search) {
         // Deterministic order — newest accounts first. Without an explicit sort
         // Spring Data falls back to ID order, so with more roster users than the
         // page size a freshly created account (highest ID) would land past the
@@ -167,6 +167,9 @@ public class UserServiceImpl implements UserService {
                 pageable.getPageSize(),
                 Sort.by(Sort.Direction.DESC, "createdAt")
                         .and(Sort.by(Sort.Direction.DESC, "id")));
+        if (search != null && !search.isBlank()) {
+            return userRepository.search(search.trim(), sorted).map(this::toResponse);
+        }
         return userRepository.findAll(sorted).map(this::toResponse);
     }
 

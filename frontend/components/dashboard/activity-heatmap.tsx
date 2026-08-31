@@ -12,7 +12,6 @@ import { getAdminActivity } from '@/services/dashboardService';
 import type { AdminActivityEntry } from '@/types/dashboard';
 
 // ── Color intensity levels ────────────────────────
-// 0 = dark gray (light) / light gray (dark), then soft green → deep green
 
 const INTENSITY_LEVELS = [
   { threshold: 0, className: 'bg-slate-300 dark:bg-slate-700' },
@@ -31,13 +30,91 @@ function getIntensityClass(count: number): string {
   return INTENSITY_LEVELS[0].className;
 }
 
-// ── Month label helper ────────────────────────────
+// ── Day labels (Mon–Fri) ──────────────────────────
 
-const MONTH_LABELS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven'];
 
-// ── Day labels ────────────────────────────────────
+// ── Grid layout constants ─────────────────────────
 
-const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven']; // Mon — Fri
+const CELL_SIZE = 16; // px — matches `h-4 w-4`
+const CELL_GAP = 4;   // px — matches `gap-[4px]`
+const COL_WIDTH = CELL_SIZE + CELL_GAP; // 20px per column
+
+// ── Build weeks ───────────────────────────────────
+// Single source of truth: every column and label is derived from this.
+
+interface Day {
+  date: Date;
+  count: number;
+}
+
+interface Week {
+  days: Day[]; // Mon–Fri (indices 0–4)
+}
+
+/**
+ * Build all weeks between `startDate` (inclusive) and `endDate` (inclusive).
+ * startDate is aligned back to its Monday; endDate stops at today.
+ * Each week contains up to 5 weekdays (Mon–Fri), matching the design.
+ */
+function buildWeeks(
+  startDate: Date,
+  endDate: Date,
+  byDate: Map<string, number>,
+): Week[] {
+  // Align startDate back to Monday
+  const aligned = new Date(startDate);
+  const dayOfWeek = aligned.getDay(); // 0=Sun … 6=Sat
+  const daysSinceMonday = (dayOfWeek + 6) % 7; // Mon=0 … Sun=6
+  aligned.setDate(aligned.getDate() - daysSinceMonday);
+
+  const weeks: Week[] = [];
+  const cursor = new Date(aligned);
+
+  while (cursor <= endDate) {
+    const days: Day[] = [];
+    // Mon–Fri (indices 0–4)
+    for (let d = 0; d < 5; d++) {
+      const dayDate = new Date(cursor);
+      dayDate.setDate(cursor.getDate() + d);
+      // Don't add future days
+      if (dayDate > endDate) break;
+      const key = `${dayDate.getFullYear()}-${String(dayDate.getMonth() + 1).padStart(2, '0')}-${String(dayDate.getDate()).padStart(2, '0')}`;
+      days.push({ date: dayDate, count: byDate.get(key) ?? 0 });
+    }
+    if (days.length > 0) {
+      weeks.push({ days });
+    }
+    // Advance to next Monday
+    cursor.setDate(cursor.getDate() + 7);
+  }
+
+  return weeks;
+}
+
+/**
+ * Derive month labels from the weeks array.
+ * A label is placed only where the month changes.
+ */
+function getMonthLabels(weeks: Week[]): { columnIndex: number; label: string }[] {
+  const labels: { columnIndex: number; label: string }[] = [];
+  let lastMonth = -1;
+
+  weeks.forEach((week, columnIndex) => {
+    const firstDay = week.days[0]?.date;
+    if (!firstDay) return;
+    const month = firstDay.getMonth();
+    if (month !== lastMonth) {
+      labels.push({
+        columnIndex,
+        label: firstDay.toLocaleString('fr-FR', { month: 'short' }),
+      });
+      lastMonth = month;
+    }
+  });
+
+  return labels;
+}
 
 // ── Hover Tooltip ─────────────────────────────────
 
@@ -68,6 +145,8 @@ function HeatmapTooltip({
   );
 }
 
+// ── Props ─────────────────────────────────────────
+
 interface ActivityHeatmapProps {
   /** Optional pre-fetched daily buckets ({date, count}). When provided, no fetch happens. */
   data?: Array<{ date: string; count: number }>;
@@ -78,12 +157,8 @@ interface ActivityHeatmapProps {
   unit?: string;
 }
 
-/**
- * GitHub-style activity grid built from real daily counts. By default it
- * fetches evaluations (`GET /api/dashboard/admin-activity`); pass {@code data}
- * to render pre-fetched buckets (e.g. per-user declarations/resolutions).
- * Renders a dedicated empty state when the period has no activity.
- */
+// ── Main Component ────────────────────────────────
+
 export function ActivityHeatmap({
   data: externalData,
   title = 'Contribution',
@@ -95,51 +170,30 @@ export function ActivityHeatmap({
     [externalData === undefined],
   );
 
-  // Pre-fetched buckets win; otherwise fall back to the fetched endpoint data.
   const data = externalData ?? fetched ?? [];
   const isLoading = externalData === undefined && loading;
 
-  // ── Build the 52-week × 5-day grid from real counts ──
-  // Month labels are derived from the actual week dates so the axis always
-  // matches the data window (e.g. the first column is the month of the week
-  // 51 weeks ago — August, not September).
-  const { grid, monthLabels, total } = useMemo(() => {
-    if (!data) return { grid: [], monthLabels: [], total: 0 };
-    const byDate = new Map(data.map((e) => [e.date, e.count]));
-    const now = new Date();
-    const cursor = new Date(now);
-    cursor.setHours(0, 0, 0, 0);
-
-    // Monday of the current week (or today itself when today is Monday).
-    const thisMonday = new Date(cursor);
-    thisMonday.setDate(cursor.getDate() - ((cursor.getDay() || 7) - 1));
-
-    // 52 columns, each a Monday-starting week ending with Friday.
-    const weekRows: { start: Date; counts: number[] }[] = [];
-    for (let w = 51; w >= 0; w--) {
-      const weekStart = new Date(thisMonday);
-      weekStart.setDate(thisMonday.getDate() - 7 * w);
-      const counts: number[] = [];
-      for (let d = 0; d < 5; d++) {
-        const date = new Date(weekStart);
-        date.setDate(weekStart.getDate() + d);
-        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-        counts.push(byDate.get(key) ?? 0);
-      }
-      weekRows.push({ start: weekStart, counts });
+  // ── Build weeks from data — single source of truth ──
+  const { weeks, monthLabels, total } = useMemo(() => {
+    if (!data || data.length === 0) {
+      return { weeks: [], monthLabels: [], total: 0 };
     }
 
-    // Label the first week and every week whose month differs from the previous one.
-    const labels: { index: number; label: string }[] = [];
-    weekRows.forEach((row, idx) => {
-      const month = row.start.getMonth();
-      if (idx === 0 || weekRows[idx - 1].start.getMonth() !== month) {
-        labels.push({ index: idx, label: MONTH_LABELS[month] });
-      }
-    });
+    const byDate = new Map(data.map((e) => [e.date, e.count]));
 
+    const now = new Date();
+    const endDate = new Date(now);
+    endDate.setHours(0, 0, 0, 0);
+
+    // Start 1 year back from today
+    const startDate = new Date(endDate);
+    startDate.setFullYear(startDate.getFullYear() - 1);
+
+    const w = buildWeeks(startDate, endDate, byDate);
+    const labels = getMonthLabels(w);
     const totalCount = data.reduce((sum, e) => sum + e.count, 0);
-    return { grid: weekRows.map((r) => r.counts), monthLabels: labels, total: totalCount };
+
+    return { weeks: w, monthLabels: labels, total: totalCount };
   }, [data]);
 
   // Tooltip state
@@ -156,6 +210,9 @@ export function ActivityHeatmap({
   const handleMouseLeave = useCallback(() => {
     setTooltip(null);
   }, []);
+
+  // Grid width: weeks.length columns × (cellSize + gap)
+  const gridWidth = weeks.length * COL_WIDTH;
 
   return (
     <motion.div
@@ -196,15 +253,15 @@ export function ActivityHeatmap({
                   ))}
                 </div>
 
-                {/* Grid */}
+                {/* Scrollable grid wrapper */}
                 <div className="flex-1 overflow-x-auto">
-                  {/* Month labels */}
-                  <div className="flex gap-[4px] mb-1.5">
-                    {monthLabels.map(({ index, label }) => (
+                  {/* Month labels — absolutely positioned to align with columns */}
+                  <div className="relative mb-1.5" style={{ height: 14 }}>
+                    {monthLabels.map(({ columnIndex, label }) => (
                       <span
-                        key={`${index}-${label}`}
-                        className="text-[8px] font-medium text-muted-foreground"
-                        style={{ marginLeft: index * 4 }}
+                        key={`${columnIndex}-${label}`}
+                        className="absolute top-0 text-[8px] font-medium text-muted-foreground"
+                        style={{ left: columnIndex * COL_WIDTH }}
                       >
                         {label}
                       </span>
@@ -212,20 +269,23 @@ export function ActivityHeatmap({
                   </div>
 
                   {/* Week grid */}
-                  <div className="flex gap-[4px]">
-                    {grid.map((week, wIdx) => (
+                  <div
+                    className="flex gap-[4px]"
+                    style={{ width: gridWidth }}
+                  >
+                    {weeks.map((week, wIdx) => (
                       <div key={wIdx} className="flex flex-col gap-[4px]">
-                        {week.map((count, dIdx) => (
+                        {week.days.map((day, dIdx) => (
                           <div
                             key={dIdx}
-                            onMouseEnter={(e) => handleMouseEnter(count, e)}
+                            onMouseEnter={(e) => handleMouseEnter(day.count, e)}
                             onMouseLeave={handleMouseLeave}
                             className={cn(
                               'h-4 w-4 rounded-sm transition-colors cursor-pointer',
-                              getIntensityClass(count),
-                              count > 0 && 'hover:ring-1 hover:ring-green-500/50',
+                              getIntensityClass(day.count),
+                              day.count > 0 && 'hover:ring-1 hover:ring-green-500/50',
                             )}
-                            title={`${count} ${unit}${count > 1 ? 's' : ''}`}
+                            title={`${day.count} ${unit}${day.count > 1 ? 's' : ''}`}
                           />
                         ))}
                       </div>

@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -69,8 +70,10 @@ public class UserController {
             @ApiResponse(responseCode = "200", description = "Paginated users (Page<UserResponse>)"),
             @ApiResponse(responseCode = "403", description = "ADMIN role required")
     })
-    public ResponseEntity<Page<UserResponse>> getAllUsers(@PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(userService.getAllUsers(pageable));
+    public ResponseEntity<Page<UserResponse>> getAllUsers(
+            @PageableDefault(size = 20) Pageable pageable,
+            @RequestParam(value = "search", required = false) String search) {
+        return ResponseEntity.ok(userService.getAllUsers(pageable, search));
     }
 
     @GetMapping("/{id}")
