@@ -457,7 +457,8 @@ public interface IncidentRepository
             FROM incidents i
             LEFT JOIN categories c ON c.id = i.category_id
             WHERE i.user_id = :userId
-              AND i.declared_at >= :start AND i.declared_at < :end
+              AND i.declared_at >= :start
+              AND i.declared_at < :end
             ORDER BY i.declared_at DESC
             """, nativeQuery = true)
     List<Object[]> findDeclarationsByUser(
@@ -474,7 +475,8 @@ public interface IncidentRepository
             LEFT JOIN categories c ON c.id = i.category_id
             WHERE i.claimed_by_id = :userId
               AND i.claimed_at IS NOT NULL
-              AND i.claimed_at >= :start AND i.claimed_at < :end
+              AND i.claimed_at >= :start
+              AND i.claimed_at < :end
             ORDER BY i.claimed_at DESC
             """, nativeQuery = true)
     List<Object[]> findClaimsByUser(
@@ -486,16 +488,18 @@ public interface IncidentRepository
      * Incidents evaluated (resolved/non-resolved) by the user in the given date range.
      */
     @Query(value = """
-            SELECT i.id, i.reference, LEFT(i.description, 200), COALESCE(c.name, '-'), i.resolved_at, CAST(i.status AS text)
+            SELECT i.id, i.reference, LEFT(i.description, 200), COALESCE(c.name, '-'), i.resolved_at, i.status::text
             FROM incidents i
             LEFT JOIN categories c ON c.id = i.category_id
             WHERE i.resolved_by_id = :userId
               AND i.resolved_at IS NOT NULL
-              AND i.resolved_at >= :start AND i.resolved_at < :end
+              AND i.resolved_at >= :start
+              AND i.resolved_at < :end
             ORDER BY i.resolved_at DESC
             """, nativeQuery = true)
     List<Object[]> findEvaluationsByUser(
             @Param("userId") Long userId,
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end);
+
 }

@@ -59,14 +59,7 @@ function formatElapsed(iso: string | null | undefined): string {
   return `${hours}h ${mins.toString().padStart(2, '0')}m`;
 }
 
-function fmtDuration(ms: number | null): string {
-  if (ms == null || Number.isNaN(ms)) return '—';
-  const totalMin = Math.floor(ms / 60000);
-  if (totalMin < 60) return `${totalMin} min`;
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  return `${h}h ${m.toString().padStart(2, '0')}m`;
-}
+
 
 // ── Stat Card ─────────────────────────────────────
 
@@ -265,17 +258,6 @@ export default function AdminDashboardPage() {
   const incidentsFetch = useAsync(() => getIncidents({ size: 200 }), []);
   const staleFetch = useAsync(() => getStaleIncidents(), []);
   const activityFetch = useAsync(() => getActivityLog(), []);
-  // Dedicated fetches for MTTR / time-to-claim — the main incidents list
-  // is sorted newest-first so its first 200 items rarely include resolved
-  // or claimed incidents. These targeted queries guarantee we have data.
-  const claimedIncidentsFetch = useAsync(
-    () => getIncidents({ statuses: ['CLAIMED', 'IN_PROGRESS'], size: 200 }),
-    [],
-  );
-  const resolvedIncidentsFetch = useAsync(
-    () => getIncidents({ statuses: ['RESOLVED', 'NON_RESOLVED'], size: 200, sort: 'resolvedAt,desc' }),
-    [],
-  );
 
   const stats = statsFetch.data;
   const incidents = incidentsFetch.data?.content ?? [];
@@ -348,25 +330,6 @@ export default function AdminDashboardPage() {
 
   // 4.3 — Aging incidents from the real stale endpoint
   const agingIncidents = staleFetch.data ?? [];
-
-  // 4.3 — MTTR / time-to-claim computed from dedicated fetches
-  const metrics = useMemo(() => {
-    const claimed = (claimedIncidentsFetch.data?.content ?? []).filter((i) => i.claimedAt);
-    const resolved = (resolvedIncidentsFetch.data?.content ?? []).filter((i) => i.resolvedAt);
-    const avg = (arr: IncidentDTO[], key: 'claimedAt' | 'resolvedAt') => {
-      if (arr.length === 0) return null;
-      const totalMs = arr.reduce((sum, i) => {
-        const start = new Date(i.declaredAt).getTime();
-        const end = i[key] ? new Date(i[key]!).getTime() : start;
-        return sum + (end - start);
-      }, 0);
-      return totalMs / arr.length;
-    };
-    return {
-      timeToClaim: avg(claimed, 'claimedAt'),
-      mttr: avg(resolved, 'resolvedAt'),
-    };
-  }, [claimedIncidentsFetch.data, resolvedIncidentsFetch.data]);
 
   const hasAnyStats = statsFetch.data != null;
   const hasStatsData = Object.keys(stats?.byStatus ?? {}).some((k) => (stats?.byStatus[k] ?? 0) > 0);
@@ -458,7 +421,7 @@ export default function AdminDashboardPage() {
             <CardHeader className="px-4 py-3">
               <CardTitle className="text-sm font-semibold">Par statut</CardTitle>
             </CardHeader>
-            <CardContent className="px-2 pb-4">
+            <CardContent className="px-2 pb-0 overflow-hidden">
               {statsFetch.loading ? (
                 <ChartBlockSkeleton />
               ) : !hasStatsData ? (
@@ -470,8 +433,8 @@ export default function AdminDashboardPage() {
                 />
               ) : (
                 <>
-                  <ResponsiveContainer width="100%" height={180}>
-                    <PieChart margin={{ top: 12, right: 12, bottom: 8, left: 8 }}>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <PieChart margin={{ top: 20, right: 12, bottom: 0, left: 8 }}>
                       <Pie
                         data={statusChartData}
                         cx="50%"
@@ -488,47 +451,15 @@ export default function AdminDashboardPage() {
                       <Tooltip content={<PieTooltip />} />
                     </PieChart>
                   </ResponsiveContainer>
-                  <div className="flex flex-wrap justify-center gap-2 mt-1">
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-1 pl-6">
                     {statusChartData.map((entry) => (
                       <span key={entry.name} className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
-                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
-                        {entry.name}: {entry.value}
+                        <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
+                        <span className="truncate">{entry.name}: {entry.value}</span>
                       </span>
                     ))}
                   </div>
                 </>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Bar — Department distribution */}
-          <Card className="min-w-[280px] snap-start lg:min-w-0 lg:col-span-1">
-            <CardHeader className="px-4 py-3">
-              <CardTitle className="text-sm font-semibold">Par département</CardTitle>
-            </CardHeader>
-            <CardContent className="px-2 pb-4">
-              {statsFetch.loading ? (
-                <ChartBlockSkeleton />
-              ) : deptChartData.length === 0 ? (
-                <EmptyState
-                  compact
-                  icon={Inbox}
-                  title="Aucune donnée disponible"
-                />
-              ) : (
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={deptChartData} margin={{ top: 16, right: 16, bottom: 4, left: 4 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 10 }} />
-                    <Tooltip content={<ChartTooltip />} />
-                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                      {deptChartData.map((entry, idx) => (
-                        <Cell key={idx} fill={entry.fill} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
               )}
             </CardContent>
           </Card>
@@ -538,7 +469,7 @@ export default function AdminDashboardPage() {
             <CardHeader className="px-4 py-3">
               <CardTitle className="text-sm font-semibold">Par priorité</CardTitle>
             </CardHeader>
-            <CardContent className="px-2 pb-4">
+            <CardContent className="px-2 pb-0 overflow-hidden">
               {statsFetch.loading ? (
                 <ChartBlockSkeleton />
               ) : priorityChartData.length === 0 ? (
@@ -548,11 +479,11 @@ export default function AdminDashboardPage() {
                   title="Aucune donnée disponible"
                 />
               ) : (
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={priorityChartData} margin={{ top: 16, right: 16, bottom: 4, left: 4 }}>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={priorityChartData} margin={{ top: 20, right: 16, bottom: 0, left: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                     <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} width={30} />
                     <Tooltip content={<ChartTooltip />} />
                     <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                       {priorityChartData.map((entry, idx) => (
@@ -565,28 +496,35 @@ export default function AdminDashboardPage() {
             </CardContent>
           </Card>
 
-          {/* MTTR & Time-to-Claim metric cards */}
-          <Card className="min-w-[200px] snap-start lg:min-w-0 lg:col-span-1">
+          {/* Bar — Department distribution (full width) */}
+          <Card className="min-w-[280px] snap-start lg:min-w-0 lg:col-span-2">
             <CardHeader className="px-4 py-3">
-              <CardTitle className="text-sm font-semibold">Métriques temps</CardTitle>
+              <CardTitle className="text-sm font-semibold">Par département</CardTitle>
             </CardHeader>
-            <CardContent className="px-4 pb-4 space-y-3">
-              <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 p-3 border border-blue-100 dark:border-blue-900">
-                <p className="text-[10px] font-medium uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                  Temps moyen de prise en charge
-                </p>
-                <p className="text-xl font-bold text-blue-700 dark:text-blue-300 mt-0.5">
-                  {(incidentsFetch.loading || claimedIncidentsFetch.loading) ? '…' : fmtDuration(metrics.timeToClaim)}
-                </p>
-              </div>
-              <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 p-3 border border-emerald-100 dark:border-emerald-900">
-                <p className="text-[10px] font-medium uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                  MTTR (Temps moyen de résolution)
-                </p>
-                <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300 mt-0.5">
-                  {(incidentsFetch.loading || resolvedIncidentsFetch.loading) ? '…' : fmtDuration(metrics.mttr)}
-                </p>
-              </div>
+            <CardContent className="px-2 pb-0 overflow-hidden">
+              {statsFetch.loading ? (
+                <ChartBlockSkeleton />
+              ) : deptChartData.length === 0 ? (
+                <EmptyState
+                  compact
+                  icon={Inbox}
+                  title="Aucune donnée disponible"
+                />
+              ) : (
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={deptChartData} margin={{ top: 20, right: 16, bottom: 0, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} width={30} />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                      {deptChartData.map((entry, idx) => (
+                        <Cell key={idx} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </CardContent>
           </Card>
         </div>

@@ -71,16 +71,16 @@ public class IncidentEntity {
     @Column(nullable = false, updatable = false)
     private LocalDateTime declaredAt;
 
-    @Column(updatable = false)
+    @Column
     private LocalDateTime claimedAt;
 
-    @Column(updatable = false)
+    @Column
     private LocalDateTime inProgressAt;
 
-    @Column(updatable = false)
+    @Column
     private LocalDateTime resolvedAt;
 
-    @Column(updatable = false)
+    @Column
     private LocalDateTime closedAt;
 
     @Column(length = 1000)

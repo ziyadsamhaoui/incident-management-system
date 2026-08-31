@@ -410,7 +410,7 @@ export function ContributionHistory() {
               <ErrorState message={error} compact onRetry={refetch} />
             </div>
           ) : monthGroups.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 text-center">
+            <div className="flex flex-col items-center justify-center py-10 text-center h-[200px]">
               <Inbox className="mb-3 h-10 w-10 text-muted-foreground/30" />
               <p className="text-sm font-medium text-muted-foreground">
                 Aucune contribution sur cette période
@@ -420,7 +420,7 @@ export function ContributionHistory() {
               </p>
             </div>
           ) : (
-            <div className="divide-y divide-border">
+            <div className="divide-y divide-border h-[200px] overflow-y-auto">
               {monthGroups.map((group) => (
                 <div key={group.key}>
                   {/* Month header */}

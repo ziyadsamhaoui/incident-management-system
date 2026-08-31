@@ -1,6 +1,7 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 import { useTranslation } from '@/lib/i18n';
 import type { HeatmapResponse } from '@/types/analytics';
 
@@ -14,11 +15,9 @@ const DAY_KEYS = [
   'analyticsDayWed',
   'analyticsDayThu',
   'analyticsDayFri',
-  'analyticsDaySat',
-  'analyticsDaySun',
 ];
 
-const HOUR_TICKS = [0, 3, 6, 9, 12, 15, 18, 21];
+const HOUR_TICKS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
 
 /**
  * Section 5 — Shift / time-of-day heatmap.
@@ -36,6 +35,9 @@ export function ShiftHeatmap({ heatmap }: ShiftHeatmapProps) {
     if (cell.count > max) max = cell.count;
   }
 
+  // Filter for Mon-Fri and 07:00-19:00
+  const displayGrid = grid.slice(0, 5).map((row) => row.slice(7, 20));
+
   const cellOpacity = (count: number): number => {
     if (count === 0) return 0.06;
     if (max <= 1) return 0.55;
@@ -52,15 +54,15 @@ export function ShiftHeatmap({ heatmap }: ShiftHeatmapProps) {
       </CardHeader>
       <CardContent className="px-4 pb-4">
         <div className="overflow-x-auto pb-1">
-          <div className="min-w-[560px]">
+          <div className="min-w-[560px] flex flex-col gap-2">
             {/* Hour header row */}
-            <div className="grid" style={{ gridTemplateColumns: '44px repeat(24, minmax(18px, 1fr))', gap: 2 }}>
+            <div className="grid" style={{ gridTemplateColumns: '44px repeat(13, minmax(18px, 1fr))', gap: 2 }}>
               <div />
               {HOUR_TICKS.map((h) => (
                 <div
                   key={h}
                   className="text-center text-[9px] font-medium text-muted-foreground"
-                  style={{ gridColumnStart: h + 2, gridColumnEnd: h + 3 }}
+                  style={{ gridColumnStart: h - 7 + 2, gridColumnEnd: h - 7 + 3 }}
                 >
                   {String(h).padStart(2, '0')}h
                 </div>
@@ -68,26 +70,38 @@ export function ShiftHeatmap({ heatmap }: ShiftHeatmapProps) {
             </div>
 
             {/* Day rows */}
-            {grid.map((row, dayIdx) => (
+            {displayGrid.map((row, dayIdx) => (
               <div
                 key={dayIdx}
                 className="grid items-center"
-                style={{ gridTemplateColumns: '44px repeat(24, minmax(18px, 1fr))', gap: 2 }}
+                style={{ gridTemplateColumns: '44px repeat(13, minmax(18px, 1fr))', gap: 2 }}
               >
                 <span className="text-[10px] font-medium text-muted-foreground">
                   {t[DAY_KEYS[dayIdx]]}
                 </span>
-                {row.map((count, hourIdx) => (
-                  <div
-                    key={hourIdx}
-                    title={`${t[DAY_KEYS[dayIdx]]} ${String(hourIdx).padStart(2, '0')}h — ${count}`}
-                    className="aspect-square rounded-[3px] transition-transform hover:scale-110 hover:ring-1 hover:ring-slate-400"
-                    style={{
-                      backgroundColor: `rgb(59 130 246 / ${cellOpacity(count)})`,
-                      boxShadow: count > 0 ? 'inset 0 0 0 1px rgba(59,130,246,0.25)' : undefined,
-                    }}
-                  />
-                ))}
+                {row.map((count, hourIdx) => {
+                  const actualHour = 7 + hourIdx;
+                  const hourLabel =
+                    actualHour === 12
+                      ? '12 PM'
+                      : actualHour > 12
+                        ? `${actualHour - 12} PM`
+                        : `${actualHour} AM`;
+                  return (
+                    <div
+                      key={hourIdx}
+                      title={count > 0 ? `${count} incidents at ${hourLabel}` : ''}
+                      className={cn(
+                        'aspect-square rounded-[3px] transition-transform w-4/5 m-auto',
+                        count > 0 && 'hover:scale-110 hover:ring-1 hover:ring-slate-400',
+                      )}
+                      style={{
+                        backgroundColor: `rgb(59 130 246 / ${cellOpacity(count)})`,
+                        boxShadow: count > 0 ? 'inset 0 0 0 1px rgba(59,130,246,0.25)' : undefined,
+                      }}
+                    />
+                  );
+                })}
               </div>
             ))}
 
