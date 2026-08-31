@@ -1,6 +1,7 @@
 package incident.management.system.service;
 
 import incident.management.system.dto.AuditLogResponse;
+import incident.management.system.dto.ContributionEntry;
 import incident.management.system.dto.CreateUserRequest;
 import incident.management.system.dto.DepartmentResponse;
 import incident.management.system.dto.UpdateUserRequest;
@@ -8,6 +9,8 @@ import incident.management.system.dto.UserActivityResponse;
 import incident.management.system.dto.UserResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+
+import java.time.LocalDate;
 
 import java.util.List;
 
@@ -79,4 +82,10 @@ public interface UserService {
      * requiring them to claim their account on first login.
      */
     UserResponse promoteToChefAtelier(Long id);
+
+    /**
+     * Paginated contribution history for the authenticated user: declarations,
+     * claims, and (if admin) evaluations. Scoped server-side to {@code userId}.
+     */
+    Page<ContributionEntry> getMyContributions(Long userId, LocalDate startDate, LocalDate endDate, Pageable pageable);
 }

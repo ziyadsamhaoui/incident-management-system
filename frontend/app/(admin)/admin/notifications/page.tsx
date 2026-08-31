@@ -25,7 +25,6 @@ import { getMe } from '@/services/userService';
 import { getAllNotifications, markNotificationAsRead } from '@/services/notificationService';
 import type { NotificationDTO } from '@/types/notification';
 
-// ── Notification icon/color maps ──────────────────
 
 const NOTIFICATION_ICONS: Record<string, React.ElementType> = {
   CRITICAL: AlertTriangle,

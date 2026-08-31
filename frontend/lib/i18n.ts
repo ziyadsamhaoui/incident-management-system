@@ -279,7 +279,7 @@ const T: Record<Lang, Record<string, string>> = {
     analyticsDeptTitle: 'Répartition par département',
     analyticsDeptDesc: 'Volume total sur la période',
     analyticsWorkloadTitle: 'Charge de travail de l’équipe',
-    analyticsWorkloadDesc: 'Indicateurs agrégés — équilibrage de la charge',
+    analyticsWorkloadDesc: 'Équilibrage de la charge',
     analyticsWorkloadMember: 'Membre',
     analyticsWorkloadClaims: 'Pris en charge',
     analyticsWorkloadResolved: 'Résolus',

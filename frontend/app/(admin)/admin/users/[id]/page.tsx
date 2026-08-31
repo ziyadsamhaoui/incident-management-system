@@ -64,7 +64,7 @@ import {
 import { CountdownTimer } from '@/components/auth/countdown-timer';
 import { getIncidents } from '@/services/incidentService';
 import { getStatusConfig } from '@/lib/constants/incidentStatus';
-import { ActivityHeatmap } from '@/components/dashboard/activity-heatmap';
+
 import type { UserResponseDTO, UserActivityDTO, GenerateResetCodeResponse, AuditLogEntry } from '@/types/user';
 import type { IncidentDTO } from '@/types/incident';
 
@@ -682,12 +682,7 @@ export default function AdminUserDetailPage() {
               <MiniStat label="Prise en charge moy." value={formatMinutes(activity?.avgTimeToClaimMinutes)} icon={Timer} />
               <MiniStat label="MTTR moyen" value={formatMinutes(activity?.avgMttrMinutes)} icon={Activity} />
             </div>
-            <ActivityHeatmap
-              data={activity?.resolvedByDay ?? []}
-              title="Résolutions (12 mois)"
-              emptyLabel="Aucune résolution enregistrée sur cette période."
-              unit="résolution"
-            />
+
           </>
         ) : (
           <>
@@ -761,12 +756,7 @@ export default function AdminUserDetailPage() {
               </CardContent>
             </Card>
 
-            <ActivityHeatmap
-              data={activity?.declaredByDay ?? []}
-              title="Déclarations (12 mois)"
-              emptyLabel="Aucune déclaration enregistrée sur cette période."
-              unit="déclaration"
-            />
+
           </>
         )}
       </div>

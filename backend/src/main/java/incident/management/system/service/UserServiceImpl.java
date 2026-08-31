@@ -1,6 +1,7 @@
 package incident.management.system.service;
 
 import incident.management.system.dto.AuditLogResponse;
+import incident.management.system.dto.ContributionEntry;
 import incident.management.system.dto.CreateUserRequest;
 import incident.management.system.dto.DepartmentResponse;
 import incident.management.system.dto.UpdateUserRequest;
@@ -29,6 +30,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -406,9 +411,89 @@ public class UserServiceImpl implements UserService {
                         sub.getDepartment().getId(),
                         sub.getDepartment().getName()))
                 .collect(Collectors.toList());
+    }    // ── Contribution History ────────────────────────────
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<ContributionEntry> getMyContributions(Long userId, LocalDate startDate, LocalDate endDate, Pageable pageable) {
+        LocalDateTime start = startDate != null
+                ? startDate.atStartOfDay()
+                : LocalDate.of(2000, 1, 1).atStartOfDay();
+        LocalDateTime end = endDate != null
+                ? endDate.plusDays(1).atStartOfDay()
+                : LocalDateTime.now().plusDays(1);
+
+        // Fetch all three contribution types separately and merge
+        List<Object[]> declarations = incidentRepository.findDeclarationsByUser(userId, start, end);
+        List<Object[]> claims = incidentRepository.findClaimsByUser(userId, start, end);
+        List<Object[]> evaluations = incidentRepository.findEvaluationsByUser(userId, start, end);
+
+        List<ContributionEntry> all = new ArrayList<>();
+        for (Object[] row : declarations) {
+            all.add(new ContributionEntry(
+                    "DECLARATION",
+                    toLong(row[0]),
+                    (String) row[1],
+                    (String) row[2],
+                    (String) row[3],
+                    toLocalDateTime(row[4]),
+                    null
+            ));
+        }
+        for (Object[] row : claims) {
+            all.add(new ContributionEntry(
+                    "CLAIM",
+                    toLong(row[0]),
+                    (String) row[1],
+                    (String) row[2],
+                    (String) row[3],
+                    toLocalDateTime(row[4]),
+                    null
+            ));
+        }
+        for (Object[] row : evaluations) {
+            all.add(new ContributionEntry(
+                    "EVALUATION",
+                    toLong(row[0]),
+                    (String) row[1],
+                    (String) row[2],
+                    (String) row[3],
+                    toLocalDateTime(row[4]),
+                    (String) row[5]
+            ));
+        }
+
+        // Sort by timestamp descending
+        all.sort((a, b) -> {
+            if (a.timestamp() == null && b.timestamp() == null) return 0;
+            if (a.timestamp() == null) return 1;
+            if (b.timestamp() == null) return -1;
+            return b.timestamp().compareTo(a.timestamp());
+        });
+
+        // Apply pagination manually
+        int startIdx = pageable.getPageNumber() * pageable.getPageSize();
+        int endIdx = Math.min(startIdx + pageable.getPageSize(), all.size());
+        List<ContributionEntry> pageContent = startIdx < all.size() ? all.subList(startIdx, endIdx) : List.of();
+
+        return new org.springframework.data.domain.PageImpl<>(pageContent, pageable, all.size());
     }
 
-    //  Helpers
+    // Helpers
+
+    private static long toLong(Object value) {
+        if (value == null) return 0L;
+        if (value instanceof Number n) return n.longValue();
+        return Long.parseLong(value.toString());
+    }
+
+    private static LocalDateTime toLocalDateTime(Object value) {
+        if (value == null) return null;
+        if (value instanceof LocalDateTime ldt) return ldt;
+        if (value instanceof java.sql.Timestamp ts) return ts.toLocalDateTime();
+        if (value instanceof java.sql.Date d) return d.toLocalDate().atStartOfDay();
+        return LocalDateTime.parse(value.toString());
+    }
 
     private boolean isUnclaimed(UserEntity user) {
         return user.getPasswordHash() == null || user.getPasswordHash().isBlank();

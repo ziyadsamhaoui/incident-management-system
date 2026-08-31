@@ -98,7 +98,7 @@ function LogsTable({
                     onClick={() => onNavigate(inc.id)}
                     className="cursor-pointer transition-colors hover:bg-muted/30 group"
                   >
-                    <td className="px-5 py-4" style={{ boxShadow: 'inset 4px 0 0 0 #10b981' }} />
+                    <td className="px-5 py-4" style={{ boxShadow: `inset 4px 0 0 0 ${inc.status === 'NON_RESOLVED' ? '#ef4444' : '#10b981'}` }} />
                     <td className="px-5 py-4">
                       <span className="font-mono text-sm font-semibold text-blue-600 group-hover:underline dark:text-blue-400">
                         {inc.reference}
@@ -111,10 +111,17 @@ function LogsTable({
                       <td className="px-5 py-4 text-sm text-muted-foreground">{inc.department}</td>
                     )}
                     <td className="px-5 py-4">
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
-                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                        {t.logsResolved}
-                      </span>
+                      {inc.status === 'NON_RESOLVED' ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-950/40 dark:text-red-400">
+                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-500" />
+                          Non résolu
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                          {t.logsResolved}
+                        </span>
+                      )}
                     </td>
                     <td className="px-5 py-4 text-sm text-muted-foreground">{resolvedByName(inc)}</td>
                     <td className="px-5 py-4 text-sm text-muted-foreground whitespace-nowrap">
@@ -154,7 +161,7 @@ function LogsCards({
           key={inc.id}
           onClick={() => onNavigate(inc.id)}
           className="cursor-pointer rounded-xl border bg-card transition-colors hover:bg-muted/20"
-          style={{ borderLeftWidth: '4px', borderLeftColor: '#10b981' }}
+          style={{ borderLeftWidth: '4px', borderLeftColor: inc.status === 'NON_RESOLVED' ? '#ef4444' : '#10b981' }}
         >
           <div className="flex w-full items-center justify-between px-5 py-4">
             <div className="flex-1 min-w-0">
@@ -169,10 +176,17 @@ function LogsCards({
               </div>
               {/* Line 2 — outcome badge + accountability subtitle */}
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  {t.logsResolved}
-                </span>
+                {inc.status === 'NON_RESOLVED' ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-950/40 dark:text-red-400">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-500" />
+                    Non résolu
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    {t.logsResolved}
+                  </span>
+                )}
                 <span className="text-xs text-muted-foreground">
                   {t.logsResolvedBy.replace('{name}', resolvedByName(inc))}
                 </span>
@@ -268,7 +282,7 @@ export function TerminalIncidentsView({
       inc.reference,
       inc.category,
       ...(isAdmin ? [inc.department] : []),
-      t.logsResolved,
+      inc.status === 'NON_RESOLVED' ? 'Non résolu' : t.logsResolved,
       resolvedByName(inc),
       inc.resolvedAt ? new Date(inc.resolvedAt).toLocaleString('fr-FR') : '—',
       inc.resolutionNote ?? '',

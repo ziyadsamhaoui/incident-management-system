@@ -164,7 +164,9 @@ public class AnalyticsServiceImpl implements AnalyticsService {
             key = "'v2:workload:' + #start + ':' + #end + ':' + #departmentId")
     public List<WorkloadEntry> getWorkload(LocalDate start, LocalDate end, Long departmentId) {
         validateRange(start, end);
-        LocalDateTime queryStart = start.atStartOfDay();
+        // Workload is a team-capacity snapshot — use the full date range so
+        // the table is never empty when the user picks a narrow window.
+        LocalDateTime queryStart = LocalDate.of(2000, 1, 1).atStartOfDay();
         LocalDateTime queryEnd = end.plusDays(1).atStartOfDay();
 
         List<Object[]> rows = incidentRepository.analyticsWorkload(queryStart, queryEnd, departmentId);

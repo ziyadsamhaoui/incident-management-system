@@ -19,6 +19,7 @@ import {
   Circle,
   Archive,
   BarChart3,
+  Image,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -35,9 +36,9 @@ interface TabItem {
 }
 
 const BOTTOM_TABS: TabItem[] = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'Tableau de bord', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Incidents', href: '/admin/incidents', icon: AlertTriangle, dotColor: 'bg-rose-500' },
-  { label: 'Users', href: '/users', icon: Users, dotColor: 'bg-amber-500' },
+  { label: 'Utilisateurs', href: '/users', icon: Users, dotColor: 'bg-amber-500' },
   { label: 'Notifs', href: '#notifications', icon: Bell },
   { label: 'Plus', href: '#more', icon: MoreHorizontal },
 ];
@@ -87,19 +88,20 @@ export function MobileBottomNav({ isVisible = true, onNavigate }: MobileBottomNa
   // More sheet navigation items
   const secondaryRoutes = [
     {
-      label: 'Reference Data',
+      label: 'Données de référence',
       icon: Building2,
       children: [
-        { label: 'Categories', href: '/admin/reference?tab=categories' },
-        { label: 'Departments', href: '/admin/reference?tab=departments' },
+        { label: 'Catégories', href: '/admin/reference?tab=categories' },
+        { label: 'Départements', href: '/admin/reference?tab=departments' },
         { label: 'Sections', href: '/admin/reference?tab=sections' },
-        { label: 'Production Lines', href: '/admin/reference?tab=production-lines' },
+        { label: 'Lignes de production', href: '/admin/reference?tab=production-lines' },
       ],
     },
-    { label: 'Analytics', href: '/analytics', icon: BarChart3 },
+    { label: 'Analytique', href: '/analytics', icon: BarChart3 },
     { label: 'Archives', href: '/admin/incidents/logs', icon: Archive },
-    { label: 'My Subscriptions', href: '/admin/subscriptions', icon: BellRing },
-    { label: 'Settings', href: '/admin/settings', icon: Settings },
+    { label: 'Médias', href: '/admin/media', icon: Image },
+    { label: 'Mes abonnements', href: '/admin/subscriptions', icon: BellRing },
+    { label: 'Paramètres', href: '/admin/settings', icon: Settings },
   ];
 
   if (!isVisible) return null;

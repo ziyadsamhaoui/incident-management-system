@@ -61,11 +61,11 @@ const PRIORITY_LABELS: Record<string, string> = { LOW: 'Faible', MEDIUM: 'Moyenn
 const PRIORITY_CLASSES: Record<string, string> = { LOW: 'text-slate-500 bg-slate-100 dark:bg-slate-800', MEDIUM: 'text-amber-600 bg-amber-50 dark:bg-amber-900/20', HIGH: 'text-orange-600 bg-orange-50 dark:bg-orange-900/20', CRITICAL: 'text-red-600 bg-red-50 dark:bg-red-900/20' };
 const PRIORITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
-// Actifs page — terminal (resolved) incidents live in the Logs page.
 const STATUS_OPTIONS = [
   { value: 'DECLARED', label: 'Déclaré' },
   { value: 'CLAIMED', label: 'Pris en charge' },
   { value: 'IN_PROGRESS', label: 'En cours' },
+  { value: 'NON_RESOLVED', label: 'Non résolu' },
 ];
 
 const PRIORITY_OPTIONS = [
@@ -384,10 +384,8 @@ export default function AdminIncidentsPage() {
   const [filterOpen, setFilterOpen] = useState(false);
 
   // ── Real data ─────────────────────────────────────
-  // Active states only (server-scoped via the `status` group) — resolved
-  // incidents are archived on the dedicated Logs page (/admin/incidents/logs).
   const incidentsFetch = useAsync(
-    () => getIncidents({ statuses: ['DECLARED', 'CLAIMED', 'IN_PROGRESS'], size: 200 }),
+    () => getIncidents({ size: 200 }),
     [],
   );
   const deptsFetch = useAsync(() => getDepartments(), []);
@@ -419,7 +417,7 @@ export default function AdminIncidentsPage() {
   const allIncidents = incidentsFetch.data?.content ?? [];
 
   const filteredIncidents = useMemo(() => {
-    let result = [...allIncidents];
+    let result = [...allIncidents].filter((i) => i.status !== 'RESOLVED');
 
     if (filters.search) {
       const q = filters.search.toLowerCase();
@@ -470,11 +468,12 @@ export default function AdminIncidentsPage() {
   }, [allIncidents, filters, currentMatricule]);
 
   const groupedByStatus = useMemo(() => {
-    // Kanban shows the 3 active columns only — resolved incidents live in Logs.
     const groups: Record<string, IncidentDTO[]> = {
       DECLARED: [],
       CLAIMED: [],
       IN_PROGRESS: [],
+      RESOLVED: [],
+      NON_RESOLVED: [],
     };
     filteredIncidents.forEach((i) => { if (groups[i.status]) groups[i.status].push(i); });
     return groups;
@@ -795,6 +794,12 @@ export default function AdminIncidentsPage() {
                 title="En cours"
                 incidents={groupedByStatus.IN_PROGRESS}
                 onDrop={handleDrop('IN_PROGRESS')}
+                onDragStart={handleDragStart}
+              />
+              <KanbanColumn
+                title="Non résolu"
+                incidents={groupedByStatus.NON_RESOLVED}
+                onDrop={handleDrop('NON_RESOLVED')}
                 onDragStart={handleDragStart}
               />
             </div>

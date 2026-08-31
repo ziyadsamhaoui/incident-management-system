@@ -24,6 +24,17 @@ export interface AdminActivityEntry {
   count: number;
 }
 
+/** Entry of GET /api/me/contributions — personal contribution history */
+export interface ContributionEntry {
+  type: 'DECLARATION' | 'CLAIM' | 'EVALUATION';
+  incidentId: number;
+  incidentReference: string;
+  incidentDescription: string | null;
+  category: string;
+  timestamp: string;
+  evaluationOutcome: 'RESOLVED' | 'NON_RESOLVED' | null;
+}
+
 /** Entry of GET /api/dashboard/recent-activities (legacy feed) */
 export interface RecentActivityEntry {
   id: number;

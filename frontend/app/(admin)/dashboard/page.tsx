@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { useNavigationProgress } from '@/components/ui/navigation-progress';
+import { useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -26,7 +27,7 @@ import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { getStatusConfig } from '@/lib/constants/incidentStatus';
-import { ActivityHeatmap } from '@/components/dashboard/activity-heatmap';
+import { ContributionHistory } from '@/components/dashboard/contribution-history';
 import { ErrorState } from '@/components/ui/error-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { StatGridSkeleton, TableSkeleton, ChartBlockSkeleton } from '@/components/ui/skeleton';
@@ -254,13 +255,27 @@ function ActivityIcon({ status }: { status: string | null }) {
 
 // ── Page ──────────────────────────────────────────
 
+const ACTIVITY_PAGE_SIZE = 15;
+
 export default function AdminDashboardPage() {
   const { startNavigation } = useNavigationProgress();
+  const [activityVisibleCount, setActivityVisibleCount] = useState(ACTIVITY_PAGE_SIZE);
 
   const statsFetch = useAsync(() => getDashboardStats(), []);
   const incidentsFetch = useAsync(() => getIncidents({ size: 200 }), []);
   const staleFetch = useAsync(() => getStaleIncidents(), []);
   const activityFetch = useAsync(() => getActivityLog(), []);
+  // Dedicated fetches for MTTR / time-to-claim — the main incidents list
+  // is sorted newest-first so its first 200 items rarely include resolved
+  // or claimed incidents. These targeted queries guarantee we have data.
+  const claimedIncidentsFetch = useAsync(
+    () => getIncidents({ statuses: ['CLAIMED', 'IN_PROGRESS'], size: 200 }),
+    [],
+  );
+  const resolvedIncidentsFetch = useAsync(
+    () => getIncidents({ statuses: ['RESOLVED', 'NON_RESOLVED'], size: 200, sort: 'resolvedAt,desc' }),
+    [],
+  );
 
   const stats = statsFetch.data;
   const incidents = incidentsFetch.data?.content ?? [];
@@ -334,10 +349,10 @@ export default function AdminDashboardPage() {
   // 4.3 — Aging incidents from the real stale endpoint
   const agingIncidents = staleFetch.data ?? [];
 
-  // 4.3 — MTTR / time-to-claim computed from real incidents
+  // 4.3 — MTTR / time-to-claim computed from dedicated fetches
   const metrics = useMemo(() => {
-    const claimed = incidents.filter((i) => i.claimedAt);
-    const resolved = incidents.filter((i) => i.resolvedAt);
+    const claimed = (claimedIncidentsFetch.data?.content ?? []).filter((i) => i.claimedAt);
+    const resolved = (resolvedIncidentsFetch.data?.content ?? []).filter((i) => i.resolvedAt);
     const avg = (arr: IncidentDTO[], key: 'claimedAt' | 'resolvedAt') => {
       if (arr.length === 0) return null;
       const totalMs = arr.reduce((sum, i) => {
@@ -351,7 +366,7 @@ export default function AdminDashboardPage() {
       timeToClaim: avg(claimed, 'claimedAt'),
       mttr: avg(resolved, 'resolvedAt'),
     };
-  }, [incidents]);
+  }, [claimedIncidentsFetch.data, resolvedIncidentsFetch.data]);
 
   const hasAnyStats = statsFetch.data != null;
   const hasStatsData = Object.keys(stats?.byStatus ?? {}).some((k) => (stats?.byStatus[k] ?? 0) > 0);
@@ -561,7 +576,7 @@ export default function AdminDashboardPage() {
                   Temps moyen de prise en charge
                 </p>
                 <p className="text-xl font-bold text-blue-700 dark:text-blue-300 mt-0.5">
-                  {incidentsFetch.loading ? '…' : fmtDuration(metrics.timeToClaim)}
+                  {(incidentsFetch.loading || claimedIncidentsFetch.loading) ? '…' : fmtDuration(metrics.timeToClaim)}
                 </p>
               </div>
               <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 p-3 border border-emerald-100 dark:border-emerald-900">
@@ -569,7 +584,7 @@ export default function AdminDashboardPage() {
                   MTTR (Temps moyen de résolution)
                 </p>
                 <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300 mt-0.5">
-                  {incidentsFetch.loading ? '…' : fmtDuration(metrics.mttr)}
+                  {(incidentsFetch.loading || resolvedIncidentsFetch.loading) ? '…' : fmtDuration(metrics.mttr)}
                 </p>
               </div>
             </CardContent>
@@ -674,7 +689,7 @@ export default function AdminDashboardPage() {
             </CardContent>
           </Card>
 
-          <ActivityHeatmap />
+          <ContributionHistory />
         </div>
       </div>
 
@@ -701,8 +716,9 @@ export default function AdminDashboardPage() {
               </p>
             </div>
           ) : (
+            <>
             <div className="divide-y divide-border">
-              {activityFetch.data.map((entry) => {
+              {activityFetch.data.slice(0, activityVisibleCount).map((entry) => {
                 const cfg = STATUS_ICONS[entry.currentStatus ?? ''] ?? STATUS_ICONS.DECLARED;
                 return (
                   <div
@@ -727,6 +743,18 @@ export default function AdminDashboardPage() {
                 );
               })}
             </div>
+            {activityFetch.data.length > activityVisibleCount && (
+              <div className="flex justify-center border-t px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => setActivityVisibleCount((c) => c + 15)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-input bg-background px-4 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  Voir plus
+                </button>
+              </div>
+            )}
+            </>
           )}
         </CardContent>
       </Card>

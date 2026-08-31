@@ -4,8 +4,10 @@ import type {
   StatMap,
   ActivityLogEntry,
   AdminActivityEntry,
+  ContributionEntry,
   RecentActivityEntry,
 } from '@/types/dashboard';
+import type { Page } from '@/types/incident';
 
 /** Dashboard statistics — grouped by status, priority and department. */
 export async function getDashboardStats(): Promise<DashboardStats> {
@@ -36,5 +38,23 @@ export async function getRecentActivities(): Promise<RecentActivityEntry[]> {
 /** Admin evaluation heatmap — evaluations per day over the last 12 months. */
 export async function getAdminActivity(): Promise<AdminActivityEntry[]> {
   const { data } = await apiClient.get<AdminActivityEntry[]>('/api/dashboard/admin-activity');
+  return data;
+}
+
+/** Personal contribution history — declarations, claims, and evaluations for the current user. */
+export async function getMyContributions(params: {
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  size?: number;
+} = {}): Promise<Page<ContributionEntry>> {
+  const { data } = await apiClient.get<Page<ContributionEntry>>('/api/me/contributions', {
+    params: {
+      ...(params.startDate ? { startDate: params.startDate } : {}),
+      ...(params.endDate ? { endDate: params.endDate } : {}),
+      page: params.page ?? 0,
+      size: params.size ?? 50,
+    },
+  });
   return data;
 }
