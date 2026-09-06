@@ -1,6 +1,5 @@
 # Incident Management System: CI/CD Pipeline
-# Trigger: push to main, pull_request targeting main
-# Stack: Java 17, Maven, PostgreSQL 17, Railway deploy
+
 name: CI/CD Pipeline
 
 on:
@@ -97,7 +96,7 @@ jobs:
             backend/target/failsafe-reports/
           retention-days: 7
 
-      # 7. Upload static-analysis reports (PMD only)
+      # 7. Upload static-analysis reports
       - name: Upload static analysis reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -106,23 +105,53 @@ jobs:
           path: backend/target/pmd.xml
           retention-days: 7
 
-  # JOB 2: Automated Railway Deployment (main branch only)
+  # JOB 2: Automated Deployment
   deploy:
-    name: Deploy to Railway
-    if: ${{ false }}
-    # replace : ${{ false }} 
-    # with : github.ref == 'refs/heads/main' && github.event_name == 'push'
+    name: Deploy to Company Server
+    if: github.event_name == 'push'
     needs: build-and-test
     runs-on: ubuntu-latest
-
     steps:
+      # 1. Checkout source code
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      - name: Deploy to Railway
-        run: railway up --service incident-management-system
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_SECRET }}
+ 
+      # 2. Set up JDK 17 to build the deployable artifact
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+ 
+      # 3. Package the Spring Boot application as an executable JAR
+      - name: Package application
+        run: ./mvnw clean package -DskipTests -B
+        working-directory: backend
+ 
+      # 4. Configure SSH access to the on-premise company server
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+ 
+      # 5. Transfer the built JAR to the company server
+      - name: Copy artifact to server
+        run: |
+          scp -i ~/.ssh/deploy_key \
+            backend/target/*.jar \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/opt/icglma/app.jar
+ 
+      # 6. Restart the systemd-managed service on the server
+      - name: Restart application service
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "sudo systemctl restart icglma.service && sleep 5 && sudo systemctl status icglma.service --no-pager"
+ 
+      # 7. Post-deployment health check against the internal server endpoint
+      - name: Verify deployment health
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "curl -sf http://localhost:8080/actuator/health || exit 1"
