@@ -75,7 +75,7 @@ jobs:
       - name: Make Maven wrapper executable
         run: chmod +x backend/mvnw
 
-      # 5. Full build with static code analysis and integration tests
+      # 5. Full build with code analysis and integration tests
       # Note: Maven requires pom.xml in the working directory — run from backend/.
       - name: Build, analyze & verify with Maven
         run: ./mvnw clean verify -B -V
@@ -108,7 +108,8 @@ jobs:
   # JOB 2: Automated Deployment
   deploy:
     name: Deploy to Company Server
-    if: github.event_name == 'push'
+    # replace with " false " with " github.event_name == 'push' " if you have a valid SSH key
+    if: false
     needs: build-and-test
     runs-on: ubuntu-latest
     steps:
