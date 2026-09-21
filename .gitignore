@@ -21,6 +21,7 @@ frontend/.next
 *.iml
 *.ipr
 .env
+tmp
 
 ### NetBeans ###
 /nbproject/private/

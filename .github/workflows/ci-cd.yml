@@ -84,6 +84,14 @@ jobs:
           SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_DB }}
           SPRING_DATASOURCE_USERNAME: ${{ env.POSTGRES_USER }}
           SPRING_DATASOURCE_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          # Dummy secrets for the Spring context to start during integration tests.
+          # Tests never exercise real JWT/SMTP/media signing; only values that are
+          # syntactically valid (BASE64 JWT secret ≥ 256 bits) are required.
+          JWT_SECRET: cGlwZWxpbmUtZHVtbXktc2VjcmV0LXBpcGVsaW5lLWR1bW15LXNlY3JldC1waXBlbGluZQ==
+          MEDIA_SIGNING_SECRET: pipeline-dummy-media-signing-secret
+          DB_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          MAIL_USERNAME: pipeline-dummy@mail.local
+          MAIL_PASSWORD: pipeline-dummy
 
       # 6. Upload test report
       - name: Upload test results
